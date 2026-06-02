@@ -35,15 +35,18 @@ namespace VentCalc.Revit.Commands
             var pathDataReader = new RevitVentPathDataReader(elementInfoReader);
             var pathFinder = new VentPathFinder();
             var ductGeometryReader = new RevitDuctGeometryReader();
+            var localResistanceDataReader = new RevitLocalResistanceDataReader();
             var aerodynamicCalculator = new AerodynamicCalculator();
 
             VentElementInfo elementInfo = elementInfoReader.Read(element);
             VentNetworkInfo networkInfo = pathDataReader.Enrich(uiDocument.Document, networkReader.Read(uiDocument.Document, element.Id));
             VentPathSummary pathSummary = pathFinder.FindPaths(networkInfo);
             IReadOnlyDictionary<long, DuctGeometryData> ductDataByElementId = ductGeometryReader.ReadDucts(uiDocument.Document, networkInfo);
+            IReadOnlyDictionary<long, LocalResistanceElementData> localDataByElementId = localResistanceDataReader.ReadElements(uiDocument.Document, networkInfo);
             AerodynamicCalculationSummary aerodynamicSummary = aerodynamicCalculator.CalculatePaths(
                 pathSummary.Paths,
                 ductDataByElementId,
+                localDataByElementId,
                 new AerodynamicSettings());
             string reportText = elementInfo.ToReportText()
                 + System.Environment.NewLine

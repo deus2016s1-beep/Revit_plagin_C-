@@ -14,6 +14,8 @@ namespace VentCalc.Core.Models
 
         public List<DuctCalculationInfo> Ducts { get; set; } = new List<DuctCalculationInfo>();
 
+        public List<LocalResistanceCalculationInfo> LocalResistances { get; set; } = new List<LocalResistanceCalculationInfo>();
+
         public double TotalDuctLengthM { get; set; }
 
         public double MaxVelocityMs { get; set; }

@@ -162,6 +162,7 @@ namespace VentCalc.Core.Services
                 .Select(node => new VentPathNode(
                     node.ElementId,
                     node.CategoryName,
+                    node.CategoryKey,
                     node.TypeName,
                     node.FamilyName,
                     node.Size,

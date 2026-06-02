@@ -14,8 +14,8 @@ namespace VentCalc.Core.Models
 
         public IReadOnlyList<PathCalculationInfo> Paths { get; }
 
-        public PathCalculationInfo? CriticalPathByFriction => Paths
-            .OrderByDescending(path => path.TotalFrictionPressureLossPa)
+        public PathCalculationInfo? CriticalPathByTotalPressure => Paths
+            .OrderByDescending(path => path.TotalPressureLossPa)
             .FirstOrDefault();
 
         public string ToReportText()
@@ -30,12 +30,12 @@ namespace VentCalc.Core.Models
                 return builder.ToString();
             }
 
-            PathCalculationInfo? criticalPath = CriticalPathByFriction;
+            PathCalculationInfo? criticalPath = CriticalPathByTotalPressure;
             if (criticalPath != null)
             {
                 builder.AppendLine(
-                    $"Предварительно критическая трасса по трению: трасса №{criticalPath.PathIndex}, " +
-                    $"{criticalPath.TotalFrictionPressureLossPa:0.###} Па. Местные сопротивления пока не учитывались.");
+                    $"Критическая трасса предварительно, местные сопротивления учтены по комментариям/рекомендациям: трасса №{criticalPath.PathIndex}, " +
+                    $"{criticalPath.TotalPressureLossPa:0.###} Па.");
                 builder.AppendLine();
             }
 
@@ -48,10 +48,11 @@ namespace VentCalc.Core.Models
                 builder.AppendLine($"Максимальная скорость: {path.MaxVelocityMs:0.###} м/с");
                 builder.AppendLine($"Минимальная скорость: {path.MinVelocityMs:0.###} м/с");
                 builder.AppendLine($"Потери на трение: {path.TotalFrictionPressureLossPa:0.###} Па");
-                builder.AppendLine("Местные сопротивления: не учитывались");
+                builder.AppendLine($"Местные сопротивления: {path.TotalLocalPressureLossPa:0.###} Па");
                 builder.AppendLine($"Итого предварительно: {path.TotalPressureLossPa:0.###} Па");
                 AppendWarnings(builder, path.Warnings);
                 builder.AppendLine();
+                builder.AppendLine("Воздуховоды трассы");
                 builder.AppendLine("ElementId | Размер | Расход м³/ч | Длина м | Площадь м² | Dэкв м | Скорость м/с | Re | λ | Pv Па | R Па/м | R·l Па");
 
                 if (path.Ducts.Count == 0)
@@ -68,6 +69,26 @@ namespace VentCalc.Core.Models
                             $"{duct.Reynolds:0.#} | {duct.Lambda:0.####} | {duct.DynamicPressurePa:0.###} | " +
                             $"{duct.SpecificPressureLossPaPerM:0.###} | {duct.FrictionPressureLossPa:0.###}");
                         AppendWarnings(builder, duct.Warnings, "  ");
+                    }
+                }
+
+                builder.AppendLine();
+                builder.AppendLine("Местные сопротивления трассы");
+                builder.AppendLine("ElementId | Тип | ζ | Источник | Скорость м/с | Pv Па | Z Па | Предупреждение");
+
+                if (path.LocalResistances.Count == 0)
+                {
+                    builder.AppendLine("— В трассе нет фитингов, терминалов или оборудования для расчёта местных сопротивлений");
+                }
+                else
+                {
+                    foreach (LocalResistanceCalculationInfo local in path.LocalResistances)
+                    {
+                        string warning = local.Warnings.Count == 0 ? "" : string.Join("; ", local.Warnings);
+                        string localType = string.IsNullOrWhiteSpace(local.LocalKind) ? local.TypeName : local.LocalKind;
+                        builder.AppendLine(
+                            $"{local.ElementId} | {localType} | {local.Zeta:0.###} | {local.Source} | " +
+                            $"{local.VelocityMs:0.###} | {local.DynamicPressurePa:0.###} | {local.LocalPressureLossPa:0.###} | {warning}");
                     }
                 }
 

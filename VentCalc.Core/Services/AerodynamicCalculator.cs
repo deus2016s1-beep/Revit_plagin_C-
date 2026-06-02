@@ -8,6 +8,7 @@ namespace VentCalc.Core.Services
 {
     public sealed class AerodynamicCalculator
     {
+        private readonly LocalResistanceCalculator localResistanceCalculator = new LocalResistanceCalculator();
         public DuctCalculationInfo CalculateDuct(DuctGeometryData duct, AerodynamicSettings settings)
         {
             var result = new DuctCalculationInfo
@@ -85,6 +86,15 @@ namespace VentCalc.Core.Services
             IReadOnlyDictionary<long, DuctGeometryData> ductDataByElementId,
             AerodynamicSettings settings)
         {
+            return CalculatePath(path, ductDataByElementId, new Dictionary<long, LocalResistanceElementData>(), settings);
+        }
+
+        public PathCalculationInfo CalculatePath(
+            VentPathInfo path,
+            IReadOnlyDictionary<long, DuctGeometryData> ductDataByElementId,
+            IReadOnlyDictionary<long, LocalResistanceElementData> localDataByElementId,
+            AerodynamicSettings settings)
+        {
             var result = new PathCalculationInfo
             {
                 PathIndex = path.PathIndex,
@@ -103,10 +113,13 @@ namespace VentCalc.Core.Services
                 result.Ducts.Add(CalculateDuct(ductData, settings));
             }
 
+            Dictionary<long, DuctCalculationInfo> ductCalculationsByElementId = result.Ducts.ToDictionary(duct => duct.ElementId);
+            result.LocalResistances.AddRange(localResistanceCalculator.CalculatePathLocalResistances(path, localDataByElementId, ductCalculationsByElementId));
+
             result.TotalDuctLengthM = result.Ducts.Sum(duct => duct.LengthM);
             result.TotalFrictionPressureLossPa = result.Ducts.Sum(duct => duct.FrictionPressureLossPa);
-            result.TotalLocalPressureLossPa = 0;
-            result.TotalPressureLossPa = result.TotalFrictionPressureLossPa;
+            result.TotalLocalPressureLossPa = result.LocalResistances.Sum(local => local.LocalPressureLossPa);
+            result.TotalPressureLossPa = result.TotalFrictionPressureLossPa + result.TotalLocalPressureLossPa;
 
             var calculatedVelocities = result.Ducts
                 .Where(duct => duct.VelocityMs > 0)
@@ -125,6 +138,11 @@ namespace VentCalc.Core.Services
                 result.Warnings.Add($"Воздуховод {duct.ElementId}: {string.Join("; ", duct.Warnings)}");
             }
 
+            foreach (LocalResistanceCalculationInfo local in result.LocalResistances.Where(local => local.Warnings.Count > 0))
+            {
+                result.Warnings.Add($"Местное сопротивление {local.ElementId}: {string.Join("; ", local.Warnings)}");
+            }
+
             return result;
         }
 
@@ -133,7 +151,16 @@ namespace VentCalc.Core.Services
             IReadOnlyDictionary<long, DuctGeometryData> ductDataByElementId,
             AerodynamicSettings settings)
         {
-            return new AerodynamicCalculationSummary(paths.Select(path => CalculatePath(path, ductDataByElementId, settings)));
+            return CalculatePaths(paths, ductDataByElementId, new Dictionary<long, LocalResistanceElementData>(), settings);
+        }
+
+        public AerodynamicCalculationSummary CalculatePaths(
+            IEnumerable<VentPathInfo> paths,
+            IReadOnlyDictionary<long, DuctGeometryData> ductDataByElementId,
+            IReadOnlyDictionary<long, LocalResistanceElementData> localDataByElementId,
+            AerodynamicSettings settings)
+        {
+            return new AerodynamicCalculationSummary(paths.Select(path => CalculatePath(path, ductDataByElementId, localDataByElementId, settings)));
         }
 
         private static double CalculateLambda(double reynolds, double roughnessM, double equivalentDiameterM)

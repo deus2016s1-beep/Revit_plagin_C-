@@ -1,0 +1,241 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text.RegularExpressions;
+using VentCalc.Core.Models;
+
+namespace VentCalc.Core.Services
+{
+    public sealed class LocalResistanceCalculator
+    {
+        public IReadOnlyList<LocalResistanceCalculationInfo> CalculatePathLocalResistances(
+            VentPathInfo path,
+            IReadOnlyDictionary<long, LocalResistanceElementData> localDataByElementId,
+            IReadOnlyDictionary<long, DuctCalculationInfo> ductCalculationsByElementId)
+        {
+            var result = new List<LocalResistanceCalculationInfo>();
+            for (int index = 0; index < path.ElementIds.Count; index++)
+            {
+                long elementId = ParseElementId(path.ElementIds[index]);
+                if (elementId == 0 || IsDuct(path.Nodes[index]))
+                {
+                    continue;
+                }
+
+                LocalResistanceElementData data = localDataByElementId.TryGetValue(elementId, out LocalResistanceElementData? found)
+                    ? found
+                    : CreateFallbackData(elementId, path.Nodes[index]);
+
+                DuctCalculationInfo? referenceDuct = FindReferenceDuct(path, index, ductCalculationsByElementId, out string referenceWarning);
+                LocalResistanceCalculationInfo item = Calculate(data, referenceDuct);
+                if (!string.IsNullOrWhiteSpace(referenceWarning))
+                {
+                    item.Warnings.Add(referenceWarning);
+                }
+
+                result.Add(item);
+            }
+
+            return result;
+        }
+
+        private static LocalResistanceCalculationInfo Calculate(LocalResistanceElementData data, DuctCalculationInfo? referenceDuct)
+        {
+            var result = new LocalResistanceCalculationInfo
+            {
+                ElementId = data.ElementId,
+                CategoryName = data.CategoryName,
+                FamilyName = data.FamilyName,
+                TypeName = data.TypeName,
+                Size = data.Size,
+            };
+            result.Warnings.AddRange(data.Warnings);
+
+            ZetaResult zeta = ResolveZeta(data);
+            result.Zeta = zeta.Value;
+            result.LocalKind = zeta.LocalKind;
+            result.Source = zeta.Source;
+            result.Warnings.AddRange(zeta.Warnings);
+
+            if (referenceDuct == null)
+            {
+                result.Warnings.Add("Не найден ближайший воздуховод для определения скорости местного сопротивления.");
+                return result;
+            }
+
+            result.FlowM3h = referenceDuct.FlowM3h;
+            result.AreaM2 = referenceDuct.AreaM2;
+            result.VelocityMs = referenceDuct.VelocityMs;
+            result.DynamicPressurePa = referenceDuct.DynamicPressurePa;
+            result.LocalPressureLossPa = result.Zeta * result.DynamicPressurePa;
+
+            return result;
+        }
+
+        private static DuctCalculationInfo? FindReferenceDuct(
+            VentPathInfo path,
+            int localIndex,
+            IReadOnlyDictionary<long, DuctCalculationInfo> ductCalculationsByElementId,
+            out string warning)
+        {
+            warning = string.Empty;
+
+            for (int index = localIndex + 1; index < path.ElementIds.Count; index++)
+            {
+                long elementId = ParseElementId(path.ElementIds[index]);
+                if (ductCalculationsByElementId.TryGetValue(elementId, out DuctCalculationInfo? duct))
+                {
+                    return duct;
+                }
+            }
+
+            for (int index = localIndex - 1; index >= 0; index--)
+            {
+                long elementId = ParseElementId(path.ElementIds[index]);
+                if (ductCalculationsByElementId.TryGetValue(elementId, out DuctCalculationInfo? duct))
+                {
+                    return duct;
+                }
+            }
+
+            DuctCalculationInfo? nearest = path.ElementIds
+                .Select(ParseElementId)
+                .Where(ductCalculationsByElementId.ContainsKey)
+                .Select(id => ductCalculationsByElementId[id])
+                .FirstOrDefault();
+            if (nearest != null)
+            {
+                warning = "Скорость взята по ближайшему воздуховоду, так как соседний воздуховод по направлению не найден.";
+            }
+
+            return nearest;
+        }
+
+        private static ZetaResult ResolveZeta(LocalResistanceElementData data)
+        {
+            if (TryReadZetaFromComments(data.Comments, out double zetaFromComments))
+            {
+                return new ZetaResult(zetaFromComments, "Комментарии", "Значение ζ из параметра Комментарии.", Array.Empty<string>());
+            }
+
+            ZetaResult recommended = ResolveRecommendedZeta(data);
+            return recommended;
+        }
+
+        private static bool TryReadZetaFromComments(string comments, out double zeta)
+        {
+            zeta = 0;
+            if (string.IsNullOrWhiteSpace(comments))
+            {
+                return false;
+            }
+
+            Match match = Regex.Match(
+                comments,
+                @"(?:ζ|zeta|z)\s*=\s*([-+]?\d+(?:[\.,]\d+)?)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            return double.TryParse(match.Groups[1].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out zeta);
+        }
+
+        private static ZetaResult ResolveRecommendedZeta(LocalResistanceElementData data)
+        {
+            string text = string.Join(" ", data.Name, data.TypeName, data.FamilyName, data.CategoryName);
+
+            if (ContainsAny(text, "Заглушка", "Cap"))
+            {
+                return Recommended(0, "Заглушка");
+            }
+
+            if (ContainsAny(text, "Отвод", "Bend", "Elbow"))
+            {
+                if (ContainsAny(text, "15")) return Recommended(0.08, "Отвод 15°");
+                if (ContainsAny(text, "30")) return Recommended(0.12, "Отвод 30°");
+                if (ContainsAny(text, "45")) return Recommended(0.18, "Отвод 45°");
+                if (ContainsAny(text, "60")) return Recommended(0.25, "Отвод 60°");
+                return Recommended(0.35, "Отвод 90°");
+            }
+
+            if (ContainsAny(text, "Переход", "Transition"))
+            {
+                if (ContainsAny(text, "расшир", "Expansion")) return Recommended(0.20, "Переход расширение");
+                if (ContainsAny(text, "суж", "Contraction")) return Recommended(0.10, "Переход сужение");
+                return Recommended(0.10, "Переход");
+            }
+
+            if (ContainsAny(text, "Тройник", "Tee")) return Recommended(1.20, "Тройник");
+            if (ContainsAny(text, "Врезка", "Tap")) return Recommended(1.20, "Врезка");
+            if (ContainsAny(text, "Крестовина", "Cross")) return Recommended(1.50, "Крестовина ответвление");
+            if (ContainsAny(text, "Утка", "Offset")) return Recommended(0.40, "Утка");
+            if (ContainsAny(text, "Дроссель", "Damper")) return Recommended(0.40, "Дроссель-клапан");
+            if (ContainsAny(text, "Противопожар", "Fire")) return Recommended(0.50, "Противопожарный клапан");
+            if (ContainsAny(text, "Обрат", "Backdraft", "Check")) return Recommended(2.00, "Обратный клапан");
+            if (ContainsAny(text, "Вход", "Inlet")) return Recommended(0.50, "Вход");
+            if (ContainsAny(text, "Выход", "Outlet")) return Recommended(1.00, "Выход");
+            if (ContainsAny(text, "Реш", "Grille", "Diffuser")) return Recommended(2.00, "Решетка");
+            if (ContainsAny(text, "Зонт", "Hood")) return Recommended(1.30, "Зонт");
+            if (ContainsAny(text, "Дефлектор", "Deflector")) return Recommended(1.00, "Дефлектор");
+
+            return new ZetaResult(0, "Не найдено", "Не классифицировано", new[] { "ζ не найден в комментариях и не подобран по рекомендациям." });
+        }
+
+        private static ZetaResult Recommended(double value, string localKind)
+        {
+            return new ZetaResult(value, "Рекомендовано", localKind, Array.Empty<string>());
+        }
+
+        private static bool IsDuct(VentPathNode node)
+        {
+            return string.Equals(node.CategoryKey, "OST_DuctCurves", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ContainsAny(string text, params string[] patterns)
+        {
+            return patterns.Any(pattern => text.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static long ParseElementId(string value)
+        {
+            return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed)
+                ? parsed
+                : 0;
+        }
+
+        private static LocalResistanceElementData CreateFallbackData(long elementId, VentPathNode node)
+        {
+            return new LocalResistanceElementData
+            {
+                ElementId = elementId,
+                CategoryKey = node.CategoryKey,
+                CategoryName = node.CategoryName,
+                FamilyName = node.FamilyName,
+                TypeName = node.TypeName,
+                Size = node.Size
+            };
+        }
+
+        private sealed class ZetaResult
+        {
+            public ZetaResult(double value, string source, string localKind, IEnumerable<string> warnings)
+            {
+                Value = value;
+                Source = source;
+                LocalKind = localKind;
+                Warnings = warnings.ToList();
+            }
+
+            public double Value { get; }
+
+            public string Source { get; }
+
+            public string LocalKind { get; }
+
+            public IReadOnlyList<string> Warnings { get; }
+        }
+    }
+}

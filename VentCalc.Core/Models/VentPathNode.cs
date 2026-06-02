@@ -5,6 +5,7 @@ namespace VentCalc.Core.Models
         public VentPathNode(
             string elementId,
             string categoryName,
+            string categoryKey,
             string typeName,
             string familyName,
             string size,
@@ -13,6 +14,7 @@ namespace VentCalc.Core.Models
         {
             ElementId = elementId;
             CategoryName = categoryName;
+            CategoryKey = categoryKey;
             TypeName = typeName;
             FamilyName = familyName;
             Size = size;
@@ -23,6 +25,8 @@ namespace VentCalc.Core.Models
         public string ElementId { get; }
 
         public string CategoryName { get; }
+
+        public string CategoryKey { get; }
 
         public string TypeName { get; }
 
