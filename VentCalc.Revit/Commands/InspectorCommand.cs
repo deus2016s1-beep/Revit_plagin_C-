@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -33,15 +34,24 @@ namespace VentCalc.Revit.Commands
             var networkReader = new RevitVentNetworkReader(elementInfoReader);
             var pathDataReader = new RevitVentPathDataReader(elementInfoReader);
             var pathFinder = new VentPathFinder();
+            var ductGeometryReader = new RevitDuctGeometryReader();
+            var aerodynamicCalculator = new AerodynamicCalculator();
 
             VentElementInfo elementInfo = elementInfoReader.Read(element);
             VentNetworkInfo networkInfo = pathDataReader.Enrich(uiDocument.Document, networkReader.Read(uiDocument.Document, element.Id));
             VentPathSummary pathSummary = pathFinder.FindPaths(networkInfo);
+            IReadOnlyDictionary<long, DuctGeometryData> ductDataByElementId = ductGeometryReader.ReadDucts(uiDocument.Document, networkInfo);
+            AerodynamicCalculationSummary aerodynamicSummary = aerodynamicCalculator.CalculatePaths(
+                pathSummary.Paths,
+                ductDataByElementId,
+                new AerodynamicSettings());
             string reportText = elementInfo.ToReportText()
                 + System.Environment.NewLine
-                + networkInfo.ToReportText()
+                + networkInfo.ToReportText(pathSummary)
                 + System.Environment.NewLine
-                + pathSummary.ToReportText();
+                + pathSummary.ToReportText()
+                + System.Environment.NewLine
+                + aerodynamicSummary.ToReportText();
             var window = new InspectorResultWindow(reportText);
             window.ShowDialog();
 

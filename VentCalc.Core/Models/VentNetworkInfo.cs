@@ -55,7 +55,7 @@ namespace VentCalc.Core.Models
 
         public int EndCandidateCount { get; }
 
-        public string ToReportText()
+        public string ToReportText(VentPathSummary? pathSummary = null)
         {
             var builder = new StringBuilder();
             builder.AppendLine("Связанная вентиляционная сеть");
@@ -69,8 +69,12 @@ namespace VentCalc.Core.Models
             builder.AppendLine($"Оборудования: {EquipmentCount}");
             builder.AppendLine($"Открытых коннекторов: {OpenConnectorCount}");
             builder.AppendLine($"Найденных связей: {Connections.Count}");
-            builder.AppendLine($"Кандидатов начала: {StartCandidateCount}");
-            builder.AppendLine($"Кандидатов конца: {EndCandidateCount}");
+            if (pathSummary != null)
+            {
+                builder.AppendLine($"Стартовых точек трассировки: {pathSummary.StartElementIds.Count}");
+                builder.AppendLine($"Конечных точек трассировки: {pathSummary.EndElementIds.Count}");
+                builder.AppendLine($"Игнорируемых заглушек: {pathSummary.IgnoredCapDetails.Count}");
+            }
             builder.AppendLine();
             builder.AppendLine("Элементы сети");
 
