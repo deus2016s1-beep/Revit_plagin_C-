@@ -29,9 +29,12 @@ namespace VentCalc.Revit.Commands
             var parameterReader = new RevitParameterReader();
             var connectorReader = new RevitConnectorReader();
             var elementInfoReader = new RevitElementInfoReader(parameterReader, connectorReader);
+            var networkReader = new RevitVentNetworkReader(elementInfoReader);
 
             VentElementInfo elementInfo = elementInfoReader.Read(element);
-            var window = new InspectorResultWindow(elementInfo.ToReportText());
+            VentNetworkInfo networkInfo = networkReader.Read(uiDocument.Document, element.Id);
+            string reportText = elementInfo.ToReportText() + System.Environment.NewLine + networkInfo.ToReportText();
+            var window = new InspectorResultWindow(reportText);
             window.ShowDialog();
 
             return Result.Succeeded;

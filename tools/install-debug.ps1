@@ -8,6 +8,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if (Get-Process -Name "Revit" -ErrorAction SilentlyContinue) {
+    Write-Host "Закройте Revit перед установкой VentCalc."
+    exit 1
+}
+
 if ([string]::IsNullOrWhiteSpace($AddinsRoot)) {
     $AddinsRoot = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$RevitVersion"
 }
@@ -48,6 +53,8 @@ if (-not (Test-Path $publishSource)) {
 }
 
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+Write-Host "Cleaning $installDir..."
+Remove-Item -Path (Join-Path $installDir "*") -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "Copying add-in files to $installDir..."
 Copy-Item -Path (Join-Path $publishSource "*") -Destination $installDir -Recurse -Force
 
@@ -72,7 +79,7 @@ $addinXml = @"
 
 Set-Content -Path $addinPath -Value $addinXml -Encoding UTF8
 
-Write-Host "VentCalc was installed successfully."
 Write-Host "DLL folder: $installDir"
 Write-Host "Add-in manifest: $addinPath"
 Write-Host "Assembly path: $assemblyPath"
+Write-Host "VentCalc установлен. Можно запускать Revit."
