@@ -12,7 +12,7 @@ namespace VentCalc.Revit.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            UIDocument uiDocument = commandData.Application.ActiveUIDocument;
+            UIDocument? uiDocument = commandData.Application.ActiveUIDocument;
             if (uiDocument == null)
             {
                 TaskDialog.Show("VentCalc", "Откройте документ Revit и выберите элемент воздуховодной системы.");
@@ -20,7 +20,7 @@ namespace VentCalc.Revit.Commands
             }
 
             var selectionReader = new RevitSelectionReader();
-            if (!selectionReader.TryGetSingleSelectedVentElement(uiDocument, out Element element, out string errorMessage))
+            if (!selectionReader.TryGetSingleSelectedVentElement(uiDocument, out Element? element, out string? errorMessage))
             {
                 TaskDialog.Show("VentCalc", errorMessage);
                 return Result.Cancelled;

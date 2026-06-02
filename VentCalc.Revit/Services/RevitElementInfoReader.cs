@@ -18,14 +18,14 @@ namespace VentCalc.Revit.Services
         public VentElementInfo Read(Element element)
         {
             Document document = element.Document;
-            Element typeElement = document.GetElement(element.GetTypeId());
+            Element? typeElement = document.GetElement(element.GetTypeId());
             var familyInstance = element as FamilyInstance;
 
             return new VentElementInfo(
-                element.Id.IntegerValue.ToString(),
+                element.Id.Value.ToString(),
                 element.Category?.Name ?? "—",
-                SafeRead(() => element.Name, "—"),
-                SafeRead(() => typeElement?.Name, "—"),
+                SafeReadString(() => element.Name, "—"),
+                SafeReadString(() => typeElement?.Name, "—"),
                 ReadFamilyName(familyInstance),
                 ReadSystemName(element),
                 ReadSystemType(element),
@@ -62,7 +62,7 @@ namespace VentCalc.Revit.Services
             return parameterReader.ReadLookupParameter(element, "Тип системы");
         }
 
-        private static string ReadFamilyName(FamilyInstance familyInstance)
+        private static string ReadFamilyName(FamilyInstance? familyInstance)
         {
             if (familyInstance?.Symbol?.Family != null)
             {
@@ -79,16 +79,16 @@ namespace VentCalc.Revit.Services
                 return "—";
             }
 
-            Element level = document.GetElement(element.LevelId);
+            Element? level = document.GetElement(element.LevelId);
             return level?.Name ?? "—";
         }
 
-        private static T SafeRead<T>(Func<T> read, T fallback)
+        private static string SafeReadString(Func<string?> read, string fallback)
         {
             try
             {
-                T value = read();
-                return value == null ? fallback : value;
+                string? value = read();
+                return value ?? fallback;
             }
             catch (Exception)
             {

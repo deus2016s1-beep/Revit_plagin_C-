@@ -25,7 +25,7 @@ namespace VentCalc.Revit.Services
             var result = new List<VentParameterInfo>();
             foreach (ParameterDefinition definition in ParameterDefinitions)
             {
-                Parameter parameter = FindParameter(element, definition);
+                Parameter? parameter = FindParameter(element, definition);
                 string value = FormatParameterValue(parameter);
                 if (!string.IsNullOrWhiteSpace(value))
                 {
@@ -51,13 +51,13 @@ namespace VentCalc.Revit.Services
             return FormatParameterValue(element.LookupParameter(parameterName));
         }
 
-        private static Parameter FindParameter(Element element, ParameterDefinition definition)
+        private static Parameter? FindParameter(Element element, ParameterDefinition definition)
         {
             foreach (string builtInParameterName in definition.BuiltInParameterNames)
             {
                 if (Enum.TryParse(builtInParameterName, out BuiltInParameter builtInParameter))
                 {
-                    Parameter parameter = element.get_Parameter(builtInParameter);
+                    Parameter? parameter = element.get_Parameter(builtInParameter);
                     if (HasValue(parameter))
                     {
                         return parameter;
@@ -67,7 +67,7 @@ namespace VentCalc.Revit.Services
 
             foreach (string parameterName in definition.LookupParameterNames)
             {
-                Parameter parameter = element.LookupParameter(parameterName);
+                Parameter? parameter = element.LookupParameter(parameterName);
                 if (HasValue(parameter))
                 {
                     return parameter;
@@ -77,19 +77,19 @@ namespace VentCalc.Revit.Services
             return null;
         }
 
-        private static bool HasValue(Parameter parameter)
+        private static bool HasValue(Parameter? parameter)
         {
             return parameter != null && parameter.HasValue;
         }
 
-        private static string FormatParameterValue(Parameter parameter)
+        private static string FormatParameterValue(Parameter? parameter)
         {
             if (!HasValue(parameter))
             {
                 return string.Empty;
             }
 
-            string valueString = parameter.AsValueString();
+            string? valueString = parameter.AsValueString();
             if (!string.IsNullOrWhiteSpace(valueString))
             {
                 return valueString;
@@ -104,7 +104,7 @@ namespace VentCalc.Revit.Services
                 case StorageType.Double:
                     return parameter.AsDouble().ToString("G6");
                 case StorageType.ElementId:
-                    return parameter.AsElementId().IntegerValue.ToString();
+                    return parameter.AsElementId().Value.ToString();
                 default:
                     return string.Empty;
             }

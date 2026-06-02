@@ -10,7 +10,7 @@ namespace VentCalc.Revit.Services
     {
         public IReadOnlyList<VentConnectorInfo> Read(Element element)
         {
-            ConnectorManager connectorManager = GetConnectorManager(element);
+            ConnectorManager? connectorManager = GetConnectorManager(element);
             if (connectorManager == null)
             {
                 return Array.Empty<VentConnectorInfo>();
@@ -20,7 +20,7 @@ namespace VentCalc.Revit.Services
             int number = 1;
             foreach (Connector connector in connectorManager.Connectors)
             {
-                ConnectorSet allRefs = SafeRead(() => connector.AllRefs, null);
+                ConnectorSet? allRefs = SafeReadReference(() => connector.AllRefs);
                 var connectedElementIds = ReadConnectedElementIds(element, allRefs);
 
                 result.Add(new VentConnectorInfo(
@@ -42,7 +42,7 @@ namespace VentCalc.Revit.Services
             return result;
         }
 
-        private static ConnectorManager GetConnectorManager(Element element)
+        private static ConnectorManager? GetConnectorManager(Element element)
         {
             var mepCurve = element as MEPCurve;
             if (mepCurve != null)
@@ -59,7 +59,7 @@ namespace VentCalc.Revit.Services
             return null;
         }
 
-        private static IReadOnlyList<string> ReadConnectedElementIds(Element owner, ConnectorSet allRefs)
+        private static IReadOnlyList<string> ReadConnectedElementIds(Element owner, ConnectorSet? allRefs)
         {
             if (allRefs == null)
             {
@@ -69,17 +69,17 @@ namespace VentCalc.Revit.Services
             var ids = new SortedSet<string>();
             foreach (Connector referencedConnector in allRefs)
             {
-                Element referencedOwner = SafeRead(() => referencedConnector.Owner, null);
-                if (referencedOwner != null && referencedOwner.Id.IntegerValue != owner.Id.IntegerValue)
+                Element? referencedOwner = SafeReadReference(() => referencedConnector.Owner);
+                if (referencedOwner != null && referencedOwner.Id.Value != owner.Id.Value)
                 {
-                    ids.Add(referencedOwner.Id.IntegerValue.ToString());
+                    ids.Add(referencedOwner.Id.Value.ToString());
                 }
             }
 
             return ids.ToList();
         }
 
-        private static int CountConnectorRefs(ConnectorSet allRefs)
+        private static int CountConnectorRefs(ConnectorSet? allRefs)
         {
             if (allRefs == null)
             {
@@ -115,6 +115,19 @@ namespace VentCalc.Revit.Services
             catch (Exception)
             {
                 return fallback;
+            }
+        }
+
+        private static T? SafeReadReference<T>(Func<T> read)
+            where T : class
+        {
+            try
+            {
+                return read();
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 

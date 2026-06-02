@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -16,7 +17,10 @@ namespace VentCalc.Revit.Services
             BuiltInCategory.OST_MechanicalEquipment
         };
 
-        public bool TryGetSingleSelectedVentElement(UIDocument uiDocument, out Element element, out string errorMessage)
+        public bool TryGetSingleSelectedVentElement(
+            UIDocument uiDocument,
+            [NotNullWhen(true)] out Element? element,
+            [NotNullWhen(false)] out string? errorMessage)
         {
             element = null;
             errorMessage = null;
@@ -28,7 +32,7 @@ namespace VentCalc.Revit.Services
                 return false;
             }
 
-            Element selectedElement = uiDocument.Document.GetElement(selectedIds.First());
+            Element? selectedElement = uiDocument.Document.GetElement(selectedIds.First());
             if (!IsSupportedVentilationElement(selectedElement))
             {
                 errorMessage = "Выберите элемент воздуховодной системы.";
@@ -39,14 +43,14 @@ namespace VentCalc.Revit.Services
             return true;
         }
 
-        private static bool IsSupportedVentilationElement(Element element)
+        private static bool IsSupportedVentilationElement(Element? element)
         {
             if (element?.Category == null)
             {
                 return false;
             }
 
-            var category = (BuiltInCategory)element.Category.Id.IntegerValue;
+            var category = (BuiltInCategory)element.Category.Id.Value;
             return SupportedCategories.Contains(category);
         }
     }

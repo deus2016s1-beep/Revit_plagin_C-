@@ -14,7 +14,7 @@ if ([string]::IsNullOrWhiteSpace($AddinsRoot)) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $solutionPath = Join-Path $repoRoot "VentCalc.sln"
-$publishSource = Join-Path $repoRoot "VentCalc.Revit\bin\$Platform\$Configuration\net48"
+$publishSource = Join-Path $repoRoot "VentCalc.Revit\bin\$Platform\$Configuration\net8.0-windows"
 $installDir = Join-Path $AddinsRoot "VentCalc"
 $addinPath = Join-Path $AddinsRoot "VentCalc.addin"
 $assemblyPath = Join-Path $installDir "VentCalc.Revit.dll"

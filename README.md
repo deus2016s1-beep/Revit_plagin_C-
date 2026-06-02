@@ -13,7 +13,7 @@ VentCalc v2.0 — новый C# Revit Add-in для профессиональн
 ## Целевая платформа
 
 - Autodesk Revit 2025 x64.
-- .NET Framework 4.8.
+- .NET 8 (`net8.0` / `net8.0-windows`).
 - Visual Studio 2022.
 - Конфигурация для проверки в Revit: `Debug x64`.
 - Установка debug-сборки в Revit: `tools\install-debug.ps1`.
@@ -79,7 +79,7 @@ Ribbon создаётся безопасно: повторный запуск н
    - `C:\Program Files\Autodesk\Revit 2025\RevitAPIUI.dll`
 4. Выполните **Build → Build Solution**.
 5. После сборки основной файл add-in находится здесь:
-   - `VentCalc.Revit\bin\x64\Debug\net48\VentCalc.Revit.dll`
+   - `VentCalc.Revit\bin\x64\Debug\net8.0-windows\VentCalc.Revit.dll`
 
 ### Установка debug-сборки в Revit
 
@@ -95,7 +95,7 @@ Ribbon создаётся безопасно: повторный запуск н
 2. Создаёт папку установки:
    - `C:\Users\user\AppData\Roaming\Autodesk\Revit\Addins\2025\VentCalc`
 3. Копирует туда все файлы из:
-   - `VentCalc.Revit\bin\x64\Debug\net48\`
+   - `VentCalc.Revit\bin\x64\Debug\net8.0-windows\`
 4. Создаёт или обновляет manifest-файл:
    - `C:\Users\user\AppData\Roaming\Autodesk\Revit\Addins\2025\VentCalc.addin`
 5. Записывает в `VentCalc.addin` полный путь к сборке:
