@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>VentCalc</Name>
+    <Assembly>%APPDATA%\Autodesk\Revit\Addins\2025\VentCalc\VentCalc.Revit.dll</Assembly>
+    <AddInId>4F16E999-51D5-4E0D-94C4-843134A41F2E</AddInId>
+    <FullClassName>VentCalc.Revit.App</FullClassName>
+    <VendorId>VCAL</VendorId>
+    <VendorDescription>VentCalc ventilation engineering add-in</VendorDescription>
+  </AddIn>
+</RevitAddIns>

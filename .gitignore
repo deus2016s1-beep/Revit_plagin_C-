@@ -1,0 +1,12 @@
+# Build outputs
+bin/
+obj/
+.vs/
+TestResults/
+packages/
+*.user
+*.suo
+*.cache
+
+# Revit local deployment artifacts
+*.addin.user

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>VentCalc.Reports</AssemblyName>
+    <RootNamespace>VentCalc.Reports</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VentCalc.Core\VentCalc.Core.csproj" />
+  </ItemGroup>
+</Project>
