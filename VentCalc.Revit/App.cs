@@ -1,3 +1,4 @@
+using System;
 using Autodesk.Revit.UI;
 
 namespace VentCalc.Revit
@@ -6,8 +7,16 @@ namespace VentCalc.Revit
     {
         public Result OnStartup(UIControlledApplication application)
         {
-            RibbonBuilder.Build(application);
-            return Result.Succeeded;
+            try
+            {
+                RibbonBuilder.Build(application);
+                return Result.Succeeded;
+            }
+            catch (Exception exception)
+            {
+                TaskDialog.Show("VentCalc — ошибка запуска", exception.ToString());
+                return Result.Failed;
+            }
         }
 
         public Result OnShutdown(UIControlledApplication application)

@@ -1,7 +1,40 @@
+using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using VentCalc.Core.Models;
+using VentCalc.Revit.Services;
+using VentCalc.UI;
+
 namespace VentCalc.Revit.Commands
 {
-    public sealed class InspectorCommand : TaskDialogCommand
+    [Transaction(TransactionMode.Manual)]
+    public sealed class InspectorCommand : IExternalCommand
     {
-        protected override string CommandName => "Инспектор";
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            UIDocument uiDocument = commandData.Application.ActiveUIDocument;
+            if (uiDocument == null)
+            {
+                TaskDialog.Show("VentCalc", "Откройте документ Revit и выберите элемент воздуховодной системы.");
+                return Result.Cancelled;
+            }
+
+            var selectionReader = new RevitSelectionReader();
+            if (!selectionReader.TryGetSingleSelectedVentElement(uiDocument, out Element element, out string errorMessage))
+            {
+                TaskDialog.Show("VentCalc", errorMessage);
+                return Result.Cancelled;
+            }
+
+            var parameterReader = new RevitParameterReader();
+            var connectorReader = new RevitConnectorReader();
+            var elementInfoReader = new RevitElementInfoReader(parameterReader, connectorReader);
+
+            VentElementInfo elementInfo = elementInfoReader.Read(element);
+            var window = new InspectorResultWindow(elementInfo.ToReportText());
+            window.ShowDialog();
+
+            return Result.Succeeded;
+        }
     }
 }
