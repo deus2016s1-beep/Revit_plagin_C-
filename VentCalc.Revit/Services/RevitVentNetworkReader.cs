@@ -202,28 +202,45 @@ namespace VentCalc.Revit.Services
             int openConnectorCount = 0;
             foreach (Connector connector in connectorManager.Connectors)
             {
-                bool hasSupportedNeighbor = false;
-                ConnectorSet? allRefs = SafeReadReference(() => connector.AllRefs);
-                if (allRefs != null)
-                {
-                    foreach (Connector referencedConnector in allRefs)
-                    {
-                        Element? neighborElement = SafeReadReference(() => referencedConnector.Owner);
-                        if (IsSupportedVentilationElement(neighborElement) && neighborElement.Id.Value != element.Id.Value)
-                        {
-                            hasSupportedNeighbor = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!hasSupportedNeighbor)
+                if (!HasRealVentNeighbor(element, connector))
                 {
                     openConnectorCount++;
                 }
             }
 
             return openConnectorCount;
+        }
+
+        private static bool HasRealVentNeighbor(Element currentElement, Connector connector)
+        {
+            ConnectorSet? allRefs = SafeReadReference(() => connector.AllRefs);
+            if (allRefs == null)
+            {
+                return false;
+            }
+
+            foreach (Connector referencedConnector in allRefs)
+            {
+                Element? owner = SafeReadReference(() => referencedConnector.Owner);
+                if (owner == null)
+                {
+                    continue;
+                }
+
+                if (owner.Id.Value == currentElement.Id.Value)
+                {
+                    continue;
+                }
+
+                if (!IsSupportedVentilationElement(owner))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         private static void AddConnectionIfMissing(

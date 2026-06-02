@@ -38,6 +38,8 @@ namespace VentCalc.Core.Models
             OpenConnectorCount = openConnectorCount;
             DuctLengthMm = ductLengthMm;
             ConnectedElementIds = new ReadOnlyCollection<string>(connectedElementIds.ToList());
+            Role = VentNodeRole.Unknown;
+            PathRoleReason = string.Empty;
         }
 
         public string ElementId { get; }
@@ -69,5 +71,15 @@ namespace VentCalc.Core.Models
         public double DuctLengthMm { get; }
 
         public IReadOnlyList<string> ConnectedElementIds { get; }
+
+        public VentNodeRole Role { get; set; }
+
+        public bool IsStartCandidate { get; set; }
+
+        public bool IsEndCandidate { get; set; }
+
+        public bool IsIgnoredForPathSearch { get; set; }
+
+        public string PathRoleReason { get; set; }
     }
 }

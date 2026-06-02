@@ -14,6 +14,7 @@ namespace VentCalc.Core.Models
             IEnumerable<VentPathNode> nodes,
             int ductCount,
             int fittingCount,
+            int accessoryCount,
             int terminalCount,
             int equipmentCount,
             int totalElementCount,
@@ -28,6 +29,7 @@ namespace VentCalc.Core.Models
             Nodes = new ReadOnlyCollection<VentPathNode>(nodes.ToList());
             DuctCount = ductCount;
             FittingCount = fittingCount;
+            AccessoryCount = accessoryCount;
             TerminalCount = terminalCount;
             EquipmentCount = equipmentCount;
             TotalElementCount = totalElementCount;
@@ -50,6 +52,8 @@ namespace VentCalc.Core.Models
 
         public int FittingCount { get; }
 
+        public int AccessoryCount { get; }
+
         public int TerminalCount { get; }
 
         public int EquipmentCount { get; }
@@ -57,6 +61,8 @@ namespace VentCalc.Core.Models
         public int TotalElementCount { get; }
 
         public double TotalDuctLengthMm { get; }
+
+        public double TotalDuctLengthM => TotalDuctLengthMm / 1000.0;
 
         public string MaxFlowM3h { get; }
 

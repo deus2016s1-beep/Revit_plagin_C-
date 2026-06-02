@@ -88,6 +88,11 @@ namespace VentCalc.Core.Models
                     builder.AppendLine($"  Имя: {element.Name}");
                     builder.AppendLine($"  Тип: {element.TypeName}");
                     builder.AppendLine($"  Семейство: {element.FamilyName}");
+                    builder.AppendLine($"  Роль трассировки: {element.Role}");
+                    builder.AppendLine($"  Причина роли: {element.PathRoleReason}");
+                    builder.AppendLine($"  Стартовый кандидат: {element.IsStartCandidate}");
+                    builder.AppendLine($"  Конечный кандидат: {element.IsEndCandidate}");
+                    builder.AppendLine($"  Игнорируется в поиске трасс: {element.IsIgnoredForPathSearch}");
                     builder.AppendLine($"  Размер: {element.Size}");
                     builder.AppendLine($"  Расход: {element.FlowM3h}");
                     builder.AppendLine($"  Система: {element.SystemName}");

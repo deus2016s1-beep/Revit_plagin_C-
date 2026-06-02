@@ -9,42 +9,34 @@ namespace VentCalc.Core.Services
 {
     public sealed class VentPathFinder
     {
+        private readonly VentPathEndpointSelector endpointSelector = new VentPathEndpointSelector();
+
         public VentPathSummary FindPaths(VentNetworkInfo networkInfo)
         {
-            string systemType = DetectSystemType(networkInfo);
-            SystemDirection direction = DetectDirection(systemType);
-            bool approximateDirection = direction == SystemDirection.Unknown;
-            string directionText = ToDirectionText(direction);
+            VentPathEndpointSelection endpointSelection = endpointSelector.SelectEndpoints(networkInfo);
+            Dictionary<long, VentNetworkNode> nodesById = BuildNodeMap(networkInfo);
+            Dictionary<long, HashSet<long>> adjacency = BuildAdjacency(networkInfo, nodesById);
+            int maxPathDepth = networkInfo.Elements.Count + 5;
 
-            IReadOnlyList<VentNetworkNode> startNodes = FindStartNodes(networkInfo, direction);
-            IReadOnlyList<VentNetworkNode> endNodes = FindEndNodes(networkInfo, direction);
-            string note = BuildDirectionNote(direction, startNodes, endNodes);
-
-            if (startNodes.Count == 0 || endNodes.Count == 0)
+            var paths = new List<VentPathInfo>();
+            foreach (long startElementId in endpointSelection.StartElementIds)
             {
-                return new VentPathSummary(
-                    systemType,
-                    directionText,
-                    approximateDirection,
-                    note,
-                    startNodes.Select(node => node.ElementId),
-                    endNodes.Select(node => node.ElementId),
-                    Array.Empty<VentPathInfo>(),
-                    BuildNoPathReason(startNodes.Count, endNodes.Count));
+                foreach (long endElementId in endpointSelection.EndElementIds)
+                {
+                    if (startElementId == endElementId)
+                    {
+                        continue;
+                    }
+
+                    List<long>? shortestPath = FindShortestPath(adjacency, startElementId, endElementId, maxPathDepth);
+                    if (shortestPath != null)
+                    {
+                        paths.Add(CreatePath(shortestPath, nodesById, endpointSelection.SystemDirection));
+                    }
+                }
             }
 
-            Dictionary<string, VentNetworkNode> nodesById = networkInfo.Elements.ToDictionary(node => node.ElementId);
-            Dictionary<string, List<string>> graph = BuildGraph(networkInfo);
-            var rawPaths = new List<IReadOnlyList<string>>();
-            var endIds = new HashSet<string>(endNodes.Select(node => node.ElementId));
-
-            foreach (VentNetworkNode startNode in startNodes)
-            {
-                FindSimplePaths(startNode.ElementId, endIds, graph, new HashSet<string>(), new List<string>(), rawPaths);
-            }
-
-            var paths = rawPaths
-                .Select(path => CreatePath(path, nodesById, directionText))
+            paths = paths
                 .OrderByDescending(path => path.TotalDuctLengthMm)
                 .ThenByDescending(path => path.TotalElementCount)
                 .ThenBy(path => path.StartElementId)
@@ -53,82 +45,119 @@ namespace VentCalc.Core.Services
                 .ToList();
 
             return new VentPathSummary(
-                systemType,
-                directionText,
-                approximateDirection,
-                note,
-                startNodes.Select(node => node.ElementId),
-                endNodes.Select(node => node.ElementId),
+                DetectSystemType(networkInfo),
+                FormatDirection(endpointSelection.SystemDirection),
+                endpointSelection.DirectionReason,
+                endpointSelection.SystemDirection == "Unknown",
+                BuildCandidateDetails(endpointSelection.StartElementIds, nodesById),
+                BuildCandidateDetails(endpointSelection.EndElementIds, nodesById),
+                BuildCandidateDetails(endpointSelection.IgnoredCapElementIds, nodesById),
+                endpointSelection.Warnings,
+                endpointSelection.StartElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)),
+                endpointSelection.EndElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)),
                 paths,
-                paths.Count == 0 ? "Между найденными стартовыми и конечными точками нет трасс по графу сети." : string.Empty);
+                paths.Count == 0 ? BuildNoPathReason(endpointSelection) : string.Empty);
         }
 
-        private static Dictionary<string, List<string>> BuildGraph(VentNetworkInfo networkInfo)
+        private static Dictionary<long, VentNetworkNode> BuildNodeMap(VentNetworkInfo networkInfo)
         {
-            var graph = networkInfo.Elements.ToDictionary(node => node.ElementId, _ => new List<string>());
+            return networkInfo.Elements
+                .Select(node => new { Node = node, Id = ParseElementId(node.ElementId) })
+                .Where(item => item.Id.HasValue)
+                .GroupBy(item => item.Id.Value)
+                .ToDictionary(group => group.Key, group => group.First().Node);
+        }
+
+        private static Dictionary<long, HashSet<long>> BuildAdjacency(
+            VentNetworkInfo networkInfo,
+            IReadOnlyDictionary<long, VentNetworkNode> nodesById)
+        {
+            var adjacency = nodesById.Keys.ToDictionary(id => id, _ => new HashSet<long>());
+            var connectionKeys = new HashSet<string>();
+
             foreach (VentNetworkConnection connection in networkInfo.Connections)
             {
-                AddEdge(graph, connection.FromElementId, connection.ToElementId);
-                AddEdge(graph, connection.ToElementId, connection.FromElementId);
-            }
-
-            foreach (List<string> neighbors in graph.Values)
-            {
-                neighbors.Sort(StringComparer.Ordinal);
-            }
-
-            return graph;
-        }
-
-        private static void AddEdge(IDictionary<string, List<string>> graph, string fromElementId, string toElementId)
-        {
-            if (!graph.TryGetValue(fromElementId, out List<string>? neighbors))
-            {
-                return;
-            }
-
-            if (!neighbors.Contains(toElementId))
-            {
-                neighbors.Add(toElementId);
-            }
-        }
-
-        private static void FindSimplePaths(
-            string currentElementId,
-            ISet<string> endElementIds,
-            IReadOnlyDictionary<string, List<string>> graph,
-            ISet<string> visitedElementIds,
-            IList<string> currentPath,
-            ICollection<IReadOnlyList<string>> paths)
-        {
-            visitedElementIds.Add(currentElementId);
-            currentPath.Add(currentElementId);
-
-            if (endElementIds.Contains(currentElementId) && currentPath.Count > 1)
-            {
-                paths.Add(currentPath.ToList());
-            }
-            else if (graph.TryGetValue(currentElementId, out List<string>? neighbors))
-            {
-                foreach (string neighborElementId in neighbors)
+                long? fromElementId = ParseElementId(connection.FromElementId);
+                long? toElementId = ParseElementId(connection.ToElementId);
+                if (!fromElementId.HasValue || !toElementId.HasValue || fromElementId.Value == toElementId.Value)
                 {
-                    if (!visitedElementIds.Contains(neighborElementId))
+                    continue;
+                }
+
+                if (!nodesById.ContainsKey(fromElementId.Value) || !nodesById.ContainsKey(toElementId.Value))
+                {
+                    continue;
+                }
+
+                long min = Math.Min(fromElementId.Value, toElementId.Value);
+                long max = Math.Max(fromElementId.Value, toElementId.Value);
+                if (!connectionKeys.Add($"{min}->{max}"))
+                {
+                    continue;
+                }
+
+                adjacency[fromElementId.Value].Add(toElementId.Value);
+                adjacency[toElementId.Value].Add(fromElementId.Value);
+            }
+
+            return adjacency;
+        }
+
+        private static List<long>? FindShortestPath(
+            IReadOnlyDictionary<long, HashSet<long>> adjacency,
+            long startId,
+            long endId,
+            int maxPathDepth)
+        {
+            var queue = new Queue<List<long>>();
+            var visitedBestDepth = new Dictionary<long, int>();
+
+            queue.Enqueue(new List<long> { startId });
+            visitedBestDepth[startId] = 1;
+
+            while (queue.Count > 0)
+            {
+                List<long> path = queue.Dequeue();
+                long current = path[path.Count - 1];
+
+                if (current == endId)
+                {
+                    return path;
+                }
+
+                if (path.Count >= maxPathDepth || !adjacency.TryGetValue(current, out HashSet<long>? neighbors))
+                {
+                    continue;
+                }
+
+                foreach (long next in neighbors.OrderBy(id => id))
+                {
+                    if (path.Contains(next))
                     {
-                        FindSimplePaths(neighborElementId, endElementIds, graph, visitedElementIds, currentPath, paths);
+                        continue;
                     }
+
+                    int nextDepth = path.Count + 1;
+                    if (visitedBestDepth.TryGetValue(next, out int bestDepth) && bestDepth <= nextDepth)
+                    {
+                        continue;
+                    }
+
+                    visitedBestDepth[next] = nextDepth;
+                    var newPath = new List<long>(path) { next };
+                    queue.Enqueue(newPath);
                 }
             }
 
-            currentPath.RemoveAt(currentPath.Count - 1);
-            visitedElementIds.Remove(currentElementId);
+            return null;
         }
 
-        private static VentPathInfo CreatePath(IReadOnlyList<string> elementIds, IReadOnlyDictionary<string, VentNetworkNode> nodesById, string pathKind)
+        private static VentPathInfo CreatePath(
+            IReadOnlyList<long> elementIds,
+            IReadOnlyDictionary<long, VentNetworkNode> nodesById,
+            string pathKind)
         {
-            var nodes = elementIds
-                .Select(elementId => nodesById[elementId])
-                .ToList();
-
+            var nodes = elementIds.Select(elementId => nodesById[elementId]).ToList();
             var pathNodes = nodes
                 .Select(node => new VentPathNode(
                     node.ElementId,
@@ -142,16 +171,17 @@ namespace VentCalc.Core.Services
 
             return new VentPathInfo(
                 0,
-                elementIds.First(),
-                elementIds.Last(),
-                elementIds,
+                elementIds.First().ToString(CultureInfo.InvariantCulture),
+                elementIds.Last().ToString(CultureInfo.InvariantCulture),
+                elementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)),
                 pathNodes,
-                nodes.Count(IsDuct),
-                nodes.Count(IsFitting),
-                nodes.Count(IsTerminal),
-                nodes.Count(IsEquipment),
-                nodes.Count,
-                nodes.Where(IsDuct).Sum(node => node.DuctLengthMm),
+                nodes.Count(node => IsCategory(node, "OST_DuctCurves")),
+                nodes.Count(node => IsCategory(node, "OST_DuctFitting")),
+                nodes.Count(node => IsCategory(node, "OST_DuctAccessory")),
+                nodes.Count(node => IsCategory(node, "OST_DuctTerminal")),
+                nodes.Count(node => IsCategory(node, "OST_MechanicalEquipment")),
+                elementIds.Count,
+                nodes.Where(node => IsCategory(node, "OST_DuctCurves")).Sum(node => node.DuctLengthMm),
                 FormatFlow(nodes.Max(node => ParseNumber(node.FlowM3h))),
                 pathKind);
         }
@@ -166,6 +196,7 @@ namespace VentCalc.Core.Services
                 path.Nodes,
                 path.DuctCount,
                 path.FittingCount,
+                path.AccessoryCount,
                 path.TerminalCount,
                 path.EquipmentCount,
                 path.TotalElementCount,
@@ -174,72 +205,24 @@ namespace VentCalc.Core.Services
                 path.PathKind);
         }
 
-        private static IReadOnlyList<VentNetworkNode> FindStartNodes(VentNetworkInfo networkInfo, SystemDirection direction)
+        private static IEnumerable<string> BuildCandidateDetails(
+            IEnumerable<long> elementIds,
+            IReadOnlyDictionary<long, VentNetworkNode> nodesById)
         {
-            List<VentNetworkNode> equipment = networkInfo.Elements.Where(IsEquipment).ToList();
-            List<VentNetworkNode> terminals = networkInfo.Elements.Where(IsTerminal).ToList();
-            List<VentNetworkNode> openEnds = networkInfo.Elements.Where(node => node.OpenConnectorCount > 0).ToList();
-            List<VentNetworkNode> leaves = FindLeaves(networkInfo);
-
-            IEnumerable<VentNetworkNode> result = direction switch
+            foreach (long elementId in elementIds.OrderBy(id => id))
             {
-                SystemDirection.Supply => equipment.Count > 0
-                    ? equipment
-                    : openEnds.Concat(leaves.Where(node => !IsTerminal(node))),
-                SystemDirection.Exhaust => terminals,
-                _ => terminals.Count > 0 ? terminals : openEnds.Concat(equipment).Concat(leaves)
-            };
-
-            return DistinctAndSort(result);
-        }
-
-        private static IReadOnlyList<VentNetworkNode> FindEndNodes(VentNetworkInfo networkInfo, SystemDirection direction)
-        {
-            List<VentNetworkNode> equipment = networkInfo.Elements.Where(IsEquipment).ToList();
-            List<VentNetworkNode> terminals = networkInfo.Elements.Where(IsTerminal).ToList();
-            List<VentNetworkNode> openEnds = networkInfo.Elements.Where(node => node.OpenConnectorCount > 0).ToList();
-            List<VentNetworkNode> leaves = FindLeaves(networkInfo);
-
-            IEnumerable<VentNetworkNode> result = direction switch
-            {
-                SystemDirection.Supply => terminals,
-                SystemDirection.Exhaust => equipment.Count > 0
-                    ? equipment.Concat(openEnds)
-                    : openEnds.Concat(leaves.Where(node => !IsTerminal(node))),
-                _ => openEnds.Concat(equipment).Concat(leaves.Where(node => !IsTerminal(node)))
-            };
-
-            return DistinctAndSort(result);
-        }
-
-        private static List<VentNetworkNode> FindLeaves(VentNetworkInfo networkInfo)
-        {
-            Dictionary<string, int> degreeByElementId = networkInfo.Elements.ToDictionary(node => node.ElementId, _ => 0);
-            foreach (VentNetworkConnection connection in networkInfo.Connections)
-            {
-                if (degreeByElementId.ContainsKey(connection.FromElementId))
+                if (!nodesById.TryGetValue(elementId, out VentNetworkNode? node))
                 {
-                    degreeByElementId[connection.FromElementId]++;
+                    continue;
                 }
 
-                if (degreeByElementId.ContainsKey(connection.ToElementId))
-                {
-                    degreeByElementId[connection.ToElementId]++;
-                }
+                yield return $"{elementId} | Role={node.Role} | {node.PathRoleReason} | Family={node.FamilyName} | Type={node.TypeName}";
             }
-
-            return networkInfo.Elements
-                .Where(node => degreeByElementId.TryGetValue(node.ElementId, out int degree) && degree <= 1)
-                .ToList();
         }
 
-        private static IReadOnlyList<VentNetworkNode> DistinctAndSort(IEnumerable<VentNetworkNode> nodes)
+        private static bool IsCategory(VentNetworkNode node, string categoryKey)
         {
-            return nodes
-                .GroupBy(node => node.ElementId)
-                .Select(group => group.First())
-                .OrderBy(node => node.ElementId)
-                .ToList();
+            return string.Equals(node.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private static string DetectSystemType(VentNetworkInfo networkInfo)
@@ -250,98 +233,41 @@ namespace VentCalc.Core.Services
                 ?? "—";
         }
 
-        private static SystemDirection DetectDirection(string systemType)
+        private static string FormatDirection(string systemDirection)
         {
-            if (ContainsAny(systemType, "Приточный", "Приток", "Supply"))
+            return systemDirection switch
             {
-                return SystemDirection.Supply;
-            }
-
-            if (ContainsAny(systemType, "Вытяжной", "Вытяжка", "Exhaust"))
-            {
-                return SystemDirection.Exhaust;
-            }
-
-            return SystemDirection.Unknown;
-        }
-
-        private static string ToDirectionText(SystemDirection direction)
-        {
-            return direction switch
-            {
-                SystemDirection.Supply => "Приточная сеть: от оборудования/открытого магистрального конца к терминалам",
-                SystemDirection.Exhaust => "Вытяжная сеть: от терминалов к оборудованию/открытому магистральному концу",
-                _ => "Неизвестное направление: fallback терминалы ↔ оборудование/открытые концы"
+                "Supply" => "Supply / Приточная система",
+                "Exhaust" => "Exhaust / Вытяжная система",
+                _ => "Unknown / Направление определено приблизительно"
             };
         }
 
-        private static string BuildDirectionNote(
-            SystemDirection direction,
-            IReadOnlyList<VentNetworkNode> startNodes,
-            IReadOnlyList<VentNetworkNode> endNodes)
+        private static string BuildNoPathReason(VentPathEndpointSelection selection)
         {
-            if (direction == SystemDirection.Supply && startNodes.Count > 0 && startNodes.All(node => !IsEquipment(node)))
-            {
-                return "Оборудование не найдено; открытый магистральный конец/лист сети используется как стартовый кандидат.";
-            }
-
-            if (direction == SystemDirection.Unknown)
-            {
-                return "Тип системы не содержит явного признака приточной или вытяжной системы.";
-            }
-
-            return startNodes.Count == 0 || endNodes.Count == 0 ? "Недостаточно стартовых или конечных точек для построения трасс." : string.Empty;
-        }
-
-        private static string BuildNoPathReason(int startCount, int endCount)
-        {
-            if (startCount == 0 && endCount == 0)
+            if (selection.StartElementIds.Count == 0 && selection.EndElementIds.Count == 0)
             {
                 return "Стартовые и конечные точки не найдены. Проверьте тип системы, терминалы, оборудование и открытые коннекторы.";
             }
 
-            if (startCount == 0)
+            if (selection.StartElementIds.Count == 0)
             {
-                return "Стартовые точки не найдены. Для приточной системы нужен элемент оборудования или открытый магистральный конец; для вытяжной — терминал/решётка.";
+                return "Стартовые точки не найдены. Заглушки не используются как старты; для притока нужен элемент оборудования или открытый магистральный конец.";
             }
 
-            if (endCount == 0)
+            if (selection.EndElementIds.Count == 0)
             {
-                return "Конечные точки не найдены. Для приточной системы нужны терминалы/решётки; для вытяжной — оборудование или открытый магистральный конец.";
+                return "Конечные точки не найдены. Заглушки не используются как концы; для притока нужны терминалы/решётки.";
             }
 
-            return "Трассы не найдены.";
+            return "Между найденными стартовыми и конечными точками нет трасс по графу сети.";
         }
 
-        private static bool IsDuct(VentNetworkNode node)
+        private static long? ParseElementId(string elementId)
         {
-            return MatchesCategory(node, "OST_DuctCurves", "ductcurves", "воздуховод", "duct");
-        }
-
-        private static bool IsFitting(VentNetworkNode node)
-        {
-            return MatchesCategory(node, "OST_DuctFitting", "ductfitting", "соедин", "fitting");
-        }
-
-        private static bool IsTerminal(VentNetworkNode node)
-        {
-            return MatchesCategory(node, "OST_DuctTerminal", "ductterminal", "термин", "реш", "terminal", "diffuser", "grille");
-        }
-
-        private static bool IsEquipment(VentNetworkNode node)
-        {
-            return MatchesCategory(node, "OST_MechanicalEquipment", "mechanicalequipment", "оборуд", "equipment", "fan", "вентил");
-        }
-
-        private static bool MatchesCategory(VentNetworkNode node, params string[] patterns)
-        {
-            string text = $"{node.CategoryKey} {node.CategoryName} {node.TypeName} {node.FamilyName}";
-            return ContainsAny(text, patterns);
-        }
-
-        private static bool ContainsAny(string text, params string[] patterns)
-        {
-            return patterns.Any(pattern => text.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0);
+            return long.TryParse(elementId, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed)
+                ? parsed
+                : null;
         }
 
         private static double ParseNumber(string value)
@@ -360,13 +286,6 @@ namespace VentCalc.Core.Services
         private static string FormatFlow(double flow)
         {
             return flow > 0 ? $"{flow:0.###} м³/ч" : "—";
-        }
-
-        private enum SystemDirection
-        {
-            Supply,
-            Exhaust,
-            Unknown
         }
     }
 }
