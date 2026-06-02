@@ -104,6 +104,7 @@ namespace VentCalc.Revit.Services
             return new VentNetworkNode(
                 elementInfo.ElementId,
                 elementInfo.CategoryName,
+                ReadCategoryKey(element),
                 elementInfo.Name,
                 elementInfo.TypeName,
                 elementInfo.FamilyName,
@@ -113,7 +114,14 @@ namespace VentCalc.Revit.Services
                 ReadSize(elementInfo),
                 elementInfo.LevelName,
                 elementInfo.Connectors.Count,
+                CountOpenConnectors(element),
+                0,
                 connectedElementIds);
+        }
+
+        private static string ReadCategoryKey(Element element)
+        {
+            return element.Category == null ? "—" : ((BuiltInCategory)element.Category.Id.Value).ToString();
         }
 
         private static string GetParameterValue(VentElementInfo elementInfo, string parameterName)

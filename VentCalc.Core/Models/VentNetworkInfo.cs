@@ -84,6 +84,7 @@ namespace VentCalc.Core.Models
                 {
                     builder.AppendLine($"ElementId: {element.ElementId}");
                     builder.AppendLine($"  Категория: {element.CategoryName}");
+                    builder.AppendLine($"  Категория API: {element.CategoryKey}");
                     builder.AppendLine($"  Имя: {element.Name}");
                     builder.AppendLine($"  Тип: {element.TypeName}");
                     builder.AppendLine($"  Семейство: {element.FamilyName}");
@@ -93,6 +94,8 @@ namespace VentCalc.Core.Models
                     builder.AppendLine($"  Тип системы: {element.SystemType}");
                     builder.AppendLine($"  Уровень: {element.LevelName}");
                     builder.AppendLine($"  Коннекторов: {element.ConnectorCount}");
+                    builder.AppendLine($"  Открытых коннекторов: {element.OpenConnectorCount}");
+                    builder.AppendLine($"  Длина воздуховода: {element.DuctLengthMm / 1000.0:0.###} м");
                     builder.AppendLine($"  Подключенные элементы: {FormatConnectedIds(element.ConnectedElementIds)}");
                     builder.AppendLine();
                 }

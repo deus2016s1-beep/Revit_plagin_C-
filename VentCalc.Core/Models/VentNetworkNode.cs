@@ -9,6 +9,7 @@ namespace VentCalc.Core.Models
         public VentNetworkNode(
             string elementId,
             string categoryName,
+            string categoryKey,
             string name,
             string typeName,
             string familyName,
@@ -18,10 +19,13 @@ namespace VentCalc.Core.Models
             string size,
             string levelName,
             int connectorCount,
+            int openConnectorCount,
+            double ductLengthMm,
             IEnumerable<string> connectedElementIds)
         {
             ElementId = elementId;
             CategoryName = categoryName;
+            CategoryKey = categoryKey;
             Name = name;
             TypeName = typeName;
             FamilyName = familyName;
@@ -31,12 +35,16 @@ namespace VentCalc.Core.Models
             Size = size;
             LevelName = levelName;
             ConnectorCount = connectorCount;
+            OpenConnectorCount = openConnectorCount;
+            DuctLengthMm = ductLengthMm;
             ConnectedElementIds = new ReadOnlyCollection<string>(connectedElementIds.ToList());
         }
 
         public string ElementId { get; }
 
         public string CategoryName { get; }
+
+        public string CategoryKey { get; }
 
         public string Name { get; }
 
@@ -55,6 +63,10 @@ namespace VentCalc.Core.Models
         public string LevelName { get; }
 
         public int ConnectorCount { get; }
+
+        public int OpenConnectorCount { get; }
+
+        public double DuctLengthMm { get; }
 
         public IReadOnlyList<string> ConnectedElementIds { get; }
     }

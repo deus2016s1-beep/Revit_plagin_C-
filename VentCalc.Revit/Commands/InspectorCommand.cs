@@ -2,6 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using VentCalc.Core.Models;
+using VentCalc.Core.Services;
 using VentCalc.Revit.Services;
 using VentCalc.UI;
 
@@ -30,10 +31,17 @@ namespace VentCalc.Revit.Commands
             var connectorReader = new RevitConnectorReader();
             var elementInfoReader = new RevitElementInfoReader(parameterReader, connectorReader);
             var networkReader = new RevitVentNetworkReader(elementInfoReader);
+            var pathDataReader = new RevitVentPathDataReader(elementInfoReader);
+            var pathFinder = new VentPathFinder();
 
             VentElementInfo elementInfo = elementInfoReader.Read(element);
-            VentNetworkInfo networkInfo = networkReader.Read(uiDocument.Document, element.Id);
-            string reportText = elementInfo.ToReportText() + System.Environment.NewLine + networkInfo.ToReportText();
+            VentNetworkInfo networkInfo = pathDataReader.Enrich(uiDocument.Document, networkReader.Read(uiDocument.Document, element.Id));
+            VentPathSummary pathSummary = pathFinder.FindPaths(networkInfo);
+            string reportText = elementInfo.ToReportText()
+                + System.Environment.NewLine
+                + networkInfo.ToReportText()
+                + System.Environment.NewLine
+                + pathSummary.ToReportText();
             var window = new InspectorResultWindow(reportText);
             window.ShowDialog();
 
