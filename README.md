@@ -16,6 +16,7 @@ VentCalc v2.0 — новый C# Revit Add-in для профессиональн
 - .NET Framework 4.8.
 - Visual Studio 2022.
 - Конфигурация для проверки в Revit: `Debug x64`.
+- Установка debug-сборки в Revit: `tools\install-debug.ps1`.
 
 ## Этап 1 — запуск add-in
 
@@ -69,22 +70,43 @@ Ribbon создаётся безопасно: повторный запуск н
 
 ## Сборка и запуск в Revit 2025
 
+### Сборка вручную через Visual Studio
+
 1. Откройте `VentCalc.sln` в Visual Studio 2022.
 2. Выберите конфигурацию **Debug x64**.
 3. Убедитесь, что установлен Autodesk Revit 2025 и доступны ссылки:
    - `C:\Program Files\Autodesk\Revit 2025\RevitAPI.dll`
    - `C:\Program Files\Autodesk\Revit 2025\RevitAPIUI.dll`
-4. Соберите solution.
+4. Выполните **Build → Build Solution**.
 5. После сборки основной файл add-in находится здесь:
    - `VentCalc.Revit\bin\x64\Debug\net48\VentCalc.Revit.dll`
-6. Создайте папку для add-in, например:
-   - `%APPDATA%\Autodesk\Revit\Addins\2025\VentCalc`
-7. Скопируйте содержимое папки `VentCalc.Revit\bin\x64\Debug\net48\` в:
-   - `%APPDATA%\Autodesk\Revit\Addins\2025\VentCalc`
-8. Скопируйте шаблон `deploy\VentCalc.addin` в:
-   - `%APPDATA%\Autodesk\Revit\Addins\2025\VentCalc.addin`
-9. Если путь к `VentCalc.Revit.dll` отличается, отредактируйте элемент `<Assembly>` в `VentCalc.addin`.
-10. Запустите Revit 2025 и проверьте вкладку **VentCalc** на Ribbon.
+
+### Установка debug-сборки в Revit
+
+Рекомендуемый способ установки — PowerShell-скрипт:
+
+```powershell
+.\tools\install-debug.ps1
+```
+
+Скрипт делает следующее:
+
+1. Собирает `VentCalc.sln` в конфигурации **Debug x64** через MSBuild.
+2. Создаёт папку установки:
+   - `C:\Users\user\AppData\Roaming\Autodesk\Revit\Addins\2025\VentCalc`
+3. Копирует туда все файлы из:
+   - `VentCalc.Revit\bin\x64\Debug\net48\`
+4. Создаёт или обновляет manifest-файл:
+   - `C:\Users\user\AppData\Roaming\Autodesk\Revit\Addins\2025\VentCalc.addin`
+5. Записывает в `VentCalc.addin` полный путь к сборке:
+
+```xml
+<Assembly>C:\Users\user\AppData\Roaming\Autodesk\Revit\Addins\2025\VentCalc\VentCalc.Revit.dll</Assembly>
+```
+
+> Скрипт использует `%APPDATA%`, поэтому на машине с другим именем пользователя путь будет автоматически соответствовать текущему Windows-профилю.
+
+После установки запустите Revit 2025 и проверьте вкладку **VentCalc** на Ribbon.
 
 ## Как проверить Инспектор в Revit
 

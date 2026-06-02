@@ -11,6 +11,12 @@
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="RevitAPI">
       <HintPath>C:\Program Files\Autodesk\Revit 2025\RevitAPI.dll</HintPath>
       <Private>false</Private>
