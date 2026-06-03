@@ -277,7 +277,7 @@ namespace VentCalc.UI.Services
                     localPressureLossPa = path.Calculation?.TotalLocalPressureLossPa ?? 0,
                     totalPressureLossPa = path.TotalPressureLossPa,
                     totalPressureLossWithReservePa = path.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0),
-                    elementIds = path.ElementIds.Select(ToLongOrNull).Where(id => id.HasValue).Select(id => id!.Value).ToList(),
+                    elementIds = ToElementIdList(path.ElementIds),
                     sections = path.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>()
                 }),
                 criticalPath = criticalPath == null ? null : new
@@ -447,6 +447,15 @@ namespace VentCalc.UI.Services
                     specificPressureLossPaPerM = topFriction.Duct.SpecificPressureLossPaPerM,
                     frictionPressureLossPa = topFriction.Duct.FrictionPressureLossPa
                 };
+        }
+
+        private static List<long> ToElementIdList(IEnumerable<string> values)
+        {
+            return values
+                .Select(ToLongOrNull)
+                .Where(id => id.HasValue)
+                .Select(id => id.GetValueOrDefault())
+                .ToList();
         }
 
         private static long? ToLongOrNull(string? value)

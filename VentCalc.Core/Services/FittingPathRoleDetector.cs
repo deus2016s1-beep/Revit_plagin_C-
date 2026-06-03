@@ -30,7 +30,7 @@ namespace VentCalc.Core.Services
                         CategoryName = path.Nodes[index].CategoryName,
                         FamilyName = path.Nodes[index].FamilyName,
                         TypeName = path.Nodes[index].TypeName,
-                        Name = path.Nodes[index].Name,
+                        Name = path.Nodes[index].TypeName,
                         Size = path.Nodes[index].Size
                     };
 

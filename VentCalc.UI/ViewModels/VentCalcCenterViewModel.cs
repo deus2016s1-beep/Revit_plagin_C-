@@ -841,7 +841,7 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            SelectElementsInRevit(new[] { elementId.Value }, "Элемент выделен в Revit.");
+            SelectElementsInRevit(new[] { elementId.GetValueOrDefault() }, "Элемент выделен в Revit.");
         }
 
         private void SelectStartElementInRevit()
@@ -965,9 +965,19 @@ namespace VentCalc.UI.ViewModels
         private void UpdatePathsThroughCurrentElement()
         {
             long? elementId = CurrentSelectedElementId;
-            IReadOnlyList<PathRow> rows = elementId.HasValue
-                ? Paths.Where(path => path.ElementIds.Any(id => TryParseElementId(id, out long parsed) && parsed == elementId.Value)).ToList()
-                : Array.Empty<PathRow>();
+            if (!elementId.HasValue)
+            {
+                Replace(PathsThroughSelectedElement, Array.Empty<PathRow>());
+                OnPropertyChanged(nameof(PathsThroughElementSummary));
+                OnPropertyChanged(nameof(PathsThroughElementMaxLossPa));
+                OnPropertyChanged(nameof(PathsThroughElementMaxFlowM3h));
+                return;
+            }
+
+            long selectedElementId = elementId.GetValueOrDefault();
+            IReadOnlyList<PathRow> rows = Paths
+                .Where(path => path.ElementIds.Any(id => TryParseElementId(id, out long parsed) && parsed == selectedElementId))
+                .ToList();
             Replace(PathsThroughSelectedElement, rows);
             OnPropertyChanged(nameof(PathsThroughElementSummary));
             OnPropertyChanged(nameof(PathsThroughElementMaxLossPa));
