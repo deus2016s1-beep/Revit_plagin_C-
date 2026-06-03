@@ -62,6 +62,21 @@ namespace VentCalc.Revit.ExternalEvents
                 {
                     data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings(), new ElementId(viewModel.LastLoadedElementId.Value));
                 }
+                else if (pendingMode == LoadSelectedSystemRequestMode.SystemCatalog && viewModel.SelectedCatalogSystem != null)
+                {
+                    data = dataLoader.LoadSystem(uiDocument, viewModel.Settings.ToAerodynamicSettings(), viewModel.SelectedCatalogSystem);
+                }
+                else if (pendingMode == LoadSelectedSystemRequestMode.SystemCatalog)
+                {
+                    data = new VentCalcCenterData
+                    {
+                        Success = false,
+                        IsUserSelectionWarning = true,
+                        ErrorMessage = "Выберите систему в списке VentCalc Center.",
+                        ReportText = "Выберите систему в списке VentCalc Center."
+                    };
+                    data.SystemCatalog.AddRange(dataLoader.ReadSystemCatalog(uiDocument));
+                }
                 else
                 {
                     data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings());

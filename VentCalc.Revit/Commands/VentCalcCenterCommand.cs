@@ -53,9 +53,13 @@ namespace VentCalc.Revit.Commands
                 selectHandler.Initialize(selectExternalEvent);
 
                 var viewModel = new VentCalcCenterViewModel(
-                    (vm, refreshLast) => loadHandler.Request(
+                    (vm, mode) => loadHandler.Request(
                         vm,
-                        refreshLast ? LoadSelectedSystemRequestMode.LastLoadedElement : LoadSelectedSystemRequestMode.SelectedElement),
+                        mode == VentCalcLoadRequestMode.LastLoadedElement
+                            ? LoadSelectedSystemRequestMode.LastLoadedElement
+                            : mode == VentCalcLoadRequestMode.SystemCatalog
+                                ? LoadSelectedSystemRequestMode.SystemCatalog
+                                : LoadSelectedSystemRequestMode.SelectedElement),
                     elementIds => selectHandler.Request(elementIds),
                     text => TaskDialog.Show("VentCalc", text),
                     settingsService,

@@ -16,6 +16,22 @@ namespace VentCalc.Core.Models
 
         public string LocalKind { get; set; } = string.Empty;
 
+        public string PathRole { get; set; } = string.Empty;
+
+        public string RoleReason { get; set; } = string.Empty;
+
+        public long? PreviousDuctElementId { get; set; }
+
+        public long? NextDuctElementId { get; set; }
+
+        public double PreviousAreaM2 { get; set; }
+
+        public double NextAreaM2 { get; set; }
+
+        public double PreviousFlowM3h { get; set; }
+
+        public double NextFlowM3h { get; set; }
+
         public double Zeta { get; set; }
 
         public double FlowM3h { get; set; }

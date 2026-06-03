@@ -9,6 +9,7 @@ namespace VentCalc.Core.Services
     public sealed class AerodynamicCalculator
     {
         private readonly LocalResistanceCalculator localResistanceCalculator = new LocalResistanceCalculator();
+        private readonly CalculationSectionBuilder sectionBuilder = new CalculationSectionBuilder();
         public DuctCalculationInfo CalculateDuct(DuctGeometryData duct, AerodynamicSettings settings)
         {
             var result = new DuctCalculationInfo
@@ -115,6 +116,8 @@ namespace VentCalc.Core.Services
 
             Dictionary<long, DuctCalculationInfo> ductCalculationsByElementId = result.Ducts.ToDictionary(duct => duct.ElementId);
             result.LocalResistances.AddRange(localResistanceCalculator.CalculatePathLocalResistances(path, localDataByElementId, ductCalculationsByElementId));
+
+            result.Sections.AddRange(sectionBuilder.Build(result));
 
             result.TotalDuctLengthM = result.Ducts.Sum(duct => duct.LengthM);
             result.TotalFrictionPressureLossPa = result.Ducts.Sum(duct => duct.FrictionPressureLossPa);

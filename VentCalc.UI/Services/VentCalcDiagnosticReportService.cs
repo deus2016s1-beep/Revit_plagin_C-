@@ -62,7 +62,7 @@ namespace VentCalc.UI.Services
                 DuctApplications = ductApplications,
                 UniqueRecommendedZetaElements = BuildUniqueLocalElements(localApplications, "Рекомендовано"),
                 UniqueCommentZetaElements = BuildUniqueLocalElements(localApplications, "Комментарии"),
-                MissingZetaElements = BuildUniqueLocalElements(localApplications, "Не найдено"),
+                MissingZetaElements = BuildMissingLocalElements(localApplications),
                 TopLocalResistanceContribution = localApplications.OrderByDescending(item => item.Local.LocalPressureLossPa).FirstOrDefault(),
                 TopFrictionContribution = ductApplications.OrderByDescending(item => item.Duct.FrictionPressureLossPa).FirstOrDefault(),
                 MaxVelocityDuct = ductApplications.OrderByDescending(item => item.Duct.VelocityMs).FirstOrDefault(),
@@ -85,6 +85,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"Версия Revit: {viewModel.RevitVersion}");
             builder.AppendLine($"Файл Revit: {viewModel.RevitFilePath}");
             builder.AppendLine($"Выбранный ElementId: {viewModel.SelectedElementId}");
+            builder.AppendLine($"Режим загрузки: {viewModel.LoadModeDisplay}");
             builder.AppendLine($"Категория: {viewModel.SelectedElementInfo?.CategoryName ?? "—"}");
             builder.AppendLine($"Имя: {viewModel.SelectedElementInfo?.Name ?? "—"}");
             builder.AppendLine($"Тип: {viewModel.SelectedElementInfo?.TypeName ?? "—"}");
@@ -106,6 +107,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"Стартовых точек: {viewModel.TraceStartCount}");
             builder.AppendLine($"Конечных точек: {viewModel.TraceEndCount}");
             builder.AppendLine($"Игнорируемых заглушек: {viewModel.IgnoredCapCount}");
+            builder.AppendLine($"Компонентов системы: {viewModel.SystemComponentCount}");
             builder.AppendLine(systemPairs.Count <= 1
                 ? $"Сеть содержит одну систему: {systemPairs.FirstOrDefault() ?? viewModel.SystemName}"
                 : "WARNING: В найденной сети обнаружены элементы разных систем: " + string.Join("; ", systemPairs));
@@ -152,7 +154,14 @@ namespace VentCalc.UI.Services
             }
             builder.AppendLine();
 
-            builder.AppendLine("7. Воздуховоды критической трассы");
+            builder.AppendLine("7. Расчётные участки критической трассы");
+            foreach (CalculationSectionInfo section in criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>())
+            {
+                builder.AppendLine($"Участок {section.SectionIndex}; elements={section.ElementIdsText}; Start={section.StartElementId}; End={section.EndElementId}; размер={section.Size}; Q={section.FlowM3h:0.###} м³/ч; L={section.TotalLengthM:0.###} м; V={section.VelocityMs:0.###} м/с; R·l={section.FrictionPressureLossPa:0.###} Па; split={section.SplitReason}; warnings={section.WarningText}");
+            }
+            builder.AppendLine();
+
+            builder.AppendLine("7а. Воздуховоды критической трассы");
             foreach (DuctCalculationInfo duct in criticalPath?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>())
             {
                 builder.AppendLine($"{duct.ElementId}; {duct.Size}; Q={duct.FlowM3h:0.###} м³/ч; L={duct.LengthM:0.###} м; A={duct.AreaM2:0.####} м²; Dэкв={duct.EquivalentDiameterM:0.####} м; V={duct.VelocityMs:0.###} м/с; Re={duct.Reynolds:0.#}; λ={duct.Lambda:0.####}; Pv={duct.DynamicPressurePa:0.###} Па; R={duct.SpecificPressureLossPaPerM:0.###} Па/м; R·l={duct.FrictionPressureLossPa:0.###} Па");
@@ -162,7 +171,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine("8. Местные сопротивления критической трассы");
             foreach (LocalResistanceCalculationInfo local in criticalPath?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
-                builder.AppendLine($"{local.ElementId}; {local.TypeName}; {local.FamilyName}; {local.Size}; ζ={local.Zeta:0.###}; источник={local.Source}; V={local.VelocityMs:0.###} м/с; Pv={local.DynamicPressurePa:0.###} Па; Z={local.LocalPressureLossPa:0.###} Па; warnings={local.WarningText}");
+                builder.AppendLine($"{local.ElementId}; {local.TypeName}; {local.FamilyName}; {local.Size}; role={local.PathRole}; reason={local.RoleReason}; prev={local.PreviousDuctElementId}; next={local.NextDuctElementId}; prevA={local.PreviousAreaM2:0.####}; nextA={local.NextAreaM2:0.####}; prevQ={local.PreviousFlowM3h:0.###}; nextQ={local.NextFlowM3h:0.###}; ζ={local.Zeta:0.###}; источник={local.Source}; V={local.VelocityMs:0.###} м/с; Pv={local.DynamicPressurePa:0.###} Па; Z={local.LocalPressureLossPa:0.###} Па; warnings={local.WarningText}");
             }
             builder.AppendLine();
 
@@ -172,11 +181,20 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"Самая большая скорость: {(diagnostics.MaxVelocityDuct?.Duct.VelocityMs ?? 0):0.###} м/с (ElementId {diagnostics.MaxVelocityDuct?.Duct.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"}, трасса №{diagnostics.MaxVelocityDuct?.PathIndex.ToString(CultureInfo.InvariantCulture) ?? "—"})");
             builder.AppendLine($"Самая маленькая скорость: {(diagnostics.MinVelocityDuct?.Duct.VelocityMs ?? 0):0.###} м/с (ElementId {diagnostics.MinVelocityDuct?.Duct.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"}, трасса №{diagnostics.MinVelocityDuct?.PathIndex.ToString(CultureInfo.InvariantCulture) ?? "—"})");
             AppendUniqueLocalGroup(builder, "Уникальные элементы с ζ из рекомендации", diagnostics.UniqueRecommendedZetaElements);
-            builder.AppendLine($"Количество применений ζ из рекомендации по трассам: {diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано")}");
+            int recommendedApplicationCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано");
+            int commentApplicationCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Комментарии");
+            int teePassCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TeePass");
+            int teeBranchCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TeeBranch");
+            int transitionNarrowingCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TransitionNarrowing");
+            int transitionExpansionCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TransitionExpansion");
+            int unknownFittingCount = diagnostics.LocalApplications.Count(item => string.Equals(item.Local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase) || item.Local.PathRole.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase));
+            builder.AppendLine($"Количество применений ζ из рекомендации по трассам: {recommendedApplicationCount}");
             AppendUniqueLocalGroup(builder, "Уникальные элементы с ζ из комментария", diagnostics.UniqueCommentZetaElements);
-            builder.AppendLine($"Количество применений ζ из комментария по трассам: {diagnostics.LocalApplications.Count(item => item.Local.Source == "Комментарии")}");
+            builder.AppendLine($"Количество применений ζ из комментария по трассам: {commentApplicationCount}");
             AppendUniqueLocalGroup(builder, "Элементы без ζ", diagnostics.MissingZetaElements);
             builder.AppendLine($"Количество элементов без ζ: {diagnostics.MissingZetaElements.Count}");
+            builder.AppendLine($"TeePass: {teePassCount}; TeeBranch: {teeBranchCount}; TransitionNarrowing: {transitionNarrowingCount}; TransitionExpansion: {transitionExpansionCount}; Unknown фитингов: {unknownFittingCount}");
+            builder.AppendLine($"Коротких воздуховодов, присоединённых к участкам: {GetAllSections(viewModel).Count(section => section.ContainsShortDucts)}; выделено отдельным участком: {GetAllSections(viewModel).Count(section => section.ContainsShortDucts && section.ElementIds.Count == 1)}");
 
             return builder.ToString();
         }
@@ -218,6 +236,10 @@ namespace VentCalc.UI.Services
                     startCount = viewModel.TraceStartCount,
                     endCount = viewModel.TraceEndCount,
                     ignoredCapCount = viewModel.IgnoredCapCount,
+                    loadMode = viewModel.LoadModeDisplay,
+                    selectedSystemName = viewModel.SelectedCatalogSystem?.SystemName ?? viewModel.SystemName,
+                    selectedSystemType = viewModel.SelectedCatalogSystem?.SystemType ?? viewModel.SystemType,
+                    componentCount = viewModel.SystemComponentCount,
                     systemPairs = GetSystemPairs(viewModel)
                 },
                 settings = new
@@ -255,7 +277,8 @@ namespace VentCalc.UI.Services
                     localPressureLossPa = path.Calculation?.TotalLocalPressureLossPa ?? 0,
                     totalPressureLossPa = path.TotalPressureLossPa,
                     totalPressureLossWithReservePa = path.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0),
-                    elementIds = path.ElementIds.Select(ToLongOrNull).Where(id => id.HasValue).Select(id => id!.Value).ToList()
+                    elementIds = path.ElementIds.Select(ToLongOrNull).Where(id => id.HasValue).Select(id => id!.Value).ToList(),
+                    sections = path.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>()
                 }),
                 criticalPath = criticalPath == null ? null : new
                 {
@@ -268,9 +291,13 @@ namespace VentCalc.UI.Services
                     totalPressureLossWithReservePa = criticalPath.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0),
                     elementIds = criticalPath.ElementIds
                 },
+                criticalPathSections = criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>(),
+                sectionSplitReasons = GetAllSections(viewModel).Select(section => new { section.PathIndex, section.SectionIndex, section.SplitReason }).ToList(),
+                shortDuctWarnings = GetAllSections(viewModel).Where(section => section.ContainsShortDucts || section.Warnings.Any(w => w.IndexOf("Корот", StringComparison.OrdinalIgnoreCase) >= 0)).Select(section => new { section.PathIndex, section.SectionIndex, section.ElementIds, section.Warnings }).ToList(),
                 criticalPathDucts = criticalPath?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>(),
                 criticalPathLocalResistances = criticalPath?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>(),
                 allDucts = GetAllDucts(viewModel),
+                sections = GetAllSections(viewModel),
                 allLocalResistances = GetAllLocalResistances(viewModel),
                 uniqueRecommendedZetaElements = diagnostics.UniqueRecommendedZetaElements,
                 uniqueCommentZetaElements = diagnostics.UniqueCommentZetaElements,
@@ -278,7 +305,14 @@ namespace VentCalc.UI.Services
                 localResistanceApplicationsCount = diagnostics.LocalApplications.Count,
                 recommendedZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано"),
                 commentZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Комментарии"),
-                missingZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Не найдено"),
+                missingZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Не найдено" || item.Local.Source == "Не определено"),
+                teePassCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TeePass"),
+                teeBranchCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TeeBranch"),
+                transitionNarrowingCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TransitionNarrowing"),
+                transitionExpansionCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TransitionExpansion"),
+                unknownFittingCount = diagnostics.LocalApplications.Count(item => string.Equals(item.Local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase) || item.Local.PathRole.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase)),
+                shortDuctsAttachedCount = GetAllSections(viewModel).Count(section => section.ContainsShortDucts),
+                shortDuctsStandaloneCount = GetAllSections(viewModel).Count(section => section.ContainsShortDucts && section.ElementIds.Count == 1),
                 topLocalResistanceContribution = ToJsonTopLocal(diagnostics.TopLocalResistanceContribution),
                 topFrictionContribution = ToJsonTopFriction(diagnostics.TopFrictionContribution)
             };
@@ -289,6 +323,11 @@ namespace VentCalc.UI.Services
         private static IEnumerable<DuctCalculationInfo> GetAllDucts(VentCalcCenterViewModel viewModel)
         {
             return viewModel.AerodynamicSummary?.Paths.SelectMany(path => path.Ducts) ?? Enumerable.Empty<DuctCalculationInfo>();
+        }
+
+        private static IEnumerable<CalculationSectionInfo> GetAllSections(VentCalcCenterViewModel viewModel)
+        {
+            return viewModel.AerodynamicSummary?.Paths.SelectMany(path => path.Sections) ?? Enumerable.Empty<CalculationSectionInfo>();
         }
 
         private static IEnumerable<LocalResistanceCalculationInfo> GetAllLocalResistances(VentCalcCenterViewModel viewModel)
@@ -310,10 +349,15 @@ namespace VentCalc.UI.Services
                 ?? Enumerable.Empty<DuctApplication>();
         }
 
-        private static IReadOnlyList<UniqueLocalResistanceElement> BuildUniqueLocalElements(IEnumerable<LocalResistanceApplication> applications, string source)
+        private static IReadOnlyList<UniqueLocalResistanceElement> BuildMissingLocalElements(IEnumerable<LocalResistanceApplication> applications)
+        {
+            return BuildUniqueLocalElements(applications.Where(item => item.Local.Source == "Не найдено" || item.Local.Source == "Не определено"), null);
+        }
+
+        private static IReadOnlyList<UniqueLocalResistanceElement> BuildUniqueLocalElements(IEnumerable<LocalResistanceApplication> applications, string? source)
         {
             return applications
-                .Where(item => string.Equals(item.Local.Source, source, StringComparison.Ordinal))
+                .Where(item => source == null || string.Equals(item.Local.Source, source, StringComparison.Ordinal))
                 .GroupBy(item => item.Local.ElementId)
                 .Select(group =>
                 {
@@ -385,7 +429,9 @@ namespace VentCalc.UI.Services
                     zeta = topLocal.Local.Zeta,
                     source = topLocal.Local.Source,
                     dynamicPressurePa = topLocal.Local.DynamicPressurePa,
-                    localPressureLossPa = topLocal.Local.LocalPressureLossPa
+                    localPressureLossPa = topLocal.Local.LocalPressureLossPa,
+                    pathRole = topLocal.Local.PathRole,
+                    roleReason = topLocal.Local.RoleReason
                 };
         }
 

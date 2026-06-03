@@ -41,12 +41,13 @@
         <Border DockPanel.Dock="Top" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8" Background="#FFF8F8F8">
             <DockPanel>
                 <WrapPanel DockPanel.Dock="Top">
-                    <Button Content="Загрузить выбранную систему" Command="{Binding LoadSelectedSystemCommand}" />
+                    <Button Content="Загрузить по выбранному элементу" Command="{Binding LoadSelectedSystemCommand}" />
+                    <Button Content="Загрузить выбранную систему из списка" Command="{Binding LoadCatalogSystemCommand}" />
                     <Button Content="Обновить" Command="{Binding RefreshCommand}" />
                     <Button Content="Выбрать стартовый элемент в Revit" Command="{Binding SelectStartElementInRevitCommand}" />
                     <Button Content="Выбрать критическую трассу в Revit" Command="{Binding SelectCriticalPathInRevitCommand}" />
                     <TextBlock Text="Система:" FontWeight="Bold" />
-                    <ComboBox ItemsSource="{Binding SystemSummaries}" SelectedItem="{Binding SelectedSystemSummary}" IsEnabled="False" Width="240" DisplayMemberPath="SystemName" Margin="4" />
+                    <ComboBox ItemsSource="{Binding SystemCatalog}" SelectedItem="{Binding SelectedCatalogSystem, Mode=TwoWay}" Width="320" DisplayMemberPath="DisplayName" Margin="4" />
                     <TextBlock Text="{Binding SelectedElementDisplay}" FontWeight="Bold" MinWidth="140" />
                 </WrapPanel>
                 <UniformGrid DockPanel.Dock="Top" Columns="7" Margin="0,8,0,4">
@@ -116,18 +117,54 @@
 
             <TabItem Header="Трассы">
                 <DockPanel Margin="6">
-                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="2*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0"><TextBlock Text="Направление" FontWeight="Bold" /><TextBlock Text="{Binding Direction}" /><TextBlock Text="Причина" FontWeight="Bold" /><TextBlock Text="{Binding DirectionReason}" TextWrapping="Wrap" /></StackPanel>
-                        <StackPanel Grid.Column="1"><TextBlock Text="Стартовые кандидаты" FontWeight="Bold" /><ListBox ItemsSource="{Binding StartCandidateDetails}" Height="80" /></StackPanel>
-                        <StackPanel Grid.Column="2"><TextBlock Text="Конечные кандидаты" FontWeight="Bold" /><ListBox ItemsSource="{Binding EndCandidateDetails}" Height="80" /></StackPanel>
-                        <StackPanel Grid.Column="3"><TextBlock Text="Заглушки / warnings" FontWeight="Bold" /><ListBox ItemsSource="{Binding IgnoredCapDetails}" Height="38" /><ListBox ItemsSource="{Binding PathWarnings}" Height="38" /></StackPanel>
-                    </Grid>
+                    <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="Решение трассировки" FontWeight="Bold" FontSize="15" />
+                            <TextBlock Text="{Binding TraceDirectionSummary}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding TraceStartSummary}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding TraceEndSummary}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding TraceCapsSummary}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding TraceWarningsSummary}" TextWrapping="Wrap" />
+                            <Expander Header="Технические детали трассировки" Margin="0,6,0,0" IsExpanded="False">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0"><TextBlock Text="Start candidates" FontWeight="Bold" /><ListBox ItemsSource="{Binding StartCandidateDetails}" Height="90" /></StackPanel>
+                                    <StackPanel Grid.Column="1"><TextBlock Text="End candidates" FontWeight="Bold" /><ListBox ItemsSource="{Binding EndCandidateDetails}" Height="90" /></StackPanel>
+                                    <StackPanel Grid.Column="2"><TextBlock Text="Caps" FontWeight="Bold" /><ListBox ItemsSource="{Binding IgnoredCapDetails}" Height="90" /></StackPanel>
+                                    <StackPanel Grid.Column="3"><TextBlock Text="Warnings / RoleReason" FontWeight="Bold" /><ListBox ItemsSource="{Binding PathWarnings}" Height="90" /></StackPanel>
+                                </Grid>
+                            </Expander>
+                        </StackPanel>
+                    </Border>
+                    <GroupBox DockPanel.Dock="Bottom" Header="Трассы через элемент" Margin="0,8,0,0">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top">
+                                <TextBlock Text="{Binding PathsThroughElementSummary}" TextWrapping="Wrap" />
+                                <WrapPanel>
+                                    <TextBlock Text="Макс. потери, Па:" FontWeight="Bold" /><TextBlock Text="{Binding PathsThroughElementMaxLossPa, StringFormat={}{0:0.###}}" />
+                                    <TextBlock Text="Макс. расход, м³/ч:" FontWeight="Bold" Margin="16,4,4,4" /><TextBlock Text="{Binding PathsThroughElementMaxFlowM3h, StringFormat={}{0:0.###}}" />
+                                    <Button Content="Выбрать все трассы через элемент в Revit" Command="{Binding SelectAllPathsThroughElementInRevitCommand}" />
+                                    <Button Content="Выбрать самую нагруженную трассу через элемент" Command="{Binding SelectLoadedPathThroughElementInRevitCommand}" />
+                                    <Button Content="Показать выбранный элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
+                                </WrapPanel>
+                            </StackPanel>
+                            <DataGrid ItemsSource="{Binding PathsThroughSelectedElement}" MaxHeight="140">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="№" Binding="{Binding PathIndex}" Width="50" />
+                                    <DataGridTextColumn Header="Start" Binding="{Binding StartElementId}" Width="100" />
+                                    <DataGridTextColumn Header="End" Binding="{Binding EndElementId}" Width="100" />
+                                    <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalDuctLengthM, StringFormat={}{0:0.###}}" Width="90" />
+                                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3hNumeric, StringFormat={}{0:0.###}}" Width="110" />
+                                    <DataGridTextColumn Header="Потери, Па" Binding="{Binding TotalPressureLossPa, StringFormat={}{0:0.###}}" Width="100" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </GroupBox>
                     <StackPanel DockPanel.Dock="Bottom">
                         <WrapPanel>
                             <Button Content="Выбрать трассу в Revit" Command="{Binding SelectSelectedPathInRevitCommand}" />
@@ -166,23 +203,50 @@
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итого с запасом" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalWithReservePa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                         </UniformGrid>
                     </Border>
-                    <Button DockPanel.Dock="Bottom" Content="Показать выбранный воздуховод в Revit" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
-                    <DataGrid ItemsSource="{Binding SelectedPathDucts}" SelectedItem="{Binding SelectedPathDuct, Mode=TwoWay}">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                            <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                            <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
-                            <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
-                            <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
-                            <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
-                            <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
-                            <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
-                            <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <Button DockPanel.Dock="Bottom" Content="Показать выбранный элемент расчёта в Revit" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
+                    <TabControl>
+                        <TabItem Header="Расчётные участки">
+                            <DataGrid ItemsSource="{Binding SelectedPathSections}" SelectedItem="{Binding SelectedPathSection, Mode=TwoWay}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="№ участка" Binding="{Binding SectionIndex}" Width="80" />
+                                    <DataGridTextColumn Header="ElementIds" Binding="{Binding ElementIdsText}" Width="160" />
+                                    <DataGridTextColumn Header="Start" Binding="{Binding StartElementId}" Width="90" />
+                                    <DataGridTextColumn Header="End" Binding="{Binding EndElementId}" Width="90" />
+                                    <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
+                                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
+                                    <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalLengthM, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
+                                    <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
+                                    <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
+                                    <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
+                                    <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
+                                    <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="Причина разделения" Binding="{Binding SplitReason}" Width="160" />
+                                    <DataGridTextColumn Header="Предупреждения" Binding="{Binding WarningText}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Воздуховоды">
+                            <DataGrid ItemsSource="{Binding SelectedPathDucts}" SelectedItem="{Binding SelectedPathDuct, Mode=TwoWay}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
+                                    <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
+                                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
+                                    <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
+                                    <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
+                                    <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
+                                    <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
+                                    <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
+                                    <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                    </TabControl>
                 </DockPanel>
             </TabItem>
 
@@ -201,6 +265,14 @@
                             <DataGridTextColumn Header="Семейство" Binding="{Binding FamilyName}" Width="150" />
                             <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
                             <DataGridTextColumn Header="Вид МС" Binding="{Binding LocalKind}" Width="140" />
+                            <DataGridTextColumn Header="PathRole" Binding="{Binding PathRole}" Width="140" />
+                            <DataGridTextColumn Header="Reason" Binding="{Binding RoleReason}" Width="220" />
+                            <DataGridTextColumn Header="PrevDuct" Binding="{Binding PreviousDuctElementId}" Width="90" />
+                            <DataGridTextColumn Header="NextDuct" Binding="{Binding NextDuctElementId}" Width="90" />
+                            <DataGridTextColumn Header="PrevArea" Binding="{Binding PreviousAreaM2, StringFormat={}{0:0.####}}" Width="80" />
+                            <DataGridTextColumn Header="NextArea" Binding="{Binding NextAreaM2, StringFormat={}{0:0.####}}" Width="80" />
+                            <DataGridTextColumn Header="PrevFlow" Binding="{Binding PreviousFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="NextFlow" Binding="{Binding NextFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="ζ" Binding="{Binding Zeta, StringFormat={}{0:0.###}}" Width="60" />
                             <DataGridTextColumn Header="Источник ζ" Binding="{Binding Source}" Width="110" />
                             <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />

@@ -14,6 +14,11 @@ namespace VentCalc.Core.Services
             IReadOnlyDictionary<long, LocalResistanceElementData> localDataByElementId,
             IReadOnlyDictionary<long, DuctCalculationInfo> ductCalculationsByElementId)
         {
+            var roleDetector = new FittingPathRoleDetector();
+            Dictionary<long, FittingPathRoleInfo> rolesByElementId = roleDetector
+                .Detect(path, localDataByElementId, ductCalculationsByElementId)
+                .GroupBy(role => role.ElementId)
+                .ToDictionary(group => group.Key, group => group.First());
             var result = new List<LocalResistanceCalculationInfo>();
             for (int index = 0; index < path.ElementIds.Count; index++)
             {
@@ -28,7 +33,8 @@ namespace VentCalc.Core.Services
                     : CreateFallbackData(elementId, path.Nodes[index]);
 
                 DuctCalculationInfo? referenceDuct = FindReferenceDuct(path, index, ductCalculationsByElementId, out string referenceWarning);
-                LocalResistanceCalculationInfo item = Calculate(data, referenceDuct);
+                rolesByElementId.TryGetValue(elementId, out FittingPathRoleInfo? role);
+                LocalResistanceCalculationInfo item = Calculate(data, referenceDuct, role);
                 if (!string.IsNullOrWhiteSpace(referenceWarning))
                 {
                     item.Warnings.Add(referenceWarning);
@@ -40,7 +46,7 @@ namespace VentCalc.Core.Services
             return result;
         }
 
-        private static LocalResistanceCalculationInfo Calculate(LocalResistanceElementData data, DuctCalculationInfo? referenceDuct)
+        private static LocalResistanceCalculationInfo Calculate(LocalResistanceElementData data, DuctCalculationInfo? referenceDuct, FittingPathRoleInfo? role)
         {
             var result = new LocalResistanceCalculationInfo
             {
@@ -49,10 +55,22 @@ namespace VentCalc.Core.Services
                 FamilyName = data.FamilyName,
                 TypeName = data.TypeName,
                 Size = data.Size,
+                PathRole = role?.PathRole ?? string.Empty,
+                RoleReason = role?.Reason ?? string.Empty,
+                PreviousDuctElementId = role?.PreviousDuctElementId,
+                NextDuctElementId = role?.NextDuctElementId,
+                PreviousAreaM2 = role?.PreviousAreaM2 ?? 0,
+                NextAreaM2 = role?.NextAreaM2 ?? 0,
+                PreviousFlowM3h = role?.PreviousFlowM3h ?? 0,
+                NextFlowM3h = role?.NextFlowM3h ?? 0
             };
             result.Warnings.AddRange(data.Warnings);
+            if (role != null)
+            {
+                result.Warnings.AddRange(role.Warnings);
+            }
 
-            ZetaResult zeta = ResolveZeta(data);
+            ZetaResult zeta = ResolveZeta(data, role);
             result.Zeta = zeta.Value;
             result.LocalKind = zeta.LocalKind;
             result.Source = zeta.Source;
@@ -112,11 +130,22 @@ namespace VentCalc.Core.Services
             return nearest;
         }
 
-        private static ZetaResult ResolveZeta(LocalResistanceElementData data)
+        private static ZetaResult ResolveZeta(LocalResistanceElementData data, FittingPathRoleInfo? role)
         {
             if (TryReadZetaFromComments(data.Comments, out double zetaFromComments))
             {
                 return new ZetaResult(zetaFromComments, "Комментарии", "Значение ζ из параметра Комментарии.", Array.Empty<string>());
+            }
+
+            if (role != null && !string.IsNullOrWhiteSpace(role.PathRole))
+            {
+                ZetaResult byRole = ResolveRoleZeta(role.PathRole);
+                if (byRole.Source != "Не определено")
+                {
+                    return byRole;
+                }
+
+                return byRole;
             }
 
             ZetaResult recommended = ResolveRecommendedZeta(data);
@@ -141,6 +170,33 @@ namespace VentCalc.Core.Services
             }
 
             return double.TryParse(match.Groups[1].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out zeta);
+        }
+
+
+        private static ZetaResult ResolveRoleZeta(string pathRole)
+        {
+            return pathRole switch
+            {
+                "Elbow15" => Recommended(0.08, "Отвод 15°"),
+                "Elbow30" => Recommended(0.12, "Отвод 30°"),
+                "Elbow45" => Recommended(0.18, "Отвод 45°"),
+                "Elbow60" => Recommended(0.25, "Отвод 60°"),
+                "Elbow90" => Recommended(0.35, "Отвод 90°"),
+                "TransitionNarrowing" => Recommended(0.10, "Переход сужение"),
+                "TransitionExpansion" => Recommended(0.20, "Переход расширение"),
+                "TeePass" => Recommended(0.30, "Тройник проход"),
+                "TeeBranch" => Recommended(1.20, "Тройник ответвление"),
+                "TapBranch" => Recommended(1.20, "Врезка ответвление"),
+                "CrossPass" => Recommended(0.50, "Крестовина проход"),
+                "CrossBranch" => Recommended(1.50, "Крестовина ответвление"),
+                "Grille" => Recommended(2.00, "Решетка"),
+                "Hood" => Recommended(1.30, "Зонт"),
+                "Damper" => Recommended(0.40, "Дроссель-клапан"),
+                "FireDamper" => Recommended(0.50, "Противопожарный клапан"),
+                "BackdraftDamper" => Recommended(2.00, "Обратный клапан"),
+                "Cap" => Recommended(0.00, "Заглушка"),
+                _ => new ZetaResult(0, "Не определено", pathRole, new[] { "Местное сопротивление не рассчитано: роль фитинга в трассе не определена." })
+            };
         }
 
         private static ZetaResult ResolveRecommendedZeta(LocalResistanceElementData data)

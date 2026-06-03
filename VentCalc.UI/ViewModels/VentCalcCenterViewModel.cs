@@ -17,7 +17,7 @@ namespace VentCalc.UI.ViewModels
 {
     public sealed class VentCalcCenterViewModel : NotifyObject
     {
-        private readonly Action<VentCalcCenterViewModel, bool> requestLoadSelectedSystem;
+        private readonly Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem;
         private readonly Action<IEnumerable<long>>? selectElementsInRevit;
         private readonly Action<string>? showMessage;
         private readonly Action<Exception>? reportException;
@@ -28,6 +28,8 @@ namespace VentCalc.UI.ViewModels
         private VentIssueInfo? selectedIssue;
         private PathRow? selectedPath;
         private VentSystemSummary? selectedSystemSummary;
+        private VentSystemCatalogItem? selectedCatalogSystem;
+        private CalculationSectionInfo? selectedPathSection;
         private string selectedElementId = "—";
         private string systemName = "—";
         private string systemType = "—";
@@ -42,7 +44,7 @@ namespace VentCalc.UI.ViewModels
         private PathCalculationInfo? criticalPath;
 
         public VentCalcCenterViewModel(
-            Action<VentCalcCenterViewModel, bool> requestLoadSelectedSystem,
+            Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem,
             Action<IEnumerable<long>>? selectElementsInRevit,
             Action<string>? showMessage,
             VentCalcSettingsService settingsService,
@@ -66,12 +68,15 @@ namespace VentCalc.UI.ViewModels
                 });
             }
 
-            LoadSelectedSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(refreshLastLoadedElement: false));
-            RefreshCommand = new RelayCommand(_ => RequestLoadSelectedSystem(refreshLastLoadedElement: true));
+            LoadSelectedSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SelectedElement));
+            LoadCatalogSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SystemCatalog), _ => SelectedCatalogSystem != null);
+            RefreshCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.LastLoadedElement));
             SelectElementInRevitCommand = new RelayCommand(_ => SelectElementInRevit(), _ => CurrentSelectedElementId.HasValue);
             SelectStartElementInRevitCommand = new RelayCommand(_ => SelectStartElementInRevit(), _ => StartElementIds.Count > 0);
             SelectSelectedPathInRevitCommand = new RelayCommand(_ => SelectSelectedPathInRevit(), _ => SelectedPath != null);
             SelectCriticalPathInRevitCommand = new RelayCommand(_ => SelectCriticalPathInRevit(), _ => CriticalPath != null);
+            SelectAllPathsThroughElementInRevitCommand = new RelayCommand(_ => SelectAllPathsThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
+            SelectLoadedPathThroughElementInRevitCommand = new RelayCommand(_ => SelectLoadedPathThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
             SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
             ResetSettingsCommand = new RelayCommand(_ => ResetSettings());
             ApplyVelocityHighlightCommand = new RelayCommand(_ => ShowStub("Подсветка скоростей будет добавлена на следующем этапе."));
@@ -116,6 +121,12 @@ namespace VentCalc.UI.ViewModels
         public ObservableCollection<string> StartElementIds { get; } = new ObservableCollection<string>();
 
         public ObservableCollection<VentSystemSummary> SystemSummaries { get; } = new ObservableCollection<VentSystemSummary>();
+
+        public ObservableCollection<VentSystemCatalogItem> SystemCatalog { get; } = new ObservableCollection<VentSystemCatalogItem>();
+
+        public ObservableCollection<CalculationSectionInfo> SelectedPathSections { get; } = new ObservableCollection<CalculationSectionInfo>();
+
+        public ObservableCollection<PathRow> PathsThroughSelectedElement { get; } = new ObservableCollection<PathRow>();
 
         public string SelectedElementId
         {
@@ -225,10 +236,36 @@ namespace VentCalc.UI.ViewModels
 
         public double SelectedPathTotalWithReservePa => SelectedPathTotalPressureLossPa * (1.0 + Settings.PressureReservePercent / 100.0);
 
+        public string LoadModeDisplay { get; private set; } = "—";
+
+        public int SystemComponentCount { get; private set; }
+
+        public string TraceDirectionSummary => $"Направление: {Direction} / {DirectionReason}";
+
+        public string TraceStartSummary => StartElementIds.Count == 0 ? "Старт: —" : $"Старт: {StartElementIds.First()}";
+
+        public string TraceEndSummary => $"Концов: {TraceEndCount} терминалов/конечных точек";
+
+        public string TraceCapsSummary => $"Заглушек проигнорировано: {IgnoredCapCount}";
+
+        public string TraceWarningsSummary => PathWarnings.Count == 0 ? "Предупреждения: —" : $"Предупреждения: {string.Join("; ", PathWarnings)}";
+
         public VentSystemSummary? SelectedSystemSummary
         {
             get => selectedSystemSummary;
             set => SetProperty(ref selectedSystemSummary, value);
+        }
+
+        public VentSystemCatalogItem? SelectedCatalogSystem
+        {
+            get => selectedCatalogSystem;
+            set
+            {
+                if (SetProperty(ref selectedCatalogSystem, value))
+                {
+                    CommandManager.InvalidateRequerySuggested();
+                }
+            }
         }
 
         public NetworkElementRow? SelectedNetworkElement
@@ -239,6 +276,7 @@ namespace VentCalc.UI.ViewModels
                 if (SetProperty(ref selectedNetworkElement, value))
                 {
                     ClearTableSelectionsExcept(nameof(SelectedNetworkElement));
+                    UpdatePathsThroughCurrentElement();
                     NotifySelectionChanged();
                 }
             }
@@ -252,6 +290,21 @@ namespace VentCalc.UI.ViewModels
                 if (SetProperty(ref selectedPathDuct, value))
                 {
                     ClearTableSelectionsExcept(nameof(SelectedPathDuct));
+                    UpdatePathsThroughCurrentElement();
+                    NotifySelectionChanged();
+                }
+            }
+        }
+
+        public CalculationSectionInfo? SelectedPathSection
+        {
+            get => selectedPathSection;
+            set
+            {
+                if (SetProperty(ref selectedPathSection, value))
+                {
+                    ClearTableSelectionsExcept(nameof(SelectedPathSection));
+                    UpdatePathsThroughCurrentElement();
                     NotifySelectionChanged();
                 }
             }
@@ -265,6 +318,7 @@ namespace VentCalc.UI.ViewModels
                 if (SetProperty(ref selectedPathLocalResistance, value))
                 {
                     ClearTableSelectionsExcept(nameof(SelectedPathLocalResistance));
+                    UpdatePathsThroughCurrentElement();
                     NotifySelectionChanged();
                 }
             }
@@ -278,6 +332,7 @@ namespace VentCalc.UI.ViewModels
                 if (SetProperty(ref selectedIssue, value))
                 {
                     ClearTableSelectionsExcept(nameof(SelectedIssue));
+                    UpdatePathsThroughCurrentElement();
                     NotifySelectionChanged();
                 }
             }
@@ -319,6 +374,8 @@ namespace VentCalc.UI.ViewModels
 
         public ICommand LoadSelectedSystemCommand { get; }
 
+        public ICommand LoadCatalogSystemCommand { get; }
+
         public ICommand RefreshCommand { get; }
 
         public ICommand SelectElementInRevitCommand { get; }
@@ -328,6 +385,10 @@ namespace VentCalc.UI.ViewModels
         public ICommand SelectSelectedPathInRevitCommand { get; }
 
         public ICommand SelectCriticalPathInRevitCommand { get; }
+
+        public ICommand SelectAllPathsThroughElementInRevitCommand { get; private set; } = null!;
+
+        public ICommand SelectLoadedPathThroughElementInRevitCommand { get; private set; } = null!;
 
         public ICommand SaveSettingsCommand { get; }
 
@@ -351,14 +412,16 @@ namespace VentCalc.UI.ViewModels
 
         public ICommand StubCommand { get; }
 
-        private void RequestLoadSelectedSystem(bool refreshLastLoadedElement)
+        private void RequestLoadSelectedSystem(VentCalcLoadRequestMode mode)
         {
             try
             {
-                StatusText = refreshLastLoadedElement && LastLoadedElementId.HasValue
+                StatusText = mode == VentCalcLoadRequestMode.LastLoadedElement && LastLoadedElementId.HasValue
                     ? "Обновление последней загруженной системы..."
-                    : "Ожидание Revit: выберите один элемент воздуховодной системы в Revit.";
-                requestLoadSelectedSystem(this, refreshLastLoadedElement);
+                    : mode == VentCalcLoadRequestMode.SystemCatalog
+                        ? "Ожидание Revit: загрузка системы из списка."
+                        : "Ожидание Revit: выберите один элемент воздуховодной системы в Revit.";
+                requestLoadSelectedSystem(this, mode);
             }
             catch (Exception exception)
             {
@@ -404,6 +467,8 @@ namespace VentCalc.UI.ViewModels
             Direction = data.PathSummary?.Direction ?? "—";
             DirectionReason = data.PathSummary?.DirectionReason ?? "—";
             CriticalPath = data.AerodynamicSummary?.CriticalPathByTotalPressure;
+            LoadModeDisplay = string.IsNullOrWhiteSpace(data.LoadMode) ? "—" : data.LoadMode;
+            SystemComponentCount = data.SystemComponentCount;
             if (data.Success && long.TryParse(data.SelectedElementInfo?.ElementId ?? data.NetworkInfo?.SelectedElementId, NumberStyles.Integer, CultureInfo.InvariantCulture, out long loadedElementId))
             {
                 LastLoadedElementId = loadedElementId;
@@ -413,6 +478,8 @@ namespace VentCalc.UI.ViewModels
             Replace(Paths, BuildPathRows(data));
             Replace(SystemSummaries, BuildSystemSummaries(data));
             SelectedSystemSummary = SystemSummaries.FirstOrDefault();
+            Replace(SystemCatalog, data.SystemCatalog);
+            SelectedCatalogSystem = SystemCatalog.FirstOrDefault(item => string.Equals(item.SystemName, data.SelectedSystemName, StringComparison.OrdinalIgnoreCase) && string.Equals(item.SystemType, data.SelectedSystemType, StringComparison.OrdinalIgnoreCase)) ?? SystemCatalog.FirstOrDefault();
             Replace(Issues, SortIssues(BuildIssues(data)));
             if (!string.IsNullOrWhiteSpace(settingsWarning))
             {
@@ -455,6 +522,13 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             OnPropertyChanged(nameof(ReportText));
+            OnPropertyChanged(nameof(LoadModeDisplay));
+            OnPropertyChanged(nameof(SystemComponentCount));
+            OnPropertyChanged(nameof(TraceDirectionSummary));
+            OnPropertyChanged(nameof(TraceStartSummary));
+            OnPropertyChanged(nameof(TraceEndSummary));
+            OnPropertyChanged(nameof(TraceCapsSummary));
+            OnPropertyChanged(nameof(TraceWarningsSummary));
             CommandManager.InvalidateRequerySuggested();
         }
 
@@ -663,14 +737,14 @@ namespace VentCalc.UI.ViewModels
 
             foreach (LocalResistanceCalculationInfo local in data.AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
-                if (local.Source == "Не найдено")
+                if (local.Source == "Не найдено" || local.Source == "Не определено" || string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase) || local.PathRole?.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     result.Add(new VentIssueInfo
                     {
                         Severity = "Warning",
                         ElementId = local.ElementId.ToString(CultureInfo.InvariantCulture),
                         Category = "Местные сопротивления",
-                        Message = "Фитинг без понятного типа МС; требуется проверка ζ.",
+                        Message = string.IsNullOrWhiteSpace(local.PathRole) ? "Фитинг без понятного типа МС; требуется проверка ζ." : $"Роль фитинга в трассе не определена уверенно: {local.PathRole}.",
                         Recommendation = "Заполните ζ в комментарии, например z=0.35."
                     });
                 }
@@ -704,11 +778,15 @@ namespace VentCalc.UI.ViewModels
         {
             selectedPathDuct = null;
             selectedPathLocalResistance = null;
+            selectedPathSection = null;
             OnPropertyChanged(nameof(SelectedPathDuct));
             OnPropertyChanged(nameof(SelectedPathLocalResistance));
+            OnPropertyChanged(nameof(SelectedPathSection));
             NotifySelectionChanged();
             Replace(SelectedPathDucts, SelectedPath?.Calculation?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>());
+            Replace(SelectedPathSections, SelectedPath?.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>());
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
+            UpdatePathsThroughCurrentElement();
             OnPropertyChanged(nameof(SelectedPathChain));
             OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
@@ -735,9 +813,19 @@ namespace VentCalc.UI.ViewModels
                     return SelectedPathLocalResistance.ElementId;
                 }
 
+                if (SelectedPathSection?.ElementIds.Count > 0)
+                {
+                    return SelectedPathSection.ElementIds.First();
+                }
+
                 if (SelectedIssue != null && TryParseElementId(SelectedIssue.ElementId, out long issueElementId))
                 {
                     return issueElementId;
+                }
+
+                if (TryParseElementId(SelectedElementId, out long loadedElementId))
+                {
+                    return loadedElementId;
                 }
 
                 return null;
@@ -787,6 +875,38 @@ namespace VentCalc.UI.ViewModels
             SelectElementsInRevit(CriticalPath.ElementIds, $"Критическая трасса №{CriticalPath.PathIndex} выделена в Revit.");
         }
 
+        private void SelectAllPathsThroughElementInRevit()
+        {
+            if (PathsThroughSelectedElement.Count == 0)
+            {
+                StatusText = "Через выбранный элемент трассы не найдены.";
+                return;
+            }
+
+            List<long> ids = PathsThroughSelectedElement
+                .SelectMany(path => path.ElementIds)
+                .Where(value => TryParseElementId(value, out _))
+                .Select(value => long.Parse(value, CultureInfo.InvariantCulture))
+                .Distinct()
+                .ToList();
+            SelectElementsInRevit(ids, "Все трассы через выбранный элемент выделены в Revit.");
+        }
+
+        private void SelectLoadedPathThroughElementInRevit()
+        {
+            PathRow? path = PathsThroughSelectedElement
+                .OrderByDescending(row => row.TotalPressureLossPa)
+                .ThenByDescending(row => row.FlowM3hNumeric)
+                .FirstOrDefault();
+            if (path == null)
+            {
+                StatusText = "Через выбранный элемент трассы не найдены.";
+                return;
+            }
+
+            SelectPathElementIds(path.ElementIds, $"Самая нагруженная трасса через элемент: №{path.PathIndex} выделена в Revit.");
+        }
+
         private void SelectPathElementIds(IEnumerable<string> elementIds, string successMessage)
         {
             List<long> parsedIds = elementIds
@@ -829,12 +949,50 @@ namespace VentCalc.UI.ViewModels
                 OnPropertyChanged(nameof(SelectedPathLocalResistance));
             }
 
+            if (propertyName != nameof(SelectedPathSection) && selectedPathSection != null)
+            {
+                selectedPathSection = null;
+                OnPropertyChanged(nameof(SelectedPathSection));
+            }
+
             if (propertyName != nameof(SelectedIssue) && selectedIssue != null)
             {
                 selectedIssue = null;
                 OnPropertyChanged(nameof(SelectedIssue));
             }
         }
+
+        private void UpdatePathsThroughCurrentElement()
+        {
+            long? elementId = CurrentSelectedElementId;
+            IReadOnlyList<PathRow> rows = elementId.HasValue
+                ? Paths.Where(path => path.ElementIds.Any(id => TryParseElementId(id, out long parsed) && parsed == elementId.Value)).ToList()
+                : Array.Empty<PathRow>();
+            Replace(PathsThroughSelectedElement, rows);
+            OnPropertyChanged(nameof(PathsThroughElementSummary));
+            OnPropertyChanged(nameof(PathsThroughElementMaxLossPa));
+            OnPropertyChanged(nameof(PathsThroughElementMaxFlowM3h));
+        }
+
+        public string PathsThroughElementSummary
+        {
+            get
+            {
+                long? elementId = CurrentSelectedElementId;
+                if (!elementId.HasValue)
+                {
+                    return "Выберите элемент, воздуховод, участок, МС или диагностику с ElementId.";
+                }
+
+                return PathsThroughSelectedElement.Count == 0
+                    ? $"ElementId {elementId}: через элемент трассы не найдены."
+                    : $"ElementId {elementId}: трасс через элемент — {PathsThroughSelectedElement.Count}; номера: {string.Join(", ", PathsThroughSelectedElement.Select(path => path.PathIndex))}.";
+            }
+        }
+
+        public double PathsThroughElementMaxLossPa => PathsThroughSelectedElement.Count == 0 ? 0 : PathsThroughSelectedElement.Max(path => path.TotalPressureLossPa);
+
+        public double PathsThroughElementMaxFlowM3h => PathsThroughSelectedElement.Count == 0 ? 0 : PathsThroughSelectedElement.Max(path => path.FlowM3hNumeric);
 
         private void NotifySelectionChanged()
         {
@@ -965,6 +1123,13 @@ namespace VentCalc.UI.ViewModels
         }
     }
 
+    public enum VentCalcLoadRequestMode
+    {
+        SelectedElement,
+        LastLoadedElement,
+        SystemCatalog
+    }
+
     public sealed class VentCalcCenterData
     {
         public VentElementInfo? SelectedElementInfo { get; set; }
@@ -990,6 +1155,16 @@ namespace VentCalc.UI.ViewModels
         public string ErrorMessage { get; set; } = string.Empty;
 
         public List<string> Warnings { get; set; } = new List<string>();
+
+        public List<VentSystemCatalogItem> SystemCatalog { get; set; } = new List<VentSystemCatalogItem>();
+
+        public string LoadMode { get; set; } = string.Empty;
+
+        public string SelectedSystemName { get; set; } = string.Empty;
+
+        public string SelectedSystemType { get; set; } = string.Empty;
+
+        public int SystemComponentCount { get; set; } = 1;
     }
 
     public sealed class NetworkElementRow
@@ -1043,9 +1218,18 @@ namespace VentCalc.UI.ViewModels
 
         public string FlowM3h => Path.MaxFlowM3h;
 
+        public double FlowM3hNumeric => TryParseFlow(Path.MaxFlowM3h);
+
         public double TotalPressureLossPa => Calculation?.TotalPressureLossPa ?? 0;
 
+
         public IReadOnlyList<string> ElementIds => Path.ElementIds;
+
+        private static double TryParseFlow(string value)
+        {
+            string number = new string((value ?? string.Empty).Replace(',', '.').Where(ch => char.IsDigit(ch) || ch == '.' || ch == '-').ToArray());
+            return double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) ? parsed : 0;
+        }
     }
 
     public sealed class VentCalcSettings : NotifyObject
