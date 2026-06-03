@@ -38,9 +38,11 @@ namespace VentCalc.UI.Services
             string basePath = Path.Combine(GetReportsDirectory(), $"ventcalc_report_{timestamp}");
             string txtPath = basePath + ".txt";
             string jsonPath = basePath + ".json";
-            string text = BuildTextReport(viewModel, DateTime.Now);
+            DateTime createdAt = DateTime.Now;
+            ReportDiagnostics diagnostics = BuildDiagnostics(viewModel);
+            string text = BuildTextReport(viewModel, createdAt, diagnostics);
             File.WriteAllText(txtPath, text, Encoding.UTF8);
-            File.WriteAllText(jsonPath, BuildJsonReport(viewModel, DateTime.Now), Encoding.UTF8);
+            File.WriteAllText(jsonPath, BuildJsonReport(viewModel, createdAt, diagnostics), Encoding.UTF8);
 
             return new VentCalcDiagnosticReportResult
             {
@@ -50,16 +52,28 @@ namespace VentCalc.UI.Services
             };
         }
 
-        private static string BuildTextReport(VentCalcCenterViewModel viewModel, DateTime createdAt)
+        private static ReportDiagnostics BuildDiagnostics(VentCalcCenterViewModel viewModel)
+        {
+            List<LocalResistanceApplication> localApplications = GetLocalApplications(viewModel).ToList();
+            List<DuctApplication> ductApplications = GetDuctApplications(viewModel).ToList();
+            return new ReportDiagnostics
+            {
+                LocalApplications = localApplications,
+                DuctApplications = ductApplications,
+                UniqueRecommendedZetaElements = BuildUniqueLocalElements(localApplications, "Рекомендовано"),
+                UniqueCommentZetaElements = BuildUniqueLocalElements(localApplications, "Комментарии"),
+                MissingZetaElements = BuildUniqueLocalElements(localApplications, "Не найдено"),
+                TopLocalResistanceContribution = localApplications.OrderByDescending(item => item.Local.LocalPressureLossPa).FirstOrDefault(),
+                TopFrictionContribution = ductApplications.OrderByDescending(item => item.Duct.FrictionPressureLossPa).FirstOrDefault(),
+                MaxVelocityDuct = ductApplications.OrderByDescending(item => item.Duct.VelocityMs).FirstOrDefault(),
+                MinVelocityDuct = ductApplications.Where(item => item.Duct.VelocityMs > 0).OrderBy(item => item.Duct.VelocityMs).FirstOrDefault()
+            };
+        }
+
+        private static string BuildTextReport(VentCalcCenterViewModel viewModel, DateTime createdAt, ReportDiagnostics diagnostics)
         {
             var builder = new StringBuilder();
             PathCalculationInfo? criticalPath = viewModel.CriticalPath;
-            IReadOnlyList<DuctCalculationInfo> allDucts = GetAllDucts(viewModel).ToList();
-            IReadOnlyList<LocalResistanceCalculationInfo> allLocalResistances = GetAllLocalResistances(viewModel).ToList();
-            DuctCalculationInfo? maxVelocityDuct = allDucts.OrderByDescending(duct => duct.VelocityMs).FirstOrDefault();
-            DuctCalculationInfo? minVelocityDuct = allDucts.Where(duct => duct.VelocityMs > 0).OrderBy(duct => duct.VelocityMs).FirstOrDefault();
-            DuctCalculationInfo? maxFrictionDuct = allDucts.OrderByDescending(duct => duct.FrictionPressureLossPa).FirstOrDefault();
-            LocalResistanceCalculationInfo? maxLocal = allLocalResistances.OrderByDescending(local => local.LocalPressureLossPa).FirstOrDefault();
             IReadOnlyList<string> systemPairs = GetSystemPairs(viewModel).ToList();
 
             builder.AppendLine("VentCalc v2.0 — отчёт для проверки");
@@ -153,18 +167,19 @@ namespace VentCalc.UI.Services
             builder.AppendLine();
 
             builder.AppendLine("9. Проверочные значения");
-            builder.AppendLine($"Самая большая скорость: {(maxVelocityDuct?.VelocityMs ?? 0):0.###} м/с (ElementId {maxVelocityDuct?.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"})");
-            builder.AppendLine($"Самая маленькая скорость: {(minVelocityDuct?.VelocityMs ?? 0):0.###} м/с (ElementId {minVelocityDuct?.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"})");
-            builder.AppendLine($"Самый большой вклад по МС: {(maxLocal?.LocalPressureLossPa ?? 0):0.###} Па (ElementId {maxLocal?.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"})");
-            builder.AppendLine($"Самый большой вклад по трению: {(maxFrictionDuct?.FrictionPressureLossPa ?? 0):0.###} Па (ElementId {maxFrictionDuct?.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"})");
-            builder.AppendLine("Элементы без ζ: " + string.Join(", ", allLocalResistances.Where(local => local.Source == "Не найдено").Select(local => local.ElementId)));
-            builder.AppendLine("Элементы с ζ из рекомендации: " + string.Join(", ", allLocalResistances.Where(local => local.Source == "Рекомендовано").Select(local => local.ElementId)));
-            builder.AppendLine("Элементы с ζ из комментария: " + string.Join(", ", allLocalResistances.Where(local => local.Source == "Комментарии").Select(local => local.ElementId)));
+            AppendTopLocalContribution(builder, diagnostics.TopLocalResistanceContribution);
+            AppendTopFrictionContribution(builder, diagnostics.TopFrictionContribution);
+            builder.AppendLine($"Самая большая скорость: {(diagnostics.MaxVelocityDuct?.Duct.VelocityMs ?? 0):0.###} м/с (ElementId {diagnostics.MaxVelocityDuct?.Duct.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"}, трасса №{diagnostics.MaxVelocityDuct?.PathIndex.ToString(CultureInfo.InvariantCulture) ?? "—"})");
+            builder.AppendLine($"Самая маленькая скорость: {(diagnostics.MinVelocityDuct?.Duct.VelocityMs ?? 0):0.###} м/с (ElementId {diagnostics.MinVelocityDuct?.Duct.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"}, трасса №{diagnostics.MinVelocityDuct?.PathIndex.ToString(CultureInfo.InvariantCulture) ?? "—"})");
+            AppendUniqueLocalGroup(builder, "Уникальные элементы с ζ из рекомендации", diagnostics.UniqueRecommendedZetaElements);
+            builder.AppendLine($"Применений ζ из рекомендации по трассам: {diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано")}");
+            AppendUniqueLocalGroup(builder, "Уникальные элементы с ζ из комментария", diagnostics.UniqueCommentZetaElements);
+            AppendUniqueLocalGroup(builder, "Элементы без ζ", diagnostics.MissingZetaElements);
 
             return builder.ToString();
         }
 
-        private static string BuildJsonReport(VentCalcCenterViewModel viewModel, DateTime createdAt)
+        private static string BuildJsonReport(VentCalcCenterViewModel viewModel, DateTime createdAt, ReportDiagnostics diagnostics)
         {
             PathCalculationInfo? criticalPath = viewModel.CriticalPath;
             var payload = new
@@ -253,7 +268,16 @@ namespace VentCalc.UI.Services
                 criticalPathDucts = criticalPath?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>(),
                 criticalPathLocalResistances = criticalPath?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>(),
                 allDucts = GetAllDucts(viewModel),
-                allLocalResistances = GetAllLocalResistances(viewModel)
+                allLocalResistances = GetAllLocalResistances(viewModel),
+                uniqueRecommendedZetaElements = diagnostics.UniqueRecommendedZetaElements,
+                uniqueCommentZetaElements = diagnostics.UniqueCommentZetaElements,
+                missingZetaElements = diagnostics.MissingZetaElements,
+                localResistanceApplicationsCount = diagnostics.LocalApplications.Count,
+                recommendedZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано"),
+                commentZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Комментарии"),
+                missingZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Не найдено"),
+                topLocalResistanceContribution = ToJsonTopLocal(diagnostics.TopLocalResistanceContribution),
+                topFrictionContribution = ToJsonTopFriction(diagnostics.TopFrictionContribution)
             };
 
             return JsonSerializer.Serialize(payload, JsonOptions);
@@ -269,6 +293,113 @@ namespace VentCalc.UI.Services
             return viewModel.AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>();
         }
 
+        private static IEnumerable<LocalResistanceApplication> GetLocalApplications(VentCalcCenterViewModel viewModel)
+        {
+            return viewModel.AerodynamicSummary?.Paths
+                .SelectMany(path => path.LocalResistances.Select(local => new LocalResistanceApplication(path.PathIndex, local)))
+                ?? Enumerable.Empty<LocalResistanceApplication>();
+        }
+
+        private static IEnumerable<DuctApplication> GetDuctApplications(VentCalcCenterViewModel viewModel)
+        {
+            return viewModel.AerodynamicSummary?.Paths
+                .SelectMany(path => path.Ducts.Select(duct => new DuctApplication(path.PathIndex, duct)))
+                ?? Enumerable.Empty<DuctApplication>();
+        }
+
+        private static IReadOnlyList<UniqueLocalResistanceElement> BuildUniqueLocalElements(IEnumerable<LocalResistanceApplication> applications, string source)
+        {
+            return applications
+                .Where(item => string.Equals(item.Local.Source, source, StringComparison.Ordinal))
+                .GroupBy(item => item.Local.ElementId)
+                .Select(group =>
+                {
+                    LocalResistanceCalculationInfo first = group.First().Local;
+                    return new UniqueLocalResistanceElement
+                    {
+                        ElementId = first.ElementId,
+                        TypeName = first.TypeName,
+                        FamilyName = first.FamilyName,
+                        Size = first.Size,
+                        Zeta = first.Zeta,
+                        Source = first.Source,
+                        ApplicationsCount = group.Count(),
+                        MaxLocalPressureLossPa = group.Max(item => item.Local.LocalPressureLossPa),
+                        PathIndexes = group.Select(item => item.PathIndex).Distinct().OrderBy(index => index).ToList()
+                    };
+                })
+                .OrderBy(item => item.ElementId)
+                .ToList();
+        }
+
+        private static void AppendUniqueLocalGroup(StringBuilder builder, string title, IReadOnlyList<UniqueLocalResistanceElement> elements)
+        {
+            builder.AppendLine($"{title}: {elements.Count}");
+            if (elements.Count == 0)
+            {
+                builder.AppendLine("  —");
+                return;
+            }
+
+            foreach (UniqueLocalResistanceElement element in elements)
+            {
+                builder.AppendLine($"  {element.ElementId}; тип={element.TypeName}; семейство={element.FamilyName}; ζ={element.Zeta:0.###}; применений={element.ApplicationsCount}; трассы={string.Join(", ", element.PathIndexes)}");
+            }
+        }
+
+        private static void AppendTopLocalContribution(StringBuilder builder, LocalResistanceApplication? topLocal)
+        {
+            if (topLocal == null)
+            {
+                builder.AppendLine("Самый большой вклад по МС: —");
+                return;
+            }
+
+            builder.AppendLine($"Самый большой вклад по МС: ElementId {topLocal.Local.ElementId}; тип={topLocal.Local.TypeName}; семейство={topLocal.Local.FamilyName}; ζ={topLocal.Local.Zeta:0.###}; Z={topLocal.Local.LocalPressureLossPa:0.###} Па; трасса №{topLocal.PathIndex}");
+        }
+
+        private static void AppendTopFrictionContribution(StringBuilder builder, DuctApplication? topFriction)
+        {
+            if (topFriction == null)
+            {
+                builder.AppendLine("Самый большой вклад по трению: —");
+                return;
+            }
+
+            builder.AppendLine($"Самый большой вклад по трению: ElementId {topFriction.Duct.ElementId}; размер={topFriction.Duct.Size}; R·l={topFriction.Duct.FrictionPressureLossPa:0.###} Па; трасса №{topFriction.PathIndex}");
+        }
+
+        private static object? ToJsonTopLocal(LocalResistanceApplication? topLocal)
+        {
+            return topLocal == null
+                ? null
+                : new
+                {
+                    pathIndex = topLocal.PathIndex,
+                    elementId = topLocal.Local.ElementId,
+                    typeName = topLocal.Local.TypeName,
+                    familyName = topLocal.Local.FamilyName,
+                    zeta = topLocal.Local.Zeta,
+                    source = topLocal.Local.Source,
+                    dynamicPressurePa = topLocal.Local.DynamicPressurePa,
+                    localPressureLossPa = topLocal.Local.LocalPressureLossPa
+                };
+        }
+
+        private static object? ToJsonTopFriction(DuctApplication? topFriction)
+        {
+            return topFriction == null
+                ? null
+                : new
+                {
+                    pathIndex = topFriction.PathIndex,
+                    elementId = topFriction.Duct.ElementId,
+                    size = topFriction.Duct.Size,
+                    specificPressureLossPaPerM = topFriction.Duct.SpecificPressureLossPaPerM,
+                    frictionPressureLossPa = topFriction.Duct.FrictionPressureLossPa
+                };
+        }
+
         private static IEnumerable<string> GetSystemPairs(VentCalcCenterViewModel viewModel)
         {
             return viewModel.NetworkInfo?.Elements
@@ -277,6 +408,74 @@ namespace VentCalc.UI.Services
                 .Distinct()
                 .OrderBy(value => value, StringComparer.Ordinal)
                 ?? Enumerable.Empty<string>();
+        }
+
+        private sealed class ReportDiagnostics
+        {
+            public IReadOnlyList<LocalResistanceApplication> LocalApplications { get; set; } = Array.Empty<LocalResistanceApplication>();
+
+            public IReadOnlyList<DuctApplication> DuctApplications { get; set; } = Array.Empty<DuctApplication>();
+
+            public IReadOnlyList<UniqueLocalResistanceElement> UniqueRecommendedZetaElements { get; set; } = Array.Empty<UniqueLocalResistanceElement>();
+
+            public IReadOnlyList<UniqueLocalResistanceElement> UniqueCommentZetaElements { get; set; } = Array.Empty<UniqueLocalResistanceElement>();
+
+            public IReadOnlyList<UniqueLocalResistanceElement> MissingZetaElements { get; set; } = Array.Empty<UniqueLocalResistanceElement>();
+
+            public LocalResistanceApplication? TopLocalResistanceContribution { get; set; }
+
+            public DuctApplication? TopFrictionContribution { get; set; }
+
+            public DuctApplication? MaxVelocityDuct { get; set; }
+
+            public DuctApplication? MinVelocityDuct { get; set; }
+        }
+
+        private sealed class LocalResistanceApplication
+        {
+            public LocalResistanceApplication(int pathIndex, LocalResistanceCalculationInfo local)
+            {
+                PathIndex = pathIndex;
+                Local = local;
+            }
+
+            public int PathIndex { get; }
+
+            public LocalResistanceCalculationInfo Local { get; }
+        }
+
+        private sealed class DuctApplication
+        {
+            public DuctApplication(int pathIndex, DuctCalculationInfo duct)
+            {
+                PathIndex = pathIndex;
+                Duct = duct;
+            }
+
+            public int PathIndex { get; }
+
+            public DuctCalculationInfo Duct { get; }
+        }
+
+        private sealed class UniqueLocalResistanceElement
+        {
+            public long ElementId { get; set; }
+
+            public string TypeName { get; set; } = string.Empty;
+
+            public string FamilyName { get; set; } = string.Empty;
+
+            public string Size { get; set; } = string.Empty;
+
+            public double Zeta { get; set; }
+
+            public string Source { get; set; } = string.Empty;
+
+            public int ApplicationsCount { get; set; }
+
+            public double MaxLocalPressureLossPa { get; set; }
+
+            public List<int> PathIndexes { get; set; } = new List<int>();
         }
     }
 }

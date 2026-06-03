@@ -47,8 +47,7 @@
                     <Button Content="Выбрать критическую трассу в Revit" IsEnabled="False" />
                     <TextBlock Text="Система:" FontWeight="Bold" />
                     <ComboBox ItemsSource="{Binding SystemSummaries}" SelectedItem="{Binding SelectedSystemSummary}" IsEnabled="False" Width="240" DisplayMemberPath="SystemName" Margin="4" />
-                    <TextBlock Text="ElementId:" FontWeight="Bold" />
-                    <TextBlock Text="{Binding SelectedElementId}" />
+                    <TextBlock Text="{Binding SelectedElementDisplay}" FontWeight="Bold" MinWidth="140" />
                 </WrapPanel>
                 <UniformGrid DockPanel.Dock="Top" Columns="7" Margin="0,8,0,4">
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>

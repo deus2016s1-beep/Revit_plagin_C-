@@ -10,14 +10,16 @@ namespace VentCalc.Revit.ExternalEvents
     {
         private readonly RevitVentCalcCenterDataLoader dataLoader;
         private readonly string launchLogPath;
+        private readonly Action? focusWindow;
         private VentCalcCenterViewModel? pendingViewModel;
         private LoadSelectedSystemRequestMode pendingMode;
         private ExternalEvent? externalEvent;
 
-        public LoadSelectedSystemExternalEventHandler(RevitVentCalcCenterDataLoader dataLoader, string launchLogPath)
+        public LoadSelectedSystemExternalEventHandler(RevitVentCalcCenterDataLoader dataLoader, string launchLogPath, Action? focusWindow = null)
         {
             this.dataLoader = dataLoader;
             this.launchLogPath = launchLogPath;
+            this.focusWindow = focusWindow;
         }
 
         public void Initialize(ExternalEvent createdExternalEvent)
@@ -65,13 +67,21 @@ namespace VentCalc.Revit.ExternalEvents
                     data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings());
                 }
 
-                InvokeOnUiThread(viewModel, () => viewModel.CompleteLoad(data));
+                InvokeOnUiThread(viewModel, () =>
+                {
+                    viewModel.CompleteLoad(data);
+                    focusWindow?.Invoke();
+                });
                 ErrorReporter.WriteTrace(launchLogPath, "LoadSelectedSystem external event completed");
             }
             catch (Exception exception)
             {
                 ErrorReporter.Report(app, "Ошибка ExternalEvent загрузки VentCalc Center", exception, launchLogPath);
-                InvokeOnUiThread(viewModel, () => viewModel.FailLoad(exception));
+                InvokeOnUiThread(viewModel, () =>
+                {
+                    viewModel.FailLoad(exception);
+                    focusWindow?.Invoke();
+                });
             }
         }
 

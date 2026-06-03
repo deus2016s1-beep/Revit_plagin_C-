@@ -1,4 +1,7 @@
 using System;
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -32,7 +35,7 @@ namespace VentCalc.Revit.Commands
 
                 if (activeWindow?.IsVisible == true)
                 {
-                    activeWindow.Activate();
+                    ActivateWindow(activeWindow);
                     ErrorReporter.WriteTrace(launchLogPath, "Existing VentCalc Center activated");
                     return Result.Succeeded;
                 }
@@ -42,7 +45,7 @@ namespace VentCalc.Revit.Commands
                 ErrorReporter.WriteTrace(launchLogPath, "Settings loaded");
 
                 var loader = new RevitVentCalcCenterDataLoader();
-                var loadHandler = new LoadSelectedSystemExternalEventHandler(loader, launchLogPath);
+                var loadHandler = new LoadSelectedSystemExternalEventHandler(loader, launchLogPath, () => ActivateWindow(activeWindow));
                 ExternalEvent loadExternalEvent = ExternalEvent.Create(loadHandler);
                 loadHandler.Initialize(loadExternalEvent);
                 var selectHandler = new SelectElementExternalEventHandler(launchLogPath);
@@ -60,6 +63,7 @@ namespace VentCalc.Revit.Commands
                 ErrorReporter.WriteTrace(launchLogPath, "ViewModel created");
 
                 var window = new VentCalcCenterWindow(viewModel);
+                AssignRevitOwner(window, uiApplication);
                 window.Dispatcher.UnhandledException += (_, args) =>
                 {
                     ErrorReporter.Report(uiApplication, "Ошибка WPF окна VentCalc Center", args.Exception, launchLogPath);
@@ -87,6 +91,48 @@ namespace VentCalc.Revit.Commands
                 message = exception.Message;
                 return Result.Failed;
             }
+        }
+
+        private static void AssignRevitOwner(Window window, UIApplication uiApplication)
+        {
+            try
+            {
+                IntPtr ownerHandle = uiApplication.MainWindowHandle;
+                if (ownerHandle == IntPtr.Zero)
+                {
+                    ownerHandle = Process.GetCurrentProcess().MainWindowHandle;
+                }
+
+                if (ownerHandle != IntPtr.Zero)
+                {
+                    new WindowInteropHelper(window).Owner = ownerHandle;
+                }
+            }
+            catch (Exception)
+            {
+                // Owner assignment is UX-only; VentCalc Center must still open if Revit does not expose a handle.
+            }
+        }
+
+        private static void ActivateWindow(Window? window)
+        {
+            if (window == null)
+            {
+                return;
+            }
+
+            window.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (window.WindowState == WindowState.Minimized)
+                {
+                    window.WindowState = WindowState.Normal;
+                }
+
+                window.Activate();
+                window.Topmost = true;
+                window.Topmost = false;
+                window.Activate();
+            }));
         }
 
     }

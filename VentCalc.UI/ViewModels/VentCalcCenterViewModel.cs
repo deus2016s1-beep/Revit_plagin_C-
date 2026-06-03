@@ -115,8 +115,16 @@ namespace VentCalc.UI.ViewModels
         public string SelectedElementId
         {
             get => selectedElementId;
-            private set => SetProperty(ref selectedElementId, value);
+            private set
+            {
+                if (SetProperty(ref selectedElementId, string.IsNullOrWhiteSpace(value) ? "—" : value))
+                {
+                    OnPropertyChanged(nameof(SelectedElementDisplay));
+                }
+            }
         }
+
+        public string SelectedElementDisplay => $"ElementId: {SelectedElementId}";
 
         public string SystemName
         {
@@ -392,6 +400,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
             OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
             OnPropertyChanged(nameof(LastLoadedElementId));
+            OnPropertyChanged(nameof(SelectedElementDisplay));
             OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
