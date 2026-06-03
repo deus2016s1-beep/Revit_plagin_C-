@@ -48,7 +48,7 @@ namespace VentCalc.Revit.Commands
                 var loadHandler = new LoadSelectedSystemExternalEventHandler(loader, launchLogPath, () => ActivateWindow(activeWindow));
                 ExternalEvent loadExternalEvent = ExternalEvent.Create(loadHandler);
                 loadHandler.Initialize(loadExternalEvent);
-                var selectHandler = new SelectElementExternalEventHandler(launchLogPath);
+                var selectHandler = new SelectElementExternalEventHandler(launchLogPath, () => ActivateWindow(activeWindow));
                 ExternalEvent selectExternalEvent = ExternalEvent.Create(selectHandler);
                 selectHandler.Initialize(selectExternalEvent);
 
@@ -56,7 +56,7 @@ namespace VentCalc.Revit.Commands
                     (vm, refreshLast) => loadHandler.Request(
                         vm,
                         refreshLast ? LoadSelectedSystemRequestMode.LastLoadedElement : LoadSelectedSystemRequestMode.SelectedElement),
-                    elementId => selectHandler.Request(elementId),
+                    elementIds => selectHandler.Request(elementIds),
                     text => TaskDialog.Show("VentCalc", text),
                     settingsService,
                     exception => ErrorReporter.Report(uiApplication, "Ошибка ViewModel VentCalc Center", exception, launchLogPath));

@@ -18,11 +18,14 @@ namespace VentCalc.UI.ViewModels
     public sealed class VentCalcCenterViewModel : NotifyObject
     {
         private readonly Action<VentCalcCenterViewModel, bool> requestLoadSelectedSystem;
-        private readonly Action<long>? selectElementInRevit;
+        private readonly Action<IEnumerable<long>>? selectElementsInRevit;
         private readonly Action<string>? showMessage;
         private readonly Action<Exception>? reportException;
         private readonly VentCalcSettingsService settingsService;
         private NetworkElementRow? selectedNetworkElement;
+        private DuctCalculationInfo? selectedPathDuct;
+        private LocalResistanceCalculationInfo? selectedPathLocalResistance;
+        private VentIssueInfo? selectedIssue;
         private PathRow? selectedPath;
         private VentSystemSummary? selectedSystemSummary;
         private string selectedElementId = "—";
@@ -40,13 +43,13 @@ namespace VentCalc.UI.ViewModels
 
         public VentCalcCenterViewModel(
             Action<VentCalcCenterViewModel, bool> requestLoadSelectedSystem,
-            Action<long>? selectElementInRevit,
+            Action<IEnumerable<long>>? selectElementsInRevit,
             Action<string>? showMessage,
             VentCalcSettingsService settingsService,
             Action<Exception>? reportException = null)
         {
             this.requestLoadSelectedSystem = requestLoadSelectedSystem;
-            this.selectElementInRevit = selectElementInRevit;
+            this.selectElementsInRevit = selectElementsInRevit;
             this.showMessage = showMessage;
             this.reportException = reportException;
             this.settingsService = settingsService;
@@ -65,8 +68,10 @@ namespace VentCalc.UI.ViewModels
 
             LoadSelectedSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(refreshLastLoadedElement: false));
             RefreshCommand = new RelayCommand(_ => RequestLoadSelectedSystem(refreshLastLoadedElement: true));
-            SelectElementInRevitCommand = new RelayCommand(_ => SelectElementInRevit(), _ => SelectedNetworkElement != null);
+            SelectElementInRevitCommand = new RelayCommand(_ => SelectElementInRevit(), _ => CurrentSelectedElementId.HasValue);
             SelectStartElementInRevitCommand = new RelayCommand(_ => SelectStartElementInRevit(), _ => StartElementIds.Count > 0);
+            SelectSelectedPathInRevitCommand = new RelayCommand(_ => SelectSelectedPathInRevit(), _ => SelectedPath != null);
+            SelectCriticalPathInRevitCommand = new RelayCommand(_ => SelectCriticalPathInRevit(), _ => CriticalPath != null);
             SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
             ResetSettingsCommand = new RelayCommand(_ => ResetSettings());
             ApplyVelocityHighlightCommand = new RelayCommand(_ => ShowStub("Подсветка скоростей будет добавлена на следующем этапе."));
@@ -233,7 +238,47 @@ namespace VentCalc.UI.ViewModels
             {
                 if (SetProperty(ref selectedNetworkElement, value))
                 {
-                    CommandManager.InvalidateRequerySuggested();
+                    ClearTableSelectionsExcept(nameof(SelectedNetworkElement));
+                    NotifySelectionChanged();
+                }
+            }
+        }
+
+        public DuctCalculationInfo? SelectedPathDuct
+        {
+            get => selectedPathDuct;
+            set
+            {
+                if (SetProperty(ref selectedPathDuct, value))
+                {
+                    ClearTableSelectionsExcept(nameof(SelectedPathDuct));
+                    NotifySelectionChanged();
+                }
+            }
+        }
+
+        public LocalResistanceCalculationInfo? SelectedPathLocalResistance
+        {
+            get => selectedPathLocalResistance;
+            set
+            {
+                if (SetProperty(ref selectedPathLocalResistance, value))
+                {
+                    ClearTableSelectionsExcept(nameof(SelectedPathLocalResistance));
+                    NotifySelectionChanged();
+                }
+            }
+        }
+
+        public VentIssueInfo? SelectedIssue
+        {
+            get => selectedIssue;
+            set
+            {
+                if (SetProperty(ref selectedIssue, value))
+                {
+                    ClearTableSelectionsExcept(nameof(SelectedIssue));
+                    NotifySelectionChanged();
                 }
             }
         }
@@ -279,6 +324,10 @@ namespace VentCalc.UI.ViewModels
         public ICommand SelectElementInRevitCommand { get; }
 
         public ICommand SelectStartElementInRevitCommand { get; }
+
+        public ICommand SelectSelectedPathInRevitCommand { get; }
+
+        public ICommand SelectCriticalPathInRevitCommand { get; }
 
         public ICommand SaveSettingsCommand { get; }
 
@@ -653,6 +702,11 @@ namespace VentCalc.UI.ViewModels
 
         private void UpdateSelectedPathDetails()
         {
+            selectedPathDuct = null;
+            selectedPathLocalResistance = null;
+            OnPropertyChanged(nameof(SelectedPathDuct));
+            OnPropertyChanged(nameof(SelectedPathLocalResistance));
+            NotifySelectionChanged();
             Replace(SelectedPathDucts, SelectedPath?.Calculation?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>());
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
             OnPropertyChanged(nameof(SelectedPathChain));
@@ -662,23 +716,134 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
         }
 
+        private long? CurrentSelectedElementId
+        {
+            get
+            {
+                if (SelectedNetworkElement != null && TryParseElementId(SelectedNetworkElement.ElementId, out long networkElementId))
+                {
+                    return networkElementId;
+                }
+
+                if (SelectedPathDuct != null)
+                {
+                    return SelectedPathDuct.ElementId;
+                }
+
+                if (SelectedPathLocalResistance != null)
+                {
+                    return SelectedPathLocalResistance.ElementId;
+                }
+
+                if (SelectedIssue != null && TryParseElementId(SelectedIssue.ElementId, out long issueElementId))
+                {
+                    return issueElementId;
+                }
+
+                return null;
+            }
+        }
+
         private void SelectElementInRevit()
         {
-            if (SelectedNetworkElement == null || !long.TryParse(SelectedNetworkElement.ElementId, NumberStyles.Integer, CultureInfo.InvariantCulture, out long elementId))
+            long? elementId = CurrentSelectedElementId;
+            if (!elementId.HasValue)
             {
+                StatusText = "Выберите строку с ElementId.";
                 return;
             }
 
-            selectElementInRevit?.Invoke(elementId);
+            SelectElementsInRevit(new[] { elementId.Value }, "Элемент выделен в Revit.");
         }
 
         private void SelectStartElementInRevit()
         {
             string? firstStart = StartElementIds.FirstOrDefault();
-            if (firstStart != null && long.TryParse(firstStart, NumberStyles.Integer, CultureInfo.InvariantCulture, out long elementId))
+            if (firstStart != null && TryParseElementId(firstStart, out long elementId))
             {
-                selectElementInRevit?.Invoke(elementId);
+                SelectElementsInRevit(new[] { elementId }, "Стартовый элемент выделен в Revit.");
             }
+        }
+
+        private void SelectSelectedPathInRevit()
+        {
+            if (SelectedPath == null)
+            {
+                StatusText = "Выберите трассу.";
+                return;
+            }
+
+            SelectPathElementIds(SelectedPath.ElementIds, $"Трасса №{SelectedPath.PathIndex} выделена в Revit.");
+        }
+
+        private void SelectCriticalPathInRevit()
+        {
+            if (CriticalPath == null)
+            {
+                StatusText = "Критическая трасса пока не определена.";
+                return;
+            }
+
+            SelectElementsInRevit(CriticalPath.ElementIds, $"Критическая трасса №{CriticalPath.PathIndex} выделена в Revit.");
+        }
+
+        private void SelectPathElementIds(IEnumerable<string> elementIds, string successMessage)
+        {
+            List<long> parsedIds = elementIds
+                .Where(value => TryParseElementId(value, out _))
+                .Select(value => long.Parse(value, CultureInfo.InvariantCulture))
+                .ToList();
+            SelectElementsInRevit(parsedIds, successMessage);
+        }
+
+        private void SelectElementsInRevit(IEnumerable<long> elementIds, string successMessage)
+        {
+            List<long> ids = elementIds.Distinct().ToList();
+            if (ids.Count == 0)
+            {
+                StatusText = "Выберите строку с ElementId.";
+                return;
+            }
+
+            selectElementsInRevit?.Invoke(ids);
+            StatusText = successMessage;
+        }
+
+        private void ClearTableSelectionsExcept(string propertyName)
+        {
+            if (propertyName != nameof(SelectedNetworkElement) && selectedNetworkElement != null)
+            {
+                selectedNetworkElement = null;
+                OnPropertyChanged(nameof(SelectedNetworkElement));
+            }
+
+            if (propertyName != nameof(SelectedPathDuct) && selectedPathDuct != null)
+            {
+                selectedPathDuct = null;
+                OnPropertyChanged(nameof(SelectedPathDuct));
+            }
+
+            if (propertyName != nameof(SelectedPathLocalResistance) && selectedPathLocalResistance != null)
+            {
+                selectedPathLocalResistance = null;
+                OnPropertyChanged(nameof(SelectedPathLocalResistance));
+            }
+
+            if (propertyName != nameof(SelectedIssue) && selectedIssue != null)
+            {
+                selectedIssue = null;
+                OnPropertyChanged(nameof(SelectedIssue));
+            }
+        }
+
+        private void NotifySelectionChanged()
+        {
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        private static bool TryParseElementId(string? value, out long elementId)
+        {
+            return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out elementId);
         }
 
         private void PickColor(string currentColorHex, Action<string> setColor)

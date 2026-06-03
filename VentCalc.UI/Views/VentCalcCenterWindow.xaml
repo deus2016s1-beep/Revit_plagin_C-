@@ -44,7 +44,7 @@
                     <Button Content="Загрузить выбранную систему" Command="{Binding LoadSelectedSystemCommand}" />
                     <Button Content="Обновить" Command="{Binding RefreshCommand}" />
                     <Button Content="Выбрать стартовый элемент в Revit" Command="{Binding SelectStartElementInRevitCommand}" />
-                    <Button Content="Выбрать критическую трассу в Revit" IsEnabled="False" />
+                    <Button Content="Выбрать критическую трассу в Revit" Command="{Binding SelectCriticalPathInRevitCommand}" />
                     <TextBlock Text="Система:" FontWeight="Bold" />
                     <ComboBox ItemsSource="{Binding SystemSummaries}" SelectedItem="{Binding SelectedSystemSummary}" IsEnabled="False" Width="240" DisplayMemberPath="SystemName" Margin="4" />
                     <TextBlock Text="{Binding SelectedElementDisplay}" FontWeight="Bold" MinWidth="140" />
@@ -100,15 +100,18 @@
             </TabItem>
 
             <TabItem Header="Проверки">
-                <DataGrid ItemsSource="{Binding Issues}" Margin="6">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="90" />
-                        <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                        <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="180" />
-                        <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*" />
-                        <DataGridTextColumn Header="Рекомендация" Binding="{Binding Recommendation}" Width="*" />
-                    </DataGrid.Columns>
-                </DataGrid>
+                <DockPanel Margin="6">
+                    <Button DockPanel.Dock="Bottom" Content="Показать выбранный элемент в Revit" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
+                    <DataGrid ItemsSource="{Binding Issues}" SelectedItem="{Binding SelectedIssue, Mode=TwoWay}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="90" />
+                            <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
+                            <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="180" />
+                            <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*" />
+                            <DataGridTextColumn Header="Рекомендация" Binding="{Binding Recommendation}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </TabItem>
 
             <TabItem Header="Трассы">
@@ -125,7 +128,13 @@
                         <StackPanel Grid.Column="2"><TextBlock Text="Конечные кандидаты" FontWeight="Bold" /><ListBox ItemsSource="{Binding EndCandidateDetails}" Height="80" /></StackPanel>
                         <StackPanel Grid.Column="3"><TextBlock Text="Заглушки / warnings" FontWeight="Bold" /><ListBox ItemsSource="{Binding IgnoredCapDetails}" Height="38" /><ListBox ItemsSource="{Binding PathWarnings}" Height="38" /></StackPanel>
                     </Grid>
-                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding SelectedPathChain}" FontWeight="Bold" TextWrapping="Wrap" Margin="4" />
+                    <StackPanel DockPanel.Dock="Bottom">
+                        <WrapPanel>
+                            <Button Content="Выбрать трассу в Revit" Command="{Binding SelectSelectedPathInRevitCommand}" />
+                            <Button Content="Выбрать критическую трассу в Revit" Command="{Binding SelectCriticalPathInRevitCommand}" />
+                        </WrapPanel>
+                        <TextBlock Text="{Binding SelectedPathChain}" FontWeight="Bold" TextWrapping="Wrap" Margin="4" />
+                    </StackPanel>
                     <DataGrid ItemsSource="{Binding Paths}" SelectedItem="{Binding SelectedPath, Mode=TwoWay}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="№" Binding="{Binding PathIndex}" Width="50" />
@@ -157,7 +166,8 @@
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итого с запасом" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalWithReservePa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                         </UniformGrid>
                     </Border>
-                    <DataGrid ItemsSource="{Binding SelectedPathDucts}">
+                    <Button DockPanel.Dock="Bottom" Content="Показать выбранный воздуховод в Revit" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
+                    <DataGrid ItemsSource="{Binding SelectedPathDucts}" SelectedItem="{Binding SelectedPathDuct, Mode=TwoWay}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
                             <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
@@ -182,8 +192,9 @@
                         <Button Content="Принять рекомендованные ζ" IsEnabled="False" />
                         <Button Content="Записать ζ в комментарии" IsEnabled="False" />
                         <Button Content="Обновить МС" Command="{Binding RefreshCommand}" />
+                        <Button Content="Показать выбранный элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
                     </WrapPanel>
-                    <DataGrid ItemsSource="{Binding SelectedPathLocalResistances}">
+                    <DataGrid ItemsSource="{Binding SelectedPathLocalResistances}" SelectedItem="{Binding SelectedPathLocalResistance, Mode=TwoWay}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
                             <DataGridTextColumn Header="Тип" Binding="{Binding TypeName}" Width="140" />

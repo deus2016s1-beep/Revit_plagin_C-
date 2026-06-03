@@ -42,7 +42,7 @@ namespace VentCalc.UI.Services
             ReportDiagnostics diagnostics = BuildDiagnostics(viewModel);
             string text = BuildTextReport(viewModel, createdAt, diagnostics);
             File.WriteAllText(txtPath, text, Encoding.UTF8);
-            File.WriteAllText(jsonPath, BuildJsonReport(viewModel, createdAt, diagnostics), Encoding.UTF8);
+            File.WriteAllText(jsonPath, BuildJsonReport(viewModel, createdAt, diagnostics), new UTF8Encoding(false));
 
             return new VentCalcDiagnosticReportResult
             {
@@ -172,9 +172,11 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"Самая большая скорость: {(diagnostics.MaxVelocityDuct?.Duct.VelocityMs ?? 0):0.###} м/с (ElementId {diagnostics.MaxVelocityDuct?.Duct.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"}, трасса №{diagnostics.MaxVelocityDuct?.PathIndex.ToString(CultureInfo.InvariantCulture) ?? "—"})");
             builder.AppendLine($"Самая маленькая скорость: {(diagnostics.MinVelocityDuct?.Duct.VelocityMs ?? 0):0.###} м/с (ElementId {diagnostics.MinVelocityDuct?.Duct.ElementId.ToString(CultureInfo.InvariantCulture) ?? "—"}, трасса №{diagnostics.MinVelocityDuct?.PathIndex.ToString(CultureInfo.InvariantCulture) ?? "—"})");
             AppendUniqueLocalGroup(builder, "Уникальные элементы с ζ из рекомендации", diagnostics.UniqueRecommendedZetaElements);
-            builder.AppendLine($"Применений ζ из рекомендации по трассам: {diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано")}");
+            builder.AppendLine($"Количество применений ζ из рекомендации по трассам: {diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано")}");
             AppendUniqueLocalGroup(builder, "Уникальные элементы с ζ из комментария", diagnostics.UniqueCommentZetaElements);
+            builder.AppendLine($"Количество применений ζ из комментария по трассам: {diagnostics.LocalApplications.Count(item => item.Local.Source == "Комментарии")}");
             AppendUniqueLocalGroup(builder, "Элементы без ζ", diagnostics.MissingZetaElements);
+            builder.AppendLine($"Количество элементов без ζ: {diagnostics.MissingZetaElements.Count}");
 
             return builder.ToString();
         }
@@ -194,7 +196,7 @@ namespace VentCalc.UI.Services
                 },
                 selectedElement = new
                 {
-                    elementId = viewModel.SelectedElementInfo?.ElementId,
+                    elementId = ToLongOrNull(viewModel.SelectedElementInfo?.ElementId),
                     categoryName = viewModel.SelectedElementInfo?.CategoryName,
                     name = viewModel.SelectedElementInfo?.Name,
                     typeName = viewModel.SelectedElementInfo?.TypeName,
@@ -232,7 +234,7 @@ namespace VentCalc.UI.Services
                 issues = viewModel.Issues.Select(issue => new
                 {
                     issue.Severity,
-                    issue.ElementId,
+                    elementId = ToLongOrNull(issue.ElementId),
                     issue.Category,
                     issue.Message,
                     issue.Recommendation
@@ -240,19 +242,20 @@ namespace VentCalc.UI.Services
                 paths = viewModel.Paths.Select(path => new
                 {
                     pathIndex = path.PathIndex,
-                    startElementId = path.StartElementId,
-                    endElementId = path.EndElementId,
+                    startElementId = ToLongOrNull(path.StartElementId),
+                    endElementId = ToLongOrNull(path.EndElementId),
                     totalElementCount = path.TotalElementCount,
                     ductCount = path.DuctCount,
                     fittingCount = path.FittingCount,
                     terminalCount = path.TerminalCount,
                     totalDuctLengthM = path.TotalDuctLengthM,
-                    flowM3h = path.FlowM3h,
+                    flowM3h = ParseFlowM3h(path.FlowM3h),
+                    flowText = path.FlowM3h,
                     frictionPressureLossPa = path.Calculation?.TotalFrictionPressureLossPa ?? 0,
                     localPressureLossPa = path.Calculation?.TotalLocalPressureLossPa ?? 0,
                     totalPressureLossPa = path.TotalPressureLossPa,
                     totalPressureLossWithReservePa = path.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0),
-                    elementIds = path.ElementIds
+                    elementIds = path.ElementIds.Select(ToLongOrNull).Where(id => id.HasValue).Select(id => id!.Value).ToList()
                 }),
                 criticalPath = criticalPath == null ? null : new
                 {
@@ -398,6 +401,25 @@ namespace VentCalc.UI.Services
                     specificPressureLossPaPerM = topFriction.Duct.SpecificPressureLossPaPerM,
                     frictionPressureLossPa = topFriction.Duct.FrictionPressureLossPa
                 };
+        }
+
+        private static long? ToLongOrNull(string? value)
+        {
+            return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed) ? parsed : null;
+        }
+
+        private static double ParseFlowM3h(string? flowText)
+        {
+            if (string.IsNullOrWhiteSpace(flowText))
+            {
+                return 0;
+            }
+
+            string numericText = new string(flowText
+                .Replace(',', '.')
+                .TakeWhile(character => char.IsDigit(character) || character == '.' || character == '-' || character == '+')
+                .ToArray());
+            return double.TryParse(numericText, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ? value : 0;
         }
 
         private static IEnumerable<string> GetSystemPairs(VentCalcCenterViewModel viewModel)
