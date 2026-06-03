@@ -204,14 +204,42 @@
 
             <TabItem Header="Отчёт">
                 <DockPanel Margin="6">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                        <TextBlock Text="Будущий Excel:" FontWeight="Bold" />
-                        <TextBlock Text="%APPDATA%\VentCalc\Reports" />
-                        <Button Content="Экспорт Excel" IsEnabled="False" />
-                        <Button Content="Открыть папку" IsEnabled="False" />
-                    </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Экспорт будет добавлен после стабилизации расчёта. Debug-отчёт оставлен для проверки данных." FontWeight="Bold" Margin="4" />
-                    <TextBox Text="{Binding ReportText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" IsReadOnly="True" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                    <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
+                        <StackPanel>
+                            <WrapPanel>
+                                <Button Content="Сформировать отчёт для проверки" Command="{Binding GenerateVerificationReportCommand}" />
+                                <Button Content="Открыть папку отчётов" Command="{Binding OpenReportsFolderCommand}" />
+                                <Button Content="Экспорт Excel" IsEnabled="False" ToolTip="Excel будет добавлен отдельным этапом" />
+                            </WrapPanel>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Последний TXT:" FontWeight="Bold" />
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LastReportTxtPath, Mode=OneWay}" IsReadOnly="True" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Последний JSON:" FontWeight="Bold" />
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LastReportJsonPath, Mode=OneWay}" IsReadOnly="True" />
+                            </Grid>
+                            <TextBlock Text="Отчёт сохраняется в %APPDATA%\VentCalc\reports. Путь к TXT копируется в буфер обмена, если это доступно." Foreground="#FF555555" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <GroupBox Grid.Row="0" Header="Preview последнего отчёта" Margin="0,0,0,6">
+                            <TextBox Text="{Binding ReportPreviewText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                        </GroupBox>
+                        <TextBlock Grid.Row="1" Text="Debug-отчёт текущей загрузки" FontWeight="Bold" Margin="4" />
+                        <TextBox Grid.Row="2" Text="{Binding ReportText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" IsReadOnly="True" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                    </Grid>
                 </DockPanel>
             </TabItem>
 

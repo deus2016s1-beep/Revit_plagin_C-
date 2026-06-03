@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -15,7 +17,7 @@ namespace VentCalc.UI.ViewModels
 {
     public sealed class VentCalcCenterViewModel : NotifyObject
     {
-        private readonly Func<VentCalcCenterData> loadSelectedSystem;
+        private readonly Action<VentCalcCenterViewModel, bool> requestLoadSelectedSystem;
         private readonly Action<long>? selectElementInRevit;
         private readonly Action<string>? showMessage;
         private readonly Action<Exception>? reportException;
@@ -29,16 +31,21 @@ namespace VentCalc.UI.ViewModels
         private string direction = "—";
         private string directionReason = "—";
         private string statusText = "Выберите элемент вентиляционной системы в Revit и нажмите «Загрузить выбранную систему».";
+        private string lastReportTxtPath = "—";
+        private string lastReportJsonPath = "—";
+        private string reportPreviewText = "Отчёт для проверки ещё не сформирован.";
+        private string revitVersion = "—";
+        private string revitFilePath = "—";
         private PathCalculationInfo? criticalPath;
 
         public VentCalcCenterViewModel(
-            Func<VentCalcCenterData> loadSelectedSystem,
+            Action<VentCalcCenterViewModel, bool> requestLoadSelectedSystem,
             Action<long>? selectElementInRevit,
             Action<string>? showMessage,
             VentCalcSettingsService settingsService,
             Action<Exception>? reportException = null)
         {
-            this.loadSelectedSystem = loadSelectedSystem;
+            this.requestLoadSelectedSystem = requestLoadSelectedSystem;
             this.selectElementInRevit = selectElementInRevit;
             this.showMessage = showMessage;
             this.reportException = reportException;
@@ -56,8 +63,8 @@ namespace VentCalc.UI.ViewModels
                 });
             }
 
-            LoadSelectedSystemCommand = new RelayCommand(_ => LoadSelectedSystem());
-            RefreshCommand = new RelayCommand(_ => LoadSelectedSystem());
+            LoadSelectedSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(refreshLastLoadedElement: false));
+            RefreshCommand = new RelayCommand(_ => RequestLoadSelectedSystem(refreshLastLoadedElement: true));
             SelectElementInRevitCommand = new RelayCommand(_ => SelectElementInRevit(), _ => SelectedNetworkElement != null);
             SelectStartElementInRevitCommand = new RelayCommand(_ => SelectStartElementInRevit(), _ => StartElementIds.Count > 0);
             SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
@@ -68,6 +75,8 @@ namespace VentCalc.UI.ViewModels
             PickNormalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.NormalVelocityColorHex, value => Settings.NormalVelocityColorHex = value));
             PickHighVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.HighVelocityColorHex, value => Settings.HighVelocityColorHex = value));
             PickCriticalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.CriticalVelocityColorHex, value => Settings.CriticalVelocityColorHex = value));
+            GenerateVerificationReportCommand = new RelayCommand(_ => GenerateVerificationReport(), _ => NetworkInfo != null || !string.IsNullOrWhiteSpace(ReportText));
+            OpenReportsFolderCommand = new RelayCommand(_ => OpenReportsFolder());
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
         }
 
@@ -179,6 +188,22 @@ namespace VentCalc.UI.ViewModels
 
         public double CriticalPathTotalPressureLossPa => CriticalPath?.TotalPressureLossPa ?? 0;
 
+        public double CriticalPathTotalWithReservePa => CriticalPathTotalPressureLossPa * (1.0 + Settings.PressureReservePercent / 100.0);
+
+        public long? LastLoadedElementId { get; private set; }
+
+        public string RevitVersion
+        {
+            get => revitVersion;
+            private set => SetProperty(ref revitVersion, value);
+        }
+
+        public string RevitFilePath
+        {
+            get => revitFilePath;
+            private set => SetProperty(ref revitFilePath, value);
+        }
+
         public double SelectedPathFrictionPressureLossPa => SelectedPath?.Calculation?.TotalFrictionPressureLossPa ?? 0;
 
         public double SelectedPathLocalPressureLossPa => SelectedPath?.Calculation?.TotalLocalPressureLossPa ?? 0;
@@ -221,6 +246,24 @@ namespace VentCalc.UI.ViewModels
 
         public string ReportText { get; private set; } = "Экспорт будет добавлен после стабилизации расчёта.";
 
+        public string LastReportTxtPath
+        {
+            get => lastReportTxtPath;
+            private set => SetProperty(ref lastReportTxtPath, value);
+        }
+
+        public string LastReportJsonPath
+        {
+            get => lastReportJsonPath;
+            private set => SetProperty(ref lastReportJsonPath, value);
+        }
+
+        public string ReportPreviewText
+        {
+            get => reportPreviewText;
+            private set => SetProperty(ref reportPreviewText, value);
+        }
+
         public ICommand LoadSelectedSystemCommand { get; }
 
         public ICommand RefreshCommand { get; }
@@ -245,31 +288,47 @@ namespace VentCalc.UI.ViewModels
 
         public ICommand PickCriticalVelocityColorCommand { get; }
 
+        public ICommand GenerateVerificationReportCommand { get; }
+
+        public ICommand OpenReportsFolderCommand { get; }
+
         public ICommand StubCommand { get; }
 
-        private void LoadSelectedSystem()
+        private void RequestLoadSelectedSystem(bool refreshLastLoadedElement)
         {
             try
             {
-                VentCalcCenterData data = loadSelectedSystem();
-                ApplyData(data);
-                StatusText = data.Success
-                    ? "Система загружена."
-                    : (string.IsNullOrWhiteSpace(data.ErrorMessage) ? "Выберите элемент воздуховодной системы и нажмите 'Загрузить выбранную систему'." : data.ErrorMessage);
+                StatusText = refreshLastLoadedElement && LastLoadedElementId.HasValue
+                    ? "Обновление последней загруженной системы..."
+                    : "Ожидание Revit: выберите один элемент воздуховодной системы в Revit.";
+                requestLoadSelectedSystem(this, refreshLastLoadedElement);
             }
             catch (Exception exception)
             {
-                StatusText = exception.Message;
-                Issues.Add(new VentIssueInfo
-                {
-                    Severity = "Error",
-                    Category = "VentCalc Center",
-                    Message = exception.Message,
-                    Recommendation = "Смотрите лог VentCalc; Revit не должен завершаться аварийно."
-                });
-                reportException?.Invoke(exception);
-                showMessage?.Invoke(exception.ToString());
+                FailLoad(exception);
             }
+        }
+
+        public void CompleteLoad(VentCalcCenterData data)
+        {
+            ApplyData(data);
+            StatusText = data.Success
+                ? "Система загружена."
+                : (string.IsNullOrWhiteSpace(data.ErrorMessage) ? "Выберите один элемент воздуховодной системы в Revit." : data.ErrorMessage);
+        }
+
+        public void FailLoad(Exception exception)
+        {
+            StatusText = exception.Message;
+            Issues.Add(new VentIssueInfo
+            {
+                Severity = "Error",
+                Category = "VentCalc Center",
+                Message = exception.Message,
+                Recommendation = "Смотрите лог VentCalc; Revit не должен завершаться аварийно."
+            });
+            reportException?.Invoke(exception);
+            showMessage?.Invoke(exception.ToString());
         }
 
         private void ApplyData(VentCalcCenterData data)
@@ -280,12 +339,18 @@ namespace VentCalc.UI.ViewModels
             PathSummary = data.PathSummary;
             AerodynamicSummary = data.AerodynamicSummary;
             ReportText = data.ReportText;
+            RevitVersion = data.RevitVersion;
+            RevitFilePath = data.RevitFilePath;
             SelectedElementId = data.SelectedElementInfo?.ElementId ?? data.NetworkInfo?.SelectedElementId ?? "—";
             SystemName = data.SelectedElementInfo?.SystemName ?? data.NetworkInfo?.Elements.FirstOrDefault()?.SystemName ?? "—";
             SystemType = data.PathSummary?.SystemType ?? data.SelectedElementInfo?.SystemType ?? "—";
             Direction = data.PathSummary?.Direction ?? "—";
             DirectionReason = data.PathSummary?.DirectionReason ?? "—";
             CriticalPath = data.AerodynamicSummary?.CriticalPathByTotalPressure;
+            if (data.Success && long.TryParse(data.SelectedElementInfo?.ElementId ?? data.NetworkInfo?.SelectedElementId, NumberStyles.Integer, CultureInfo.InvariantCulture, out long loadedElementId))
+            {
+                LastLoadedElementId = loadedElementId;
+            }
 
             Replace(NetworkElements, BuildNetworkRows(data));
             Replace(Paths, BuildPathRows(data));
@@ -325,6 +390,8 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(LoadedSystemDisplay));
             OnPropertyChanged(nameof(CriticalPathIndex));
             OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
+            OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
+            OnPropertyChanged(nameof(LastLoadedElementId));
             OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
@@ -643,6 +710,7 @@ namespace VentCalc.UI.ViewModels
         {
             settingsService.Save(Settings);
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
             StatusText = string.IsNullOrWhiteSpace(settingsService.LastWarning) ? "Настройки сохранены." : settingsService.LastWarning;
         }
 
@@ -652,7 +720,53 @@ namespace VentCalc.UI.ViewModels
             settingsService.Save(Settings);
             OnPropertyChanged(nameof(Settings));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
             StatusText = "Настройки сброшены по умолчанию и сохранены.";
+        }
+
+
+        private void GenerateVerificationReport()
+        {
+            try
+            {
+                VentCalcDiagnosticReportResult result = VentCalcDiagnosticReportService.Generate(this);
+                LastReportTxtPath = result.TxtPath;
+                LastReportJsonPath = result.JsonPath;
+                ReportPreviewText = result.PreviewText;
+                StatusText = $"Отчёт для проверки сохранён: {result.TxtPath}";
+                try
+                {
+                    System.Windows.Clipboard.SetText(result.TxtPath);
+                }
+                catch (Exception)
+                {
+                    // Clipboard is optional; report generation must not fail because of it.
+                }
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось сформировать отчёт: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
+        }
+
+        private void OpenReportsFolder()
+        {
+            try
+            {
+                string reportsDirectory = VentCalcDiagnosticReportService.GetReportsDirectory();
+                Directory.CreateDirectory(reportsDirectory);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = reportsDirectory,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось открыть папку отчётов: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
         }
 
         private void ShowStub(string message)
@@ -688,6 +802,12 @@ namespace VentCalc.UI.ViewModels
         public AerodynamicCalculationSummary? AerodynamicSummary { get; set; }
 
         public string ReportText { get; set; } = string.Empty;
+
+        public string RevitVersion { get; set; } = "—";
+
+        public string RevitFilePath { get; set; } = "—";
+
+        public DateTime LoadedAt { get; set; } = DateTime.Now;
 
         public bool Success { get; set; }
 

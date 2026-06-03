@@ -10,6 +10,15 @@ namespace VentCalc.Revit.Services
 {
     public sealed class RevitVentCalcCenterDataLoader
     {
+        private static readonly HashSet<BuiltInCategory> SupportedCategories = new HashSet<BuiltInCategory>
+        {
+            BuiltInCategory.OST_DuctCurves,
+            BuiltInCategory.OST_DuctFitting,
+            BuiltInCategory.OST_DuctAccessory,
+            BuiltInCategory.OST_DuctTerminal,
+            BuiltInCategory.OST_MechanicalEquipment
+        };
+
         public VentCalcCenterData Load(UIDocument uiDocument, AerodynamicSettings settings)
         {
             try
@@ -18,16 +27,39 @@ namespace VentCalc.Revit.Services
                 if (!selectionReader.TryGetSingleSelectedVentElement(uiDocument, out Element? element, out string? errorMessage))
                 {
                     string message = ToCenterSelectionMessage(errorMessage);
-                    return new VentCalcCenterData
-                    {
-                        Success = false,
-                        IsUserSelectionWarning = true,
-                        ErrorMessage = message,
-                        ReportText = message,
-                        Warnings = new List<string> { message }
-                    };
+                    return CreateWarningData(uiDocument, message);
                 }
 
+                return LoadElement(uiDocument, element, settings);
+            }
+            catch (Exception exception)
+            {
+                return CreateExceptionData(uiDocument, exception);
+            }
+        }
+
+        public VentCalcCenterData Load(UIDocument uiDocument, AerodynamicSettings settings, ElementId selectedElementId)
+        {
+            try
+            {
+                Element? element = uiDocument.Document.GetElement(selectedElementId);
+                if (!IsSupportedVentilationElement(element))
+                {
+                    return CreateWarningData(uiDocument, "Выбранный элемент не относится к вентиляционной системе.");
+                }
+
+                return LoadElement(uiDocument, element!, settings);
+            }
+            catch (Exception exception)
+            {
+                return CreateExceptionData(uiDocument, exception);
+            }
+        }
+
+        private VentCalcCenterData LoadElement(UIDocument uiDocument, Element element, AerodynamicSettings settings)
+        {
+            try
+            {
                 var parameterReader = new RevitParameterReader();
                 var connectorReader = new RevitConnectorReader();
                 var elementInfoReader = new RevitElementInfoReader(parameterReader, connectorReader);
@@ -56,27 +88,51 @@ namespace VentCalc.Revit.Services
                     + Environment.NewLine
                     + aerodynamicSummary.ToReportText();
 
-                return new VentCalcCenterData
-                {
-                    Success = true,
-                    SelectedElementInfo = elementInfo,
-                    NetworkInfo = networkInfo,
-                    PathSummary = pathSummary,
-                    AerodynamicSummary = aerodynamicSummary,
-                    ReportText = reportText
-                };
+                VentCalcCenterData data = CreateBaseData(uiDocument);
+                data.Success = true;
+                data.SelectedElementInfo = elementInfo;
+                data.NetworkInfo = networkInfo;
+                data.PathSummary = pathSummary;
+                data.AerodynamicSummary = aerodynamicSummary;
+                data.ReportText = reportText;
+                return data;
             }
             catch (Exception exception)
             {
-                ErrorReporter.Report(uiDocument.Application, "Ошибка загрузки данных VentCalc Center", exception);
-                return new VentCalcCenterData
-                {
-                    Success = false,
-                    ErrorMessage = exception.Message,
-                    ReportText = exception.ToString(),
-                    Warnings = new List<string> { "Ошибка при чтении вентиляционной сети. Окно оставлено открытым; смотрите лог VentCalc." }
-                };
+                return CreateExceptionData(uiDocument, exception);
             }
+        }
+
+        private static VentCalcCenterData CreateWarningData(UIDocument uiDocument, string message)
+        {
+            VentCalcCenterData data = CreateBaseData(uiDocument);
+            data.Success = false;
+            data.IsUserSelectionWarning = true;
+            data.ErrorMessage = message;
+            data.ReportText = message;
+            data.Warnings = new List<string> { message };
+            return data;
+        }
+
+        private static VentCalcCenterData CreateExceptionData(UIDocument uiDocument, Exception exception)
+        {
+            ErrorReporter.Report(uiDocument.Application, "Ошибка загрузки данных VentCalc Center", exception);
+            VentCalcCenterData data = CreateBaseData(uiDocument);
+            data.Success = false;
+            data.ErrorMessage = exception.Message;
+            data.ReportText = exception.ToString();
+            data.Warnings = new List<string> { "Ошибка при чтении вентиляционной сети. Окно оставлено открытым; смотрите лог VentCalc." };
+            return data;
+        }
+
+        private static VentCalcCenterData CreateBaseData(UIDocument uiDocument)
+        {
+            return new VentCalcCenterData
+            {
+                RevitVersion = uiDocument.Application.Application.VersionNumber,
+                RevitFilePath = string.IsNullOrWhiteSpace(uiDocument.Document.PathName) ? uiDocument.Document.Title : uiDocument.Document.PathName,
+                LoadedAt = DateTime.Now
+            };
         }
 
         private static string ToCenterSelectionMessage(string? selectionReaderMessage)
@@ -86,7 +142,18 @@ namespace VentCalc.Revit.Services
                 return "Выбранный элемент не относится к вентиляционной системе.";
             }
 
-            return "Выберите элемент воздуховодной системы и нажмите 'Загрузить выбранную систему'.";
+            return "Выберите один элемент воздуховодной системы в Revit.";
+        }
+
+        private static bool IsSupportedVentilationElement(Element? element)
+        {
+            if (element?.Category == null)
+            {
+                return false;
+            }
+
+            var category = (BuiltInCategory)element.Category.Id.Value;
+            return SupportedCategories.Contains(category);
         }
     }
 }

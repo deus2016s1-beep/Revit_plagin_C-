@@ -14,7 +14,7 @@ namespace VentCalc.Revit.Commands
         {
             var settingsService = new VentCalcSettingsService();
             var viewModel = new VentCalcCenterViewModel(
-                () => throw new System.InvalidOperationException("Загрузка системы доступна в окне VentCalc Center."),
+                (_, _) => throw new System.InvalidOperationException("Загрузка системы доступна в окне VentCalc Center."),
                 null,
                 text => TaskDialog.Show("VentCalc", text),
                 settingsService);
