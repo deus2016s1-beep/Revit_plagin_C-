@@ -22,6 +22,7 @@ namespace VentCalc.UI.ViewModels
         private readonly VentCalcSettingsService settingsService;
         private NetworkElementRow? selectedNetworkElement;
         private PathRow? selectedPath;
+        private VentSystemSummary? selectedSystemSummary;
         private string selectedElementId = "—";
         private string systemName = "—";
         private string systemType = "—";
@@ -100,6 +101,8 @@ namespace VentCalc.UI.ViewModels
 
         public ObservableCollection<string> StartElementIds { get; } = new ObservableCollection<string>();
 
+        public ObservableCollection<VentSystemSummary> SystemSummaries { get; } = new ObservableCollection<VentSystemSummary>();
+
         public string SelectedElementId
         {
             get => selectedElementId;
@@ -169,6 +172,26 @@ namespace VentCalc.UI.ViewModels
         public string CriticalPathText => CriticalPath == null
             ? "Критическая трасса пока не определена."
             : $"Критическая трасса предварительно: №{CriticalPath.PathIndex}, итого {CriticalPath.TotalPressureLossPa:0.###} Па.";
+
+        public string LoadedSystemDisplay => SystemName == "—" ? "Система не загружена" : $"{SystemName} | {SystemType} | {Direction}";
+
+        public int CriticalPathIndex => CriticalPath?.PathIndex ?? 0;
+
+        public double CriticalPathTotalPressureLossPa => CriticalPath?.TotalPressureLossPa ?? 0;
+
+        public double SelectedPathFrictionPressureLossPa => SelectedPath?.Calculation?.TotalFrictionPressureLossPa ?? 0;
+
+        public double SelectedPathLocalPressureLossPa => SelectedPath?.Calculation?.TotalLocalPressureLossPa ?? 0;
+
+        public double SelectedPathTotalPressureLossPa => SelectedPath?.Calculation?.TotalPressureLossPa ?? 0;
+
+        public double SelectedPathTotalWithReservePa => SelectedPathTotalPressureLossPa * (1.0 + Settings.PressureReservePercent / 100.0);
+
+        public VentSystemSummary? SelectedSystemSummary
+        {
+            get => selectedSystemSummary;
+            set => SetProperty(ref selectedSystemSummary, value);
+        }
 
         public NetworkElementRow? SelectedNetworkElement
         {
@@ -266,7 +289,9 @@ namespace VentCalc.UI.ViewModels
 
             Replace(NetworkElements, BuildNetworkRows(data));
             Replace(Paths, BuildPathRows(data));
-            Replace(Issues, BuildIssues(data));
+            Replace(SystemSummaries, BuildSystemSummaries(data));
+            SelectedSystemSummary = SystemSummaries.FirstOrDefault();
+            Replace(Issues, SortIssues(BuildIssues(data)));
             if (!string.IsNullOrWhiteSpace(settingsWarning))
             {
                 Issues.Insert(0, new VentIssueInfo
@@ -297,8 +322,38 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(IgnoredCapCount));
             OnPropertyChanged(nameof(PathCount));
             OnPropertyChanged(nameof(CriticalPathText));
+            OnPropertyChanged(nameof(LoadedSystemDisplay));
+            OnPropertyChanged(nameof(CriticalPathIndex));
+            OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             OnPropertyChanged(nameof(ReportText));
             CommandManager.InvalidateRequerySuggested();
+        }
+
+        private static IReadOnlyList<VentSystemSummary> BuildSystemSummaries(VentCalcCenterData data)
+        {
+            if (data.NetworkInfo == null)
+            {
+                return Array.Empty<VentSystemSummary>();
+            }
+
+            return new[]
+            {
+                new VentSystemSummary
+                {
+                    SystemName = data.SelectedElementInfo?.SystemName ?? data.NetworkInfo.Elements.FirstOrDefault()?.SystemName ?? "—",
+                    SystemType = data.PathSummary?.SystemType ?? data.SelectedElementInfo?.SystemType ?? "—",
+                    Direction = data.PathSummary?.Direction ?? "—",
+                    ElementCount = data.NetworkInfo.Elements.Count,
+                    DuctCount = data.NetworkInfo.DuctCount,
+                    FittingCount = data.NetworkInfo.FittingCount,
+                    TerminalCount = data.NetworkInfo.TerminalCount,
+                    EquipmentCount = data.NetworkInfo.EquipmentCount
+                }
+            };
         }
 
         private static IReadOnlyList<NetworkElementRow> BuildNetworkRows(VentCalcCenterData data)
@@ -392,6 +447,22 @@ namespace VentCalc.UI.ViewModels
 
             if (data.NetworkInfo != null)
             {
+                var systemPairs = data.NetworkInfo.Elements
+                    .Select(node => new { node.SystemName, node.SystemType })
+                    .Where(item => !string.IsNullOrWhiteSpace(item.SystemName) && item.SystemName != "—")
+                    .Distinct()
+                    .ToList();
+                if (systemPairs.Count > 1)
+                {
+                    result.Add(new VentIssueInfo
+                    {
+                        Severity = "Warning",
+                        Category = "Системы",
+                        Message = "В найденной сети обнаружены элементы разных систем. Проверьте соединения и классификацию системы.",
+                        Recommendation = string.Join("; ", systemPairs.Select(item => $"{item.SystemName} / {item.SystemType}"))
+                    });
+                }
+
                 foreach (VentNetworkNode node in data.NetworkInfo.Elements.Where(node => node.OpenConnectorCount > 0))
                 {
                     result.Add(new VentIssueInfo
@@ -483,6 +554,15 @@ namespace VentCalc.UI.ViewModels
             return result;
         }
 
+        private static IReadOnlyList<VentIssueInfo> SortIssues(IEnumerable<VentIssueInfo> issues)
+        {
+            return issues
+                .OrderBy(issue => issue.Severity == "Error" ? 0 : issue.Severity == "Warning" ? 1 : 2)
+                .ThenBy(issue => issue.Category, StringComparer.Ordinal)
+                .ThenBy(issue => issue.ElementId, StringComparer.Ordinal)
+                .ToList();
+        }
+
         private static void AddDuctIssue(List<VentIssueInfo> issues, long elementId, string category, string message, string recommendation, string severity = "Warning")
         {
             issues.Add(new VentIssueInfo
@@ -500,6 +580,10 @@ namespace VentCalc.UI.ViewModels
             Replace(SelectedPathDucts, SelectedPath?.Calculation?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>());
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
             OnPropertyChanged(nameof(SelectedPathChain));
+            OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
         }
 
         private void SelectElementInRevit()
@@ -558,14 +642,17 @@ namespace VentCalc.UI.ViewModels
         private void SaveSettings()
         {
             settingsService.Save(Settings);
+            OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             StatusText = string.IsNullOrWhiteSpace(settingsService.LastWarning) ? "Настройки сохранены." : settingsService.LastWarning;
         }
 
         private void ResetSettings()
         {
             Settings = VentCalcSettings.CreateDefault();
+            settingsService.Save(Settings);
             OnPropertyChanged(nameof(Settings));
-            StatusText = "Настройки сброшены по умолчанию.";
+            OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            StatusText = "Настройки сброшены по умолчанию и сохранены.";
         }
 
         private void ShowStub(string message)
@@ -671,8 +758,8 @@ namespace VentCalc.UI.ViewModels
     {
         private double airDensityKgM3 = 1.2;
         private double airDynamicViscosityPaS = 0.0000181;
-        private double roughnessM = 0.0001;
-        private double reservePercent;
+        private double roughnessMm = 0.1;
+        private double pressureReservePercent;
         private double minVelocityMs = 1;
         private double maxVelocityMs = 8;
         private double criticalVelocityMs = 12;
@@ -690,19 +777,50 @@ namespace VentCalc.UI.ViewModels
         public double AirDynamicViscosityPaS
         {
             get => airDynamicViscosityPaS;
-            set => SetProperty(ref airDynamicViscosityPaS, value);
+            set
+            {
+                if (SetProperty(ref airDynamicViscosityPaS, value))
+                {
+                    OnPropertyChanged(nameof(AirDynamicViscosityText));
+                }
+            }
+        }
+
+        public string AirDynamicViscosityText
+        {
+            get => AirDynamicViscosityPaS.ToString("0.########E+0", CultureInfo.InvariantCulture);
+            set
+            {
+                if (TryParseDouble(value, out double parsed))
+                {
+                    AirDynamicViscosityPaS = parsed;
+                    OnPropertyChanged(nameof(AirDynamicViscosityText));
+                }
+            }
+        }
+
+        public double RoughnessMm
+        {
+            get => roughnessMm;
+            set => SetProperty(ref roughnessMm, value);
         }
 
         public double RoughnessM
         {
-            get => roughnessM;
-            set => SetProperty(ref roughnessM, value);
+            get => RoughnessMm / 1000.0;
+            set => RoughnessMm = value * 1000.0;
+        }
+
+        public double PressureReservePercent
+        {
+            get => pressureReservePercent;
+            set => SetProperty(ref pressureReservePercent, value);
         }
 
         public double ReservePercent
         {
-            get => reservePercent;
-            set => SetProperty(ref reservePercent, value);
+            get => PressureReservePercent;
+            set => PressureReservePercent = value;
         }
 
         public double MinVelocityMs
@@ -750,6 +868,11 @@ namespace VentCalc.UI.ViewModels
         public static VentCalcSettings CreateDefault()
         {
             return new VentCalcSettings();
+        }
+
+        private static bool TryParseDouble(string value, out double parsed)
+        {
+            return double.TryParse(value?.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out parsed);
         }
 
         private static string NormalizeColorHex(string value, string fallback)

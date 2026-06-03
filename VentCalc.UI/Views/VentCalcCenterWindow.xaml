@@ -1,7 +1,6 @@
 <Window x:Class="VentCalc.UI.Views.VentCalcCenterWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:converters="clr-namespace:VentCalc.UI.Converters"
         Title="VentCalc Center"
         Width="1200"
         Height="800"
@@ -11,7 +10,6 @@
         WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded">
     <Window.Resources>
-        <converters:ColorHexToBrushConverter x:Key="ColorHexToBrushConverter" />
         <Style TargetType="TextBlock">
             <Setter Property="Margin" Value="4" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -28,50 +26,62 @@
             <Setter Property="CanUserDeleteRows" Value="False" />
             <Setter Property="HeadersVisibility" Value="Column" />
         </Style>
+        <Style x:Key="MetricCaption" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FF666666" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="6,4,6,0" />
+        </Style>
+        <Style x:Key="MetricValue" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="6,0,6,6" />
+        </Style>
     </Window.Resources>
 
     <DockPanel Margin="10">
-        <Border DockPanel.Dock="Top" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <WrapPanel Grid.Row="0">
+        <Border DockPanel.Dock="Top" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8" Background="#FFF8F8F8">
+            <DockPanel>
+                <WrapPanel DockPanel.Dock="Top">
                     <Button Content="Загрузить выбранную систему" Command="{Binding LoadSelectedSystemCommand}" />
                     <Button Content="Обновить" Command="{Binding RefreshCommand}" />
                     <Button Content="Выбрать стартовый элемент в Revit" Command="{Binding SelectStartElementInRevitCommand}" />
                     <Button Content="Выбрать критическую трассу в Revit" IsEnabled="False" />
-                    <TextBlock Text="Selected ElementId:" FontWeight="Bold" />
-                    <TextBlock Text="{Binding SelectedElementId}" />
                     <TextBlock Text="Система:" FontWeight="Bold" />
-                    <TextBlock Text="{Binding SystemName}" />
-                    <TextBlock Text="Тип:" FontWeight="Bold" />
-                    <TextBlock Text="{Binding SystemType}" />
+                    <ComboBox ItemsSource="{Binding SystemSummaries}" SelectedItem="{Binding SelectedSystemSummary}" IsEnabled="False" Width="240" DisplayMemberPath="SystemName" Margin="4" />
+                    <TextBlock Text="ElementId:" FontWeight="Bold" />
+                    <TextBlock Text="{Binding SelectedElementId}" />
                 </WrapPanel>
-                <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="#FF555555" />
-            </Grid>
+                <UniformGrid DockPanel.Dock="Top" Columns="7" Margin="0,8,0,4">
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Тип" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemType}" /></StackPanel>
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Направление" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding Direction}" /></StackPanel>
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Элементов" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding TotalElements}" /></StackPanel>
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Трасс" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding PathCount}" /></StackPanel>
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathIndex}" /></StackPanel>
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итоговые потери" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                </UniformGrid>
+                <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Foreground="#FF555555" />
+            </DockPanel>
         </Border>
 
         <TabControl>
             <TabItem Header="Система">
                 <DockPanel Margin="6">
                     <UniformGrid DockPanel.Dock="Top" Columns="6" Margin="0,0,0,8">
-                        <TextBlock Text="Выбранный ElementId" FontWeight="Bold" /><TextBlock Text="{Binding SelectedElementId}" />
-                        <TextBlock Text="Система" FontWeight="Bold" /><TextBlock Text="{Binding SystemName}" />
-                        <TextBlock Text="Тип системы" FontWeight="Bold" /><TextBlock Text="{Binding SystemType}" />
-                        <TextBlock Text="Направление" FontWeight="Bold" /><TextBlock Text="{Binding Direction}" />
-                        <TextBlock Text="Всего элементов" FontWeight="Bold" /><TextBlock Text="{Binding TotalElements}" />
+                        <TextBlock Text="Загруженная система" FontWeight="Bold" /><TextBlock Text="{Binding LoadedSystemDisplay}" />
+                        <TextBlock Text="SystemName" FontWeight="Bold" /><TextBlock Text="{Binding SystemName}" />
+                        <TextBlock Text="SystemType" FontWeight="Bold" /><TextBlock Text="{Binding SystemType}" />
+                        <TextBlock Text="Direction" FontWeight="Bold" /><TextBlock Text="{Binding Direction}" />
+                        <TextBlock Text="Элементов" FontWeight="Bold" /><TextBlock Text="{Binding TotalElements}" />
                         <TextBlock Text="Воздуховодов" FontWeight="Bold" /><TextBlock Text="{Binding DuctCount}" />
                         <TextBlock Text="Фитингов" FontWeight="Bold" /><TextBlock Text="{Binding FittingCount}" />
                         <TextBlock Text="Арматуры" FontWeight="Bold" /><TextBlock Text="{Binding AccessoryCount}" />
-                        <TextBlock Text="Терминалов/решёток" FontWeight="Bold" /><TextBlock Text="{Binding TerminalCount}" />
+                        <TextBlock Text="Терминалов" FontWeight="Bold" /><TextBlock Text="{Binding TerminalCount}" />
                         <TextBlock Text="Оборудования" FontWeight="Bold" /><TextBlock Text="{Binding EquipmentCount}" />
                         <TextBlock Text="Открытых коннекторов" FontWeight="Bold" /><TextBlock Text="{Binding OpenConnectorCount}" />
                         <TextBlock Text="Связей" FontWeight="Bold" /><TextBlock Text="{Binding ConnectionCount}" />
-                        <TextBlock Text="Стартовых точек" FontWeight="Bold" /><TextBlock Text="{Binding TraceStartCount}" />
-                        <TextBlock Text="Конечных точек" FontWeight="Bold" /><TextBlock Text="{Binding TraceEndCount}" />
-                        <TextBlock Text="Игнорируемых заглушек" FontWeight="Bold" /><TextBlock Text="{Binding IgnoredCapCount}" />
+                        <TextBlock Text="Стартов" FontWeight="Bold" /><TextBlock Text="{Binding TraceStartCount}" />
+                        <TextBlock Text="Концов" FontWeight="Bold" /><TextBlock Text="{Binding TraceEndCount}" />
+                        <TextBlock Text="Заглушек" FontWeight="Bold" /><TextBlock Text="{Binding IgnoredCapCount}" />
                     </UniformGrid>
                     <Button DockPanel.Dock="Bottom" Content="Показать выбранный элемент в Revit" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
                     <DataGrid ItemsSource="{Binding NetworkElements}" SelectedItem="{Binding SelectedNetworkElement, Mode=TwoWay}">
@@ -80,10 +90,10 @@
                             <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="170" />
                             <DataGridTextColumn Header="Роль" Binding="{Binding Role}" Width="130" />
                             <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                            <DataGridTextColumn Header="Расход м³/ч" Binding="{Binding FlowM3h}" Width="100" />
-                            <DataGridTextColumn Header="Длина м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h}" Width="110" />
+                            <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="Система" Binding="{Binding SystemName}" Width="100" />
-                            <DataGridTextColumn Header="Подключенные элементы" Binding="{Binding ConnectedElementIds}" Width="180" />
+                            <DataGridTextColumn Header="Подключения" Binding="{Binding ConnectedElementIds}" Width="180" />
                             <DataGridTextColumn Header="Предупреждения" Binding="{Binding Warnings}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
@@ -114,21 +124,21 @@
                         <StackPanel Grid.Column="0"><TextBlock Text="Направление" FontWeight="Bold" /><TextBlock Text="{Binding Direction}" /><TextBlock Text="Причина" FontWeight="Bold" /><TextBlock Text="{Binding DirectionReason}" TextWrapping="Wrap" /></StackPanel>
                         <StackPanel Grid.Column="1"><TextBlock Text="Стартовые кандидаты" FontWeight="Bold" /><ListBox ItemsSource="{Binding StartCandidateDetails}" Height="80" /></StackPanel>
                         <StackPanel Grid.Column="2"><TextBlock Text="Конечные кандидаты" FontWeight="Bold" /><ListBox ItemsSource="{Binding EndCandidateDetails}" Height="80" /></StackPanel>
-                        <StackPanel Grid.Column="3"><TextBlock Text="Игнорируемые заглушки / warnings" FontWeight="Bold" /><ListBox ItemsSource="{Binding IgnoredCapDetails}" Height="38" /><ListBox ItemsSource="{Binding PathWarnings}" Height="38" /></StackPanel>
+                        <StackPanel Grid.Column="3"><TextBlock Text="Заглушки / warnings" FontWeight="Bold" /><ListBox ItemsSource="{Binding IgnoredCapDetails}" Height="38" /><ListBox ItemsSource="{Binding PathWarnings}" Height="38" /></StackPanel>
                     </Grid>
                     <TextBlock DockPanel.Dock="Bottom" Text="{Binding SelectedPathChain}" FontWeight="Bold" TextWrapping="Wrap" Margin="4" />
                     <DataGrid ItemsSource="{Binding Paths}" SelectedItem="{Binding SelectedPath, Mode=TwoWay}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="№" Binding="{Binding PathIndex}" Width="50" />
-                            <DataGridTextColumn Header="StartElementId" Binding="{Binding StartElementId}" Width="100" />
-                            <DataGridTextColumn Header="EndElementId" Binding="{Binding EndElementId}" Width="100" />
-                            <DataGridTextColumn Header="Total" Binding="{Binding TotalElementCount}" Width="70" />
+                            <DataGridTextColumn Header="Start" Binding="{Binding StartElementId}" Width="100" />
+                            <DataGridTextColumn Header="End" Binding="{Binding EndElementId}" Width="100" />
+                            <DataGridTextColumn Header="Элем." Binding="{Binding TotalElementCount}" Width="70" />
                             <DataGridTextColumn Header="Duct" Binding="{Binding DuctCount}" Width="60" />
-                            <DataGridTextColumn Header="Fitting" Binding="{Binding FittingCount}" Width="70" />
-                            <DataGridTextColumn Header="Terminal" Binding="{Binding TerminalCount}" Width="80" />
-                            <DataGridTextColumn Header="Длина м" Binding="{Binding TotalDuctLengthM, StringFormat={}{0:0.###}}" Width="90" />
-                            <DataGridTextColumn Header="Flow м³/ч" Binding="{Binding FlowM3h}" Width="100" />
-                            <DataGridTextColumn Header="Потери Па" Binding="{Binding TotalPressureLossPa, StringFormat={}{0:0.###}}" Width="100" />
+                            <DataGridTextColumn Header="Fit" Binding="{Binding FittingCount}" Width="60" />
+                            <DataGridTextColumn Header="Term" Binding="{Binding TerminalCount}" Width="70" />
+                            <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalDuctLengthM, StringFormat={}{0:0.###}}" Width="90" />
+                            <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h}" Width="110" />
+                            <DataGridTextColumn Header="Потери, Па" Binding="{Binding TotalPressureLossPa, StringFormat={}{0:0.###}}" Width="100" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
@@ -137,25 +147,31 @@
             <TabItem Header="Расчёт">
                 <DockPanel Margin="6">
                     <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
-                        <StackPanel>
-                            <TextBlock Text="{Binding CriticalPathText}" FontWeight="Bold" />
-                            <TextBlock Text="Расчёт предварительный, проверяйте исходные данные." Foreground="#FF884400" />
-                        </StackPanel>
+                        <UniformGrid Columns="4">
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Направление" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding Direction}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Выбранная трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPath.PathIndex}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathIndex}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Трение" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathFrictionPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Местные" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathLocalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итого" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итого с запасом" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalWithReservePa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                        </UniformGrid>
                     </Border>
                     <DataGrid ItemsSource="{Binding SelectedPathDucts}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
                             <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                            <DataGridTextColumn Header="Расход м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="100" />
-                            <DataGridTextColumn Header="Длина м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="Площадь м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
-                            <DataGridTextColumn Header="Dэкв м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
-                            <DataGridTextColumn Header="Скорость м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="100" />
+                            <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
+                            <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
+                            <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
+                            <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
                             <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
                             <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
-                            <DataGridTextColumn Header="Pv Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="R Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="R·l Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
@@ -177,9 +193,9 @@
                             <DataGridTextColumn Header="Вид МС" Binding="{Binding LocalKind}" Width="140" />
                             <DataGridTextColumn Header="ζ" Binding="{Binding Zeta, StringFormat={}{0:0.###}}" Width="60" />
                             <DataGridTextColumn Header="Источник ζ" Binding="{Binding Source}" Width="110" />
-                            <DataGridTextColumn Header="Скорость м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="100" />
-                            <DataGridTextColumn Header="Pv Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="Z Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
+                            <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
+                            <DataGridTextColumn Header="Z, Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="Предупреждения" Binding="{Binding WarningText}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
@@ -194,25 +210,22 @@
                         <Button Content="Экспорт Excel" IsEnabled="False" />
                         <Button Content="Открыть папку" IsEnabled="False" />
                     </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Экспорт будет добавлен после стабилизации расчёта." FontWeight="Bold" Margin="4" />
+                    <TextBlock DockPanel.Dock="Top" Text="Экспорт будет добавлен после стабилизации расчёта. Debug-отчёт оставлен для проверки данных." FontWeight="Bold" Margin="4" />
                     <TextBox Text="{Binding ReportText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" IsReadOnly="True" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                 </DockPanel>
             </TabItem>
 
             <TabItem Header="Настройки">
-                <StackPanel Margin="16" MaxWidth="420" HorizontalAlignment="Left">
-                    <TextBlock Text="Настройки расчёта" FontWeight="Bold" FontSize="16" />
+                <StackPanel Margin="16" MaxWidth="460" HorizontalAlignment="Left">
+                    <TextBlock Text="Расчётные настройки" FontWeight="Bold" FontSize="16" />
                     <TextBlock Text="Плотность воздуха, кг/м³" /><TextBox Text="{Binding Settings.AirDensityKgM3, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Динамическая вязкость, Па·с" /><TextBox Text="{Binding Settings.AirDynamicViscosityPaS, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Шероховатость, м" /><TextBox Text="{Binding Settings.RoughnessM, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Запас, %" /><TextBox Text="{Binding Settings.ReservePercent, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Мин. скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Макс. скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Динамическая вязкость воздуха, Па·с" /><TextBox Text="{Binding Settings.AirDynamicViscosityText, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Обычно для воздуха при 20°C: 1.81e-5 Па·с" Foreground="#FF666666" FontSize="11" />
+                    <TextBlock Text="Шероховатость воздуховода, мм" /><TextBox Text="{Binding Settings.RoughnessMm, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Запас давления, %" /><TextBox Text="{Binding Settings.PressureReservePercent, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Минимальная скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Максимальная скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
                     <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Цвет ниже min" /><TextBox Text="{Binding Settings.LowVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Цвет нормы" /><TextBox Text="{Binding Settings.NormalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Цвет выше max" /><TextBox Text="{Binding Settings.HighVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Цвет critical" /><TextBox Text="{Binding Settings.CriticalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
                     <TextBlock Text="VentCalc v2.0 — инженерный расчёт вентиляции" Foreground="#FF555555" Margin="0,12,0,0" />
                     <WrapPanel Margin="0,12,0,0">
                         <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" />
