@@ -1,0 +1,20 @@
+<Window x:Class="VentCalc.UI.Views.VelocityHighlightWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VentCalc — Скорости"
+        Width="420"
+        Height="320"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen">
+    <StackPanel Margin="16">
+        <TextBlock Text="Будущая подсветка скоростей" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+        <TextBlock Text="Мин скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+        <TextBlock Text="Макс скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+        <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+        <WrapPanel Margin="0,14,0,0">
+            <Button Content="Применить" IsEnabled="False" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Сбросить" IsEnabled="False" Padding="10,6" />
+        </WrapPanel>
+        <TextBlock Text="Финальная подсветка через OverrideGraphicSettings будет добавлена отдельным этапом." TextWrapping="Wrap" Foreground="#FF555555" Margin="0,12,0,0" />
+    </StackPanel>
+</Window>

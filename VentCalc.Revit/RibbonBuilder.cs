@@ -10,26 +10,19 @@ namespace VentCalc.Revit
     {
         private const string TabName = "VentCalc";
         private const string VentilationPanelName = "Вентиляция";
-        private const string ServicePanelName = "Сервис";
 
         public static void Build(UIControlledApplication application)
         {
             CreateTabIfMissing(application);
 
             RibbonPanel ventilationPanel = GetOrCreatePanel(application, VentilationPanelName);
-            RibbonPanel servicePanel = GetOrCreatePanel(application, ServicePanelName);
-
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
-            AddButtonIfMissing<CalculateCommand>(ventilationPanel, "VentCalcCalculate", "Расчёт", assemblyPath);
-            AddButtonIfMissing<InspectorCommand>(ventilationPanel, "VentCalcInspector", "Инспектор", assemblyPath);
-            AddButtonIfMissing<LocalResistanceCommand>(ventilationPanel, "VentCalcLocalResistance", "МС", assemblyPath);
-            AddButtonIfMissing<HighlightCriticalPathCommand>(ventilationPanel, "VentCalcCriticalPath", "Трасса", assemblyPath);
+            AddButtonIfMissing<VentCalcCenterCommand>(ventilationPanel, "VentCalcCenter", "VentCalc", assemblyPath);
             AddButtonIfMissing<HighlightVelocityCommand>(ventilationPanel, "VentCalcVelocity", "Скорости", assemblyPath);
             AddButtonIfMissing<SettingsCommand>(ventilationPanel, "VentCalcSettings", "Настройки", assemblyPath);
-
-            AddButtonIfMissing<ClearHighlightsCommand>(servicePanel, "VentCalcClearHighlights", "Очистить", assemblyPath);
-            AddButtonIfMissing<AboutCommand>(servicePanel, "VentCalcAbout", "О программе", assemblyPath);
+            AddButtonIfMissing<ClearHighlightsCommand>(ventilationPanel, "VentCalcClearHighlights", "Очистить", assemblyPath);
+            AddButtonIfMissing<AboutCommand>(ventilationPanel, "VentCalcAbout", "О программе", assemblyPath);
         }
 
         private static void CreateTabIfMissing(UIControlledApplication application)

@@ -31,5 +31,7 @@ namespace VentCalc.Core.Models
         public string Source { get; set; } = string.Empty;
 
         public List<string> Warnings { get; set; } = new List<string>();
+
+        public string WarningText => string.Join("; ", Warnings);
     }
 }
