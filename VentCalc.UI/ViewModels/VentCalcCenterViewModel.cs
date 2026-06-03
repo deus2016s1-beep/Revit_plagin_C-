@@ -6,6 +6,8 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using Drawing = System.Drawing;
+using Forms = System.Windows.Forms;
 using VentCalc.Core.Models;
 using VentCalc.UI.Services;
 
@@ -61,6 +63,10 @@ namespace VentCalc.UI.ViewModels
             ResetSettingsCommand = new RelayCommand(_ => ResetSettings());
             ApplyVelocityHighlightCommand = new RelayCommand(_ => ShowStub("Подсветка скоростей будет добавлена на следующем этапе."));
             ResetVelocityHighlightCommand = new RelayCommand(_ => ShowStub("Сброс подсветки скоростей будет подключён к Revit OverrideGraphicSettings на следующем этапе."));
+            PickLowVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.LowVelocityColorHex, value => Settings.LowVelocityColorHex = value));
+            PickNormalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.NormalVelocityColorHex, value => Settings.NormalVelocityColorHex = value));
+            PickHighVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.HighVelocityColorHex, value => Settings.HighVelocityColorHex = value));
+            PickCriticalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.CriticalVelocityColorHex, value => Settings.CriticalVelocityColorHex = value));
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
         }
 
@@ -207,6 +213,14 @@ namespace VentCalc.UI.ViewModels
         public ICommand ApplyVelocityHighlightCommand { get; }
 
         public ICommand ResetVelocityHighlightCommand { get; }
+
+        public ICommand PickLowVelocityColorCommand { get; }
+
+        public ICommand PickNormalVelocityColorCommand { get; }
+
+        public ICommand PickHighVelocityColorCommand { get; }
+
+        public ICommand PickCriticalVelocityColorCommand { get; }
 
         public ICommand StubCommand { get; }
 
@@ -507,6 +521,40 @@ namespace VentCalc.UI.ViewModels
             }
         }
 
+        private void PickColor(string currentColorHex, Action<string> setColor)
+        {
+            try
+            {
+                using var dialog = new Forms.ColorDialog
+                {
+                    FullOpen = true,
+                    Color = ParseDrawingColor(currentColorHex)
+                };
+
+                if (dialog.ShowDialog() == Forms.DialogResult.OK)
+                {
+                    setColor($"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}");
+                    StatusText = "Цвет выбран. Нажмите 'Сохранить', чтобы записать настройки.";
+                }
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось открыть выбор цвета: {exception.Message}";
+            }
+        }
+
+        private static Drawing.Color ParseDrawingColor(string colorHex)
+        {
+            try
+            {
+                return Drawing.ColorTranslator.FromHtml(colorHex);
+            }
+            catch (Exception)
+            {
+                return Drawing.Color.White;
+            }
+        }
+
         private void SaveSettings()
         {
             settingsService.Save(Settings);
@@ -628,6 +676,10 @@ namespace VentCalc.UI.ViewModels
         private double minVelocityMs = 1;
         private double maxVelocityMs = 8;
         private double criticalVelocityMs = 12;
+        private string lowVelocityColorHex = "#2196F3";
+        private string normalVelocityColorHex = "#4CAF50";
+        private string highVelocityColorHex = "#FF9800";
+        private string criticalVelocityColorHex = "#F44336";
 
         public double AirDensityKgM3
         {
@@ -671,9 +723,44 @@ namespace VentCalc.UI.ViewModels
             set => SetProperty(ref criticalVelocityMs, value);
         }
 
+        public string LowVelocityColorHex
+        {
+            get => lowVelocityColorHex;
+            set => SetProperty(ref lowVelocityColorHex, NormalizeColorHex(value, "#2196F3"));
+        }
+
+        public string NormalVelocityColorHex
+        {
+            get => normalVelocityColorHex;
+            set => SetProperty(ref normalVelocityColorHex, NormalizeColorHex(value, "#4CAF50"));
+        }
+
+        public string HighVelocityColorHex
+        {
+            get => highVelocityColorHex;
+            set => SetProperty(ref highVelocityColorHex, NormalizeColorHex(value, "#FF9800"));
+        }
+
+        public string CriticalVelocityColorHex
+        {
+            get => criticalVelocityColorHex;
+            set => SetProperty(ref criticalVelocityColorHex, NormalizeColorHex(value, "#F44336"));
+        }
+
         public static VentCalcSettings CreateDefault()
         {
             return new VentCalcSettings();
+        }
+
+        private static string NormalizeColorHex(string value, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return fallback;
+            }
+
+            string trimmed = value.Trim();
+            return trimmed.StartsWith("#", StringComparison.Ordinal) ? trimmed : $"#{trimmed}";
         }
 
         public AerodynamicSettings ToAerodynamicSettings()

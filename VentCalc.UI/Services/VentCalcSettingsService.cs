@@ -32,6 +32,7 @@ namespace VentCalc.UI.Services
                 if (!File.Exists(SettingsPath))
                 {
                     cachedSettings = VentCalcSettings.CreateDefault();
+                    Save(cachedSettings);
                     return cachedSettings;
                 }
 

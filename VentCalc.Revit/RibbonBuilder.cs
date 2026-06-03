@@ -22,7 +22,6 @@ namespace VentCalc.Revit
             AddButtonIfMissing<HighlightVelocityCommand>(ventilationPanel, "VentCalcVelocity", "Скорости", assemblyPath);
             AddButtonIfMissing<SettingsCommand>(ventilationPanel, "VentCalcSettings", "Настройки", assemblyPath);
             AddButtonIfMissing<ClearHighlightsCommand>(ventilationPanel, "VentCalcClearHighlights", "Очистить", assemblyPath);
-            AddButtonIfMissing<AboutCommand>(ventilationPanel, "VentCalcAbout", "О программе", assemblyPath);
         }
 
         private static void CreateTabIfMissing(UIControlledApplication application)

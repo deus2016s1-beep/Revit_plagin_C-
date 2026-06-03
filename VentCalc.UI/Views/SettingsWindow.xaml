@@ -1,24 +1,59 @@
 <Window x:Class="VentCalc.UI.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:converters="clr-namespace:VentCalc.UI.Converters"
         Title="VentCalc — Настройки"
-        Width="460"
-        Height="520"
+        Width="520"
+        Height="650"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen">
-    <StackPanel Margin="16">
-        <TextBlock Text="Настройки VentCalc" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
-        <TextBlock Text="Плотность воздуха, кг/м³" /><TextBox Text="{Binding Settings.AirDensityKgM3, UpdateSourceTrigger=PropertyChanged}" />
-        <TextBlock Text="Динамическая вязкость, Па·с" /><TextBox Text="{Binding Settings.AirDynamicViscosityPaS, UpdateSourceTrigger=PropertyChanged}" />
-        <TextBlock Text="Шероховатость, м" /><TextBox Text="{Binding Settings.RoughnessM, UpdateSourceTrigger=PropertyChanged}" />
-        <TextBlock Text="Запас, %" /><TextBox Text="{Binding Settings.ReservePercent, UpdateSourceTrigger=PropertyChanged}" />
-        <TextBlock Text="Мин. скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-        <TextBlock Text="Макс. скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-        <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-        <WrapPanel Margin="0,14,0,0">
-            <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" Padding="10,6" Margin="0,0,8,0" />
-            <Button Content="Сбросить по умолчанию" Command="{Binding ResetSettingsCommand}" Padding="10,6" />
-        </WrapPanel>
-        <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
-    </StackPanel>
+    <Window.Resources>
+        <converters:ColorHexToBrushConverter x:Key="ColorHexToBrushConverter" />
+    </Window.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+            <TextBlock Text="Настройки VentCalc" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+            <TextBlock Text="Плотность воздуха, кг/м³" /><TextBox Text="{Binding Settings.AirDensityKgM3, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Динамическая вязкость, Па·с" /><TextBox Text="{Binding Settings.AirDynamicViscosityPaS, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Шероховатость, м" /><TextBox Text="{Binding Settings.RoughnessM, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Запас, %" /><TextBox Text="{Binding Settings.ReservePercent, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Мин. скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Макс. скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+
+            <GroupBox Header="Цвета скоростей" Margin="0,12,0,0" Padding="8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="60" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Ниже min" />
+                    <Border Grid.Row="0" Grid.Column="1" Width="42" Height="20" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.LowVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" />
+                    <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding Settings.LowVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Норма" />
+                    <Border Grid.Row="1" Grid.Column="1" Width="42" Height="20" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.NormalVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" />
+                    <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding Settings.NormalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Выше max" />
+                    <Border Grid.Row="2" Grid.Column="1" Width="42" Height="20" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.HighVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" />
+                    <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding Settings.HighVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Critical" />
+                    <Border Grid.Row="3" Grid.Column="1" Width="42" Height="20" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.CriticalVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" />
+                    <TextBox Grid.Row="3" Grid.Column="2" Text="{Binding Settings.CriticalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
+                </Grid>
+            </GroupBox>
+
+            <WrapPanel Margin="0,14,0,0">
+                <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" Padding="10,6" Margin="0,0,8,0" />
+                <Button Content="Сбросить по умолчанию" Command="{Binding ResetSettingsCommand}" Padding="10,6" />
+            </WrapPanel>
+            <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
+        </StackPanel>
+    </ScrollViewer>
 </Window>
