@@ -16,6 +16,7 @@ namespace VentCalc.UI.ViewModels
         private readonly Func<VentCalcCenterData> loadSelectedSystem;
         private readonly Action<long>? selectElementInRevit;
         private readonly Action<string>? showMessage;
+        private readonly Action<Exception>? reportException;
         private readonly VentCalcSettingsService settingsService;
         private NetworkElementRow? selectedNetworkElement;
         private PathRow? selectedPath;
@@ -31,13 +32,27 @@ namespace VentCalc.UI.ViewModels
             Func<VentCalcCenterData> loadSelectedSystem,
             Action<long>? selectElementInRevit,
             Action<string>? showMessage,
-            VentCalcSettingsService settingsService)
+            VentCalcSettingsService settingsService,
+            Action<Exception>? reportException = null)
         {
             this.loadSelectedSystem = loadSelectedSystem;
             this.selectElementInRevit = selectElementInRevit;
             this.showMessage = showMessage;
+            this.reportException = reportException;
             this.settingsService = settingsService;
             Settings = settingsService.Load();
+            if (!string.IsNullOrWhiteSpace(settingsService.LastWarning))
+            {
+                StatusText = settingsService.LastWarning;
+                Issues.Add(new VentIssueInfo
+                {
+                    Severity = "Warning",
+                    Category = "Настройки",
+                    Message = settingsService.LastWarning,
+                    Recommendation = "Проверьте файл %APPDATA%\\VentCalc\\settings.json; повреждённый файл переименован."
+                });
+            }
+
             LoadSelectedSystemCommand = new RelayCommand(_ => LoadSelectedSystem());
             RefreshCommand = new RelayCommand(_ => LoadSelectedSystem());
             SelectElementInRevitCommand = new RelayCommand(_ => SelectElementInRevit(), _ => SelectedNetworkElement != null);
@@ -201,17 +216,28 @@ namespace VentCalc.UI.ViewModels
             {
                 VentCalcCenterData data = loadSelectedSystem();
                 ApplyData(data);
-                StatusText = "Система загружена.";
+                StatusText = data.Success
+                    ? "Система загружена."
+                    : (string.IsNullOrWhiteSpace(data.ErrorMessage) ? "Выберите элемент воздуховодной системы и нажмите 'Загрузить выбранную систему'." : data.ErrorMessage);
             }
             catch (Exception exception)
             {
                 StatusText = exception.Message;
-                showMessage?.Invoke(exception.Message);
+                Issues.Add(new VentIssueInfo
+                {
+                    Severity = "Error",
+                    Category = "VentCalc Center",
+                    Message = exception.Message,
+                    Recommendation = "Смотрите лог VentCalc; Revit не должен завершаться аварийно."
+                });
+                reportException?.Invoke(exception);
+                showMessage?.Invoke(exception.ToString());
             }
         }
 
         private void ApplyData(VentCalcCenterData data)
         {
+            string settingsWarning = settingsService.LastWarning;
             SelectedElementInfo = data.SelectedElementInfo;
             NetworkInfo = data.NetworkInfo;
             PathSummary = data.PathSummary;
@@ -227,6 +253,16 @@ namespace VentCalc.UI.ViewModels
             Replace(NetworkElements, BuildNetworkRows(data));
             Replace(Paths, BuildPathRows(data));
             Replace(Issues, BuildIssues(data));
+            if (!string.IsNullOrWhiteSpace(settingsWarning))
+            {
+                Issues.Insert(0, new VentIssueInfo
+                {
+                    Severity = "Warning",
+                    Category = "Настройки",
+                    Message = settingsWarning,
+                    Recommendation = "Проверьте файл %APPDATA%\\VentCalc\\settings.json; повреждённый файл переименован."
+                });
+            }
             Replace(StartCandidateDetails, data.PathSummary?.StartCandidateDetails ?? Array.Empty<string>());
             Replace(EndCandidateDetails, data.PathSummary?.EndCandidateDetails ?? Array.Empty<string>());
             Replace(IgnoredCapDetails, data.PathSummary?.IgnoredCapDetails ?? Array.Empty<string>());
@@ -316,6 +352,30 @@ namespace VentCalc.UI.ViewModels
         private IReadOnlyList<VentIssueInfo> BuildIssues(VentCalcCenterData data)
         {
             var result = new List<VentIssueInfo>();
+            foreach (string warning in data.Warnings)
+            {
+                result.Add(new VentIssueInfo
+                {
+                    Severity = "Warning",
+                    Category = "VentCalc Center",
+                    Message = warning,
+                    Recommendation = "Исправьте выбор или модель и нажмите 'Загрузить выбранную систему'."
+                });
+            }
+
+            if (!data.Success && !string.IsNullOrWhiteSpace(data.ErrorMessage))
+            {
+                result.Add(new VentIssueInfo
+                {
+                    Severity = data.IsUserSelectionWarning ? "Warning" : "Error",
+                    Category = data.IsUserSelectionWarning ? "Выбор" : "Ошибка чтения сети",
+                    Message = data.ErrorMessage,
+                    Recommendation = data.IsUserSelectionWarning
+                        ? "Выберите один элемент воздуховодной системы и нажмите 'Загрузить выбранную систему'."
+                        : "Откройте лог ошибки и передайте его разработчику."
+                });
+            }
+
             if (data.NetworkInfo != null)
             {
                 foreach (VentNetworkNode node in data.NetworkInfo.Elements.Where(node => node.OpenConnectorCount > 0))
@@ -450,7 +510,7 @@ namespace VentCalc.UI.ViewModels
         private void SaveSettings()
         {
             settingsService.Save(Settings);
-            StatusText = "Настройки сохранены.";
+            StatusText = string.IsNullOrWhiteSpace(settingsService.LastWarning) ? "Настройки сохранены." : settingsService.LastWarning;
         }
 
         private void ResetSettings()
@@ -493,6 +553,14 @@ namespace VentCalc.UI.ViewModels
         public AerodynamicCalculationSummary? AerodynamicSummary { get; set; }
 
         public string ReportText { get; set; } = string.Empty;
+
+        public bool Success { get; set; }
+
+        public bool IsUserSelectionWarning { get; set; }
+
+        public string ErrorMessage { get; set; } = string.Empty;
+
+        public List<string> Warnings { get; set; } = new List<string>();
     }
 
     public sealed class NetworkElementRow

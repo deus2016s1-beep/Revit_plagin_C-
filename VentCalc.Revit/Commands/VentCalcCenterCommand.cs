@@ -15,25 +15,53 @@ namespace VentCalc.Revit.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            UIDocument? uiDocument = commandData.Application.ActiveUIDocument;
-            if (uiDocument == null)
+            string launchLogPath = ErrorReporter.CreateLaunchLog();
+            UIApplication uiApplication = commandData.Application;
+            try
             {
-                TaskDialog.Show("VentCalc", "Откройте документ Revit и выберите элемент воздуховодной системы.");
-                return Result.Cancelled;
+                ErrorReporter.WriteTrace(launchLogPath, "Command started");
+                UIDocument? uiDocument = uiApplication.ActiveUIDocument;
+                if (uiDocument == null)
+                {
+                    TaskDialog.Show("VentCalc", "Откройте документ Revit и выберите элемент воздуховодной системы.");
+                    ErrorReporter.WriteTrace(launchLogPath, "Command cancelled: ActiveUIDocument is null");
+                    return Result.Cancelled;
+                }
+
+                var settingsService = new VentCalcSettingsService();
+                settingsService.Load();
+                ErrorReporter.WriteTrace(launchLogPath, "Settings loaded");
+
+                var loader = new RevitVentCalcCenterDataLoader();
+                VentCalcCenterViewModel? viewModel = null;
+                viewModel = new VentCalcCenterViewModel(
+                    () => loader.Load(uiDocument, viewModel?.Settings.ToAerodynamicSettings() ?? settingsService.Load().ToAerodynamicSettings()),
+                    elementId => SelectElement(uiDocument, elementId),
+                    text => TaskDialog.Show("VentCalc", text),
+                    settingsService,
+                    exception => ErrorReporter.Report(uiApplication, "Ошибка ViewModel VentCalc Center", exception, launchLogPath));
+                ErrorReporter.WriteTrace(launchLogPath, "ViewModel created");
+
+                var window = new VentCalcCenterWindow(viewModel);
+                window.Dispatcher.UnhandledException += (_, args) =>
+                {
+                    ErrorReporter.Report(uiApplication, "Ошибка WPF окна VentCalc Center", args.Exception, launchLogPath);
+                    args.Handled = true;
+                };
+                ErrorReporter.WriteTrace(launchLogPath, "Window created");
+
+                ErrorReporter.WriteTrace(launchLogPath, "ShowDialog started");
+                window.ShowDialog();
+                ErrorReporter.WriteTrace(launchLogPath, "ShowDialog closed");
+                return Result.Succeeded;
             }
-
-            var settingsService = new VentCalcSettingsService();
-            var loader = new RevitVentCalcCenterDataLoader();
-            VentCalcCenterViewModel? viewModel = null;
-            viewModel = new VentCalcCenterViewModel(
-                () => loader.Load(uiDocument, viewModel?.Settings.ToAerodynamicSettings() ?? settingsService.Load().ToAerodynamicSettings()),
-                elementId => SelectElement(uiDocument, elementId),
-                text => TaskDialog.Show("VentCalc", text),
-                settingsService);
-
-            var window = new VentCalcCenterWindow(viewModel);
-            window.ShowDialog();
-            return Result.Succeeded;
+            catch (Exception exception)
+            {
+                ErrorReporter.WriteTrace(launchLogPath, "Command failed");
+                ErrorReporter.Report(uiApplication, "Ошибка запуска VentCalc Center", exception, launchLogPath);
+                message = exception.Message;
+                return Result.Failed;
+            }
         }
 
         private static void SelectElement(UIDocument uiDocument, long elementId)

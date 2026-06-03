@@ -196,3 +196,20 @@ powershell -ExecutionPolicy Bypass -File tools/install-debug.ps1
 - Сложная геометрия тройников/переходов пока не разбирается точно; если ζ не задана в комментариях, используется упрощённая рекомендованная оценка.
 - Старый pyRevit-код не переносится и не копируется.
 - Чтение параметров зависит от доступности стандартных или пользовательских параметров в конкретной модели Revit.
+
+## Диагностика ошибок VentCalc Center
+
+Команда **VentCalc** защищена от необработанных исключений при запуске окна. Если при создании окна, загрузке ViewModel, WPF Dispatcher или чтении сети возникает ошибка, Revit должен показать `TaskDialog` **VentCalc — ошибка** и оставить путь к лог-файлу.
+
+Логи пишутся сюда:
+
+```text
+%APPDATA%\VentCalc\logs\
+```
+
+Основные файлы диагностики:
+
+- `ventcalc_launch_yyyyMMdd_HHmmss_fff.txt` — smoke-check этапов запуска: `Command started`, `Settings loaded`, `ViewModel created`, `Window created`, `ShowDialog started`, `ShowDialog closed`.
+- `ventcalc_error_yyyyMMdd_HHmmss_fff.txt` — полный `Exception.ToString()`, stack trace, inner exception и версия Revit.
+
+Если `%APPDATA%\VentCalc\settings.json` повреждён, VentCalc переименует его в `settings_corrupted_yyyyMMdd_HHmmss.json`, загрузит настройки по умолчанию и покажет warning в окне.
