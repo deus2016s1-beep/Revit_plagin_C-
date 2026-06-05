@@ -40,6 +40,7 @@ namespace VentCalc.UI.ViewModels
         private string lastReportTxtPath = "—";
         private string lastReportJsonPath = "—";
         private string reportPreviewText = "Отчёт для проверки ещё не сформирован.";
+        private string lastActionMessage = "Действий пока не было.";
         private string revitVersion = "—";
         private string revitFilePath = "—";
         private PathCalculationInfo? criticalPath;
@@ -59,6 +60,7 @@ namespace VentCalc.UI.ViewModels
             this.reportException = reportException;
             this.settingsService = settingsService;
             Settings = settingsService.Load();
+            LogAction("VentCalc Center открыт; настройки загружены.");
             if (!string.IsNullOrWhiteSpace(settingsService.LastWarning))
             {
                 StatusText = settingsService.LastWarning;
@@ -115,6 +117,10 @@ namespace VentCalc.UI.ViewModels
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedPathLocalResistances { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
 
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedLocalResistanceRows { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
+
+        public ObservableCollection<ZetaWriteActionInfo> ZetaWriteActions { get; } = new ObservableCollection<ZetaWriteActionInfo>();
+
+        public ObservableCollection<ZetaRecalculationActionInfo> ZetaRecalculationActions { get; } = new ObservableCollection<ZetaRecalculationActionInfo>();
 
         public ObservableCollection<VentIssueInfo> Issues { get; } = new ObservableCollection<VentIssueInfo>();
 
@@ -390,6 +396,20 @@ namespace VentCalc.UI.ViewModels
             private set => SetProperty(ref reportPreviewText, value);
         }
 
+        public string LastActionMessage
+        {
+            get => lastActionMessage;
+            private set
+            {
+                if (SetProperty(ref lastActionMessage, value))
+                {
+                    OnPropertyChanged(nameof(LastActionDisplay));
+                }
+            }
+        }
+
+        public string LastActionDisplay => $"Последнее действие: {LastActionMessage}";
+
         public ICommand LoadSelectedSystemCommand { get; }
 
         public ICommand LoadCatalogSystemCommand { get; }
@@ -459,6 +479,7 @@ namespace VentCalc.UI.ViewModels
             StatusText = data.Success
                 ? "Система загружена."
                 : (string.IsNullOrWhiteSpace(data.ErrorMessage) ? "Выберите один элемент воздуховодной системы в Revit." : data.ErrorMessage);
+            LogAction(data.Success ? $"Загрузка системы выполнена: {SystemName}, трасс {PathCount}." : $"Загрузка системы не выполнена: {StatusText}");
         }
 
         public void FailLoad(Exception exception)
@@ -868,6 +889,12 @@ namespace VentCalc.UI.ViewModels
             Replace(SelectedPathDucts, SelectedPath?.Calculation?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>());
             Replace(SelectedPathSections, SelectedPath?.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>());
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
+            foreach (LocalResistanceCalculationInfo local in SelectedPathLocalResistances)
+            {
+                local.PropertyChanged -= LocalResistance_PropertyChanged;
+                local.PropertyChanged += LocalResistance_PropertyChanged;
+            }
+
             UpdatePathsThroughCurrentElement();
             OnPropertyChanged(nameof(SelectedPathChain));
             OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
@@ -1150,6 +1177,7 @@ namespace VentCalc.UI.ViewModels
             StatusText = updated == 0
                 ? "Для выбранных МС нет рекомендованных ζ."
                 : $"Рекомендованные ζ приняты вручную для {updated} строк. Нажмите «Пересчитать с ручными ζ».";
+            LogAction(StatusText);
         }
 
         private void RecalculateWithManualZeta()
@@ -1159,6 +1187,10 @@ namespace VentCalc.UI.ViewModels
                 StatusText = "Сначала загрузите систему.";
                 return;
             }
+
+            int? previousCriticalPathIndex = CriticalPath?.PathIndex;
+            double previousCriticalPressurePa = CriticalPath?.TotalPressureLossPa ?? 0;
+            int changedRowsCount = AerodynamicSummary.Paths.SelectMany(path => path.LocalResistances).Count(local => local.ManualZeta.HasValue);
 
             foreach (PathCalculationInfo path in AerodynamicSummary.Paths)
             {
@@ -1207,7 +1239,18 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
-            StatusText = "Расчёт обновлён с ручными ζ. Запись в Revit не выполнялась.";
+            var action = new ZetaRecalculationActionInfo
+            {
+                Timestamp = DateTime.Now,
+                ChangedRowsCount = changedRowsCount,
+                PreviousCriticalPathIndex = previousCriticalPathIndex,
+                NewCriticalPathIndex = CriticalPath?.PathIndex,
+                PreviousCriticalPressurePa = previousCriticalPressurePa,
+                NewCriticalPressurePa = CriticalPath?.TotalPressureLossPa ?? 0
+            };
+            ZetaRecalculationActions.Add(action);
+            StatusText = $"Пересчёт выполнен: ручных ζ {changedRowsCount}, критическая трасса {action.NewCriticalPathIndex}, итог {action.NewCriticalPressurePa:0.###} Па.";
+            LogAction(StatusText);
         }
 
         private void WriteSelectedZetaToComments()
@@ -1241,17 +1284,28 @@ namespace VentCalc.UI.ViewModels
                 : new[] { SelectedPathLocalResistance };
         }
 
-        public void CompleteZetaCommentWrite(IReadOnlyCollection<long> writtenElementIds, string message)
+        public void CompleteZetaCommentWrite(IReadOnlyCollection<ZetaWriteActionInfo> actions, string message)
         {
+            foreach (ZetaWriteActionInfo action in actions)
+            {
+                ZetaWriteActions.Add(action);
+                VentCalcActionLogService.Append($"Запись ζ: ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; ok={action.WriteSucceeded}; parameter={action.ParameterName}; error={action.ErrorMessage}");
+            }
+
             foreach (LocalResistanceCalculationInfo local in AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
-                if (writtenElementIds.Contains(local.ElementId))
+                ZetaWriteActionInfo? action = actions.LastOrDefault(item => item.ElementId == local.ElementId);
+                if (action == null)
                 {
-                    local.WasWrittenToRevitComment = true;
+                    continue;
                 }
+
+                local.WasWrittenToRevitComment = action.WriteSucceeded;
+                local.LastWriteError = action.ErrorMessage;
             }
 
             StatusText = message;
+            LogAction(message);
         }
 
         private void SaveSettings()
@@ -1321,6 +1375,12 @@ namespace VentCalc.UI.ViewModels
         {
             StatusText = message;
             showMessage?.Invoke(message);
+        }
+
+        private void LogAction(string message)
+        {
+            LastActionMessage = message;
+            VentCalcActionLogService.Append(message);
         }
 
         private static string ExtractElementId(string value)
@@ -1465,6 +1525,32 @@ namespace VentCalc.UI.ViewModels
             string number = new string((value ?? string.Empty).Replace(',', '.').Where(ch => char.IsDigit(ch) || ch == '.' || ch == '-').ToArray());
             return double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) ? parsed : 0;
         }
+    }
+
+    public sealed class ZetaWriteActionInfo
+    {
+        public DateTime Timestamp { get; set; } = DateTime.Now;
+        public long ElementId { get; set; }
+        public int PathIndex { get; set; }
+        public string OldComment { get; set; } = string.Empty;
+        public string NewComment { get; set; } = string.Empty;
+        public double RequestedZeta { get; set; }
+        public bool ParameterFound { get; set; }
+        public string ParameterName { get; set; } = string.Empty;
+        public bool ParameterIsReadOnly { get; set; }
+        public string StorageType { get; set; } = string.Empty;
+        public bool WriteSucceeded { get; set; }
+        public string ErrorMessage { get; set; } = string.Empty;
+    }
+
+    public sealed class ZetaRecalculationActionInfo
+    {
+        public DateTime Timestamp { get; set; } = DateTime.Now;
+        public int ChangedRowsCount { get; set; }
+        public int? PreviousCriticalPathIndex { get; set; }
+        public int? NewCriticalPathIndex { get; set; }
+        public double PreviousCriticalPressurePa { get; set; }
+        public double NewCriticalPressurePa { get; set; }
     }
 
     public sealed class VentCalcSettings : NotifyObject

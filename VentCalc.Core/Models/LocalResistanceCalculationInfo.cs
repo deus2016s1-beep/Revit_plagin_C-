@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace VentCalc.Core.Models
@@ -9,16 +10,21 @@ namespace VentCalc.Core.Models
         private double zeta;
         private double autoZeta;
         private double? manualZeta;
+        private string manualZetaText = string.Empty;
         private double effectiveZeta;
         private string source = string.Empty;
         private string zetaSource = string.Empty;
         private string zetaComment = string.Empty;
+        private string validationMessage = string.Empty;
+        private string lastWriteError = string.Empty;
         private double localPressureLossPa;
         private bool wasWrittenToRevitComment;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
         public long ElementId { get; set; }
+
+        public int PathIndex { get; set; }
 
         public string CategoryName { get; set; } = string.Empty;
 
@@ -61,7 +67,52 @@ namespace VentCalc.Core.Models
         public double? ManualZeta
         {
             get => manualZeta;
-            set => SetProperty(ref manualZeta, value);
+            set
+            {
+                if (!SetProperty(ref manualZeta, value))
+                {
+                    return;
+                }
+
+                manualZetaText = value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+                OnPropertyChanged(nameof(ManualZetaText));
+                if (value.HasValue)
+                {
+                    ValidationMessage = string.Empty;
+                    ApplyManualZeta(value.Value);
+                }
+            }
+        }
+
+        public string ManualZetaText
+        {
+            get => manualZetaText;
+            set
+            {
+                if (!SetProperty(ref manualZetaText, value ?? string.Empty))
+                {
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(manualZetaText))
+                {
+                    manualZeta = null;
+                    ValidationMessage = string.Empty;
+                    OnPropertyChanged(nameof(ManualZeta));
+                    return;
+                }
+
+                if (!double.TryParse(manualZetaText.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) || parsed < 0)
+                {
+                    ValidationMessage = "Некорректное значение ζ";
+                    return;
+                }
+
+                ValidationMessage = string.Empty;
+                manualZeta = parsed;
+                OnPropertyChanged(nameof(ManualZeta));
+                ApplyManualZeta(parsed);
+            }
         }
 
         public double EffectiveZeta
@@ -81,6 +132,22 @@ namespace VentCalc.Core.Models
             get => zetaComment;
             set => SetProperty(ref zetaComment, value);
         }
+
+        public string ValidationMessage
+        {
+            get => validationMessage;
+            set => SetProperty(ref validationMessage, value);
+        }
+
+        public string LastWriteError
+        {
+            get => lastWriteError;
+            set => SetProperty(ref lastWriteError, value);
+        }
+
+        public bool CanEditManualZeta => true;
+
+        public bool CanWriteComment => ElementId > 0;
 
         public bool WasWrittenToRevitComment
         {
@@ -112,14 +179,29 @@ namespace VentCalc.Core.Models
 
         public string WarningText => string.Join("; ", Warnings);
 
-        private void SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
+        private void ApplyManualZeta(double value)
+        {
+            EffectiveZeta = value;
+            Zeta = value;
+            Source = "Вручную";
+            ZetaSource = "Вручную";
+            LocalPressureLossPa = value * DynamicPressurePa;
+        }
+
+        private bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
         {
             if (EqualityComparer<T>.Default.Equals(storage, value))
             {
-                return;
+                return false;
             }
 
             storage = value;
+            OnPropertyChanged(propertyName);
+            return true;
+        }
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }

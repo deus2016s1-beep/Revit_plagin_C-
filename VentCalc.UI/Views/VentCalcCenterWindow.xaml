@@ -59,7 +59,10 @@
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDisplay}" /></StackPanel>
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итоговые потери" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                 </UniformGrid>
-                <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Foreground="#FF555555" />
+                <StackPanel DockPanel.Dock="Bottom">
+                    <TextBlock Text="{Binding LastActionDisplay}" FontWeight="SemiBold" Foreground="#FF333333" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" />
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -278,10 +281,17 @@
                             <DataGridTextColumn Header="PrevFlow" Binding="{Binding PreviousFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="NextFlow" Binding="{Binding NextFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="AutoZeta" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="80" IsReadOnly="True" />
-                            <DataGridTextColumn Header="ManualZeta" Binding="{Binding ManualZeta, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.###}}" Width="90" />
+                            <DataGridTemplateColumn Header="ManualZeta" Width="90">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding ManualZetaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" Padding="2" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="EffectiveZeta" Binding="{Binding EffectiveZeta, StringFormat={}{0:0.###}}" Width="95" IsReadOnly="True" />
                             <DataGridTextColumn Header="Источник ζ" Binding="{Binding ZetaSource}" Width="110" IsReadOnly="True" />
                             <DataGridTextColumn Header="Комментарий ζ" Binding="{Binding ZetaComment}" Width="140" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Проверка ζ" Binding="{Binding ValidationMessage}" Width="130" IsReadOnly="True" />
                             <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
                             <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="Z, Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />

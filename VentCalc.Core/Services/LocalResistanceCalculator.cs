@@ -36,6 +36,7 @@ namespace VentCalc.Core.Services
                 DuctCalculationInfo? referenceDuct = FindReferenceDuct(path, index, ductCalculationsByElementId, out string referenceWarning);
                 rolesByElementId.TryGetValue(elementId, out FittingPathRoleInfo? role);
                 LocalResistanceCalculationInfo item = Calculate(data, referenceDuct, role);
+                item.PathIndex = path.PathIndex;
                 if (!string.IsNullOrWhiteSpace(referenceWarning))
                 {
                     item.Warnings.Add(referenceWarning);

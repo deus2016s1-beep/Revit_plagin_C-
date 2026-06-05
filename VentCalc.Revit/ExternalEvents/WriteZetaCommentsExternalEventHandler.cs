@@ -35,7 +35,7 @@ namespace VentCalc.Revit.ExternalEvents
         public void Request(VentCalcCenterViewModel viewModel, IReadOnlyList<LocalResistanceCalculationInfo> rows)
         {
             pendingViewModel = viewModel;
-            pendingRows = rows.Where(row => row.EffectiveZeta > 0 || row.ManualZeta.HasValue || row.AutoZeta > 0).ToList();
+            pendingRows = rows.DistinctBy(row => row.ElementId).ToList();
             ErrorReporter.WriteTrace(launchLogPath, $"WriteZetaComments requested: {pendingRows.Count} rows");
             externalEvent?.Raise();
         }
@@ -48,20 +48,19 @@ namespace VentCalc.Revit.ExternalEvents
                 return;
             }
 
-            var writtenIds = new List<long>();
-            var warnings = new List<string>();
+            var actions = new List<ZetaWriteActionInfo>();
             try
             {
                 UIDocument? uiDocument = app.ActiveUIDocument;
                 if (uiDocument == null)
                 {
-                    Complete(viewModel, writtenIds, "Откройте документ Revit перед записью ζ.");
+                    Complete(viewModel, actions, "Запись ζ: успешно 0, ошибок 1. Откройте документ Revit.");
                     return;
                 }
 
                 if (pendingRows.Count == 0)
                 {
-                    Complete(viewModel, writtenIds, "Выберите строки МС с ζ для записи.");
+                    Complete(viewModel, actions, "Запись ζ: успешно 0, ошибок 1. Выберите строки МС.");
                     return;
                 }
 
@@ -70,47 +69,78 @@ namespace VentCalc.Revit.ExternalEvents
                     transaction.Start();
                     foreach (LocalResistanceCalculationInfo row in pendingRows)
                     {
+                        ZetaWriteActionInfo action = CreateBaseAction(row);
+                        actions.Add(action);
+
+                        if (!TryResolveRequestedZeta(row, out double zeta, out string zetaError))
+                        {
+                            action.ErrorMessage = zetaError;
+                            continue;
+                        }
+
+                        action.RequestedZeta = zeta;
                         Element? element = uiDocument.Document.GetElement(new ElementId(row.ElementId));
                         if (element == null)
                         {
-                            warnings.Add($"ElementId {row.ElementId}: элемент не найден.");
+                            action.ErrorMessage = "Элемент не найден.";
                             continue;
                         }
 
-                        Parameter? comments = element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)
-                            ?? element.LookupParameter("Комментарии")
-                            ?? element.LookupParameter("Comments");
-                        if (comments == null || comments.IsReadOnly || comments.StorageType != StorageType.String)
+                        Parameter? comments = FindCommentsParameter(element, out string parameterName);
+                        action.ParameterFound = comments != null;
+                        action.ParameterName = parameterName;
+                        action.ParameterIsReadOnly = comments?.IsReadOnly ?? false;
+                        action.StorageType = comments?.StorageType.ToString() ?? string.Empty;
+                        if (comments == null)
                         {
-                            warnings.Add($"ElementId {row.ElementId}: параметр Комментарии недоступен для записи.");
+                            action.ErrorMessage = "Параметр Комментарии не найден.";
                             continue;
                         }
 
-                        double zeta = row.ManualZeta ?? row.EffectiveZeta;
-                        string oldComment = comments.AsString() ?? string.Empty;
-                        comments.Set(UpdateZetaComment(oldComment, zeta));
-                        writtenIds.Add(row.ElementId);
-                        row.WasWrittenToRevitComment = true;
+                        if (comments.IsReadOnly)
+                        {
+                            action.ErrorMessage = "Параметр Комментарии недоступен для записи.";
+                            continue;
+                        }
+
+                        if (comments.StorageType != StorageType.String)
+                        {
+                            action.ErrorMessage = $"Параметр Комментарии имеет тип {comments.StorageType}, ожидался String.";
+                            continue;
+                        }
+
+                        action.OldComment = comments.AsString() ?? string.Empty;
+                        action.NewComment = UpdateZetaComment(action.OldComment, zeta);
+                        comments.Set(action.NewComment);
+                        string verifyComment = comments.AsString() ?? string.Empty;
+                        action.WriteSucceeded = ContainsZetaValue(verifyComment, zeta);
+                        action.ErrorMessage = action.WriteSucceeded ? string.Empty : "После записи комментарий не содержит ожидаемое z=...";
+                        row.WasWrittenToRevitComment = action.WriteSucceeded;
+                        row.LastWriteError = action.ErrorMessage;
                     }
 
                     transaction.Commit();
                 }
 
-                if (writtenIds.Count > 0 && viewModel.LastLoadedElementId.HasValue)
+                VerifyCommittedComments(uiDocument.Document, actions);
+
+                if (actions.Any(action => action.WriteSucceeded) && viewModel.LastLoadedElementId.HasValue)
                 {
                     VentCalcCenterData data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings(), new ElementId(viewModel.LastLoadedElementId.Value));
                     InvokeOnUiThread(viewModel, () => viewModel.CompleteLoad(data));
                 }
 
-                string message = writtenIds.Count == 0
-                    ? $"ζ не записан. {string.Join("; ", warnings)}"
-                    : $"ζ записан в комментарии для {writtenIds.Count} элементов. {string.Join("; ", warnings)}";
-                Complete(viewModel, writtenIds, message.Trim());
+                int successCount = actions.Count(action => action.WriteSucceeded);
+                int errorCount = actions.Count - successCount;
+                string errors = string.Join("; ", actions.Where(action => !action.WriteSucceeded && !string.IsNullOrWhiteSpace(action.ErrorMessage)).Select(action => $"{action.ElementId}: {action.ErrorMessage}"));
+                string message = $"Запись ζ: успешно {successCount}, ошибок {errorCount}." + (string.IsNullOrWhiteSpace(errors) ? string.Empty : $" {errors}");
+                Complete(viewModel, actions, message);
             }
             catch (Exception exception)
             {
+                actions.Add(new ZetaWriteActionInfo { Timestamp = DateTime.Now, ErrorMessage = exception.Message });
                 ErrorReporter.Report(app, "Ошибка записи ζ в комментарии", exception, launchLogPath);
-                InvokeOnUiThread(viewModel, () => viewModel.FailLoad(exception));
+                Complete(viewModel, actions, $"Запись ζ: ошибка Transaction/ExternalEvent. {exception.Message}");
             }
             finally
             {
@@ -121,6 +151,63 @@ namespace VentCalc.Revit.ExternalEvents
         public string GetName()
         {
             return "VentCalc Write Zeta Comments";
+        }
+
+        private static ZetaWriteActionInfo CreateBaseAction(LocalResistanceCalculationInfo row)
+        {
+            return new ZetaWriteActionInfo
+            {
+                Timestamp = DateTime.Now,
+                ElementId = row.ElementId,
+                PathIndex = row.PathIndex,
+                RequestedZeta = 0
+            };
+        }
+
+        private static bool TryResolveRequestedZeta(LocalResistanceCalculationInfo row, out double zeta, out string errorMessage)
+        {
+            if (row.ManualZeta.HasValue)
+            {
+                zeta = row.ManualZeta.Value;
+            }
+            else if (row.EffectiveZeta > 0)
+            {
+                zeta = row.EffectiveZeta;
+            }
+            else if (row.AutoZeta > 0)
+            {
+                zeta = row.AutoZeta;
+            }
+            else
+            {
+                zeta = 0;
+                errorMessage = "Нет значения ζ для записи.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static Parameter? FindCommentsParameter(Element element, out string parameterName)
+        {
+            Parameter? parameter = element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
+            if (parameter != null)
+            {
+                parameterName = BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS.ToString();
+                return parameter;
+            }
+
+            parameter = element.LookupParameter("Комментарии");
+            if (parameter != null)
+            {
+                parameterName = "Комментарии";
+                return parameter;
+            }
+
+            parameter = element.LookupParameter("Comments");
+            parameterName = parameter == null ? string.Empty : "Comments";
+            return parameter;
         }
 
         private static string UpdateZetaComment(string existingComment, double zeta)
@@ -137,9 +224,15 @@ namespace VentCalc.Revit.ExternalEvents
                 : $"{existingComment.TrimEnd()} z={zetaText}";
         }
 
-        private static void Complete(VentCalcCenterViewModel viewModel, IReadOnlyCollection<long> writtenIds, string message)
+        private static bool ContainsZetaValue(string comment, double zeta)
         {
-            InvokeOnUiThread(viewModel, () => viewModel.CompleteZetaCommentWrite(writtenIds, message));
+            string expected = zeta.ToString("0.###", CultureInfo.InvariantCulture);
+            return Regex.IsMatch(comment, $@"(?:ζ|zeta|z)\s*=\s*{Regex.Escape(expected)}(?:\D|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        private static void Complete(VentCalcCenterViewModel viewModel, IReadOnlyCollection<ZetaWriteActionInfo> actions, string message)
+        {
+            InvokeOnUiThread(viewModel, () => viewModel.CompleteZetaCommentWrite(actions, message));
         }
 
         private static void InvokeOnUiThread(VentCalcCenterViewModel viewModel, Action action)

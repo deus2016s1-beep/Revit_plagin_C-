@@ -122,6 +122,29 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"Запас давления, %: {viewModel.Settings.PressureReservePercent:0.###}");
             builder.AppendLine($"Min/Max/Critical скорость, м/с: {viewModel.Settings.MinVelocityMs:0.###} / {viewModel.Settings.MaxVelocityMs:0.###} / {viewModel.Settings.CriticalVelocityMs:0.###}");
             builder.AppendLine();
+            builder.AppendLine("3а. Состояние редактора ζ");
+            IReadOnlyList<LocalResistanceCalculationInfo> allLocalRows = GetAllLocalResistances(viewModel).ToList();
+            builder.AppendLine($"Последнее действие: {viewModel.LastActionMessage}");
+            builder.AppendLine($"Лог действий: {VentCalcActionLogService.GetLogPath()}");
+            builder.AppendLine($"Всего строк МС: {allLocalRows.Count}; выбранных строк: {viewModel.SelectedLocalResistanceRows.Count}");
+            builder.AppendLine($"Строк с ручными ζ: {allLocalRows.Count(row => row.ManualZeta.HasValue)}; из комментариев: {allLocalRows.Count(row => row.ZetaSource == "Комментарии")}; рекомендованных: {allLocalRows.Count(row => row.ZetaSource == "Рекомендовано")}; без ζ: {allLocalRows.Count(row => row.ZetaSource == "Не определено")}");
+            builder.AppendLine("Строки с ручными ζ:");
+            foreach (LocalResistanceCalculationInfo row in allLocalRows.Where(row => row.ManualZeta.HasValue))
+            {
+                builder.AppendLine($"  ElementId={row.ElementId}; трасса={row.PathIndex}; manualζ={row.ManualZeta:0.###}; effectiveζ={row.EffectiveZeta:0.###}; Z={row.LocalPressureLossPa:0.###} Па");
+            }
+            builder.AppendLine("Последние действия записи ζ:");
+            foreach (ZetaWriteActionInfo action in viewModel.ZetaWriteActions.TakeLast(20))
+            {
+                builder.AppendLine($"  {action.Timestamp:yyyy-MM-dd HH:mm:ss}; ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; ok={action.WriteSucceeded}; parameter={action.ParameterName}; error={action.ErrorMessage}; old='{action.OldComment}'; new='{action.NewComment}'");
+            }
+            builder.AppendLine("Ошибки записи ζ:");
+            foreach (ZetaWriteActionInfo action in viewModel.ZetaWriteActions.Where(action => !action.WriteSucceeded && !string.IsNullOrWhiteSpace(action.ErrorMessage)).TakeLast(20))
+            {
+                builder.AppendLine($"  ElementId={action.ElementId}; {action.ErrorMessage}");
+            }
+            builder.AppendLine();
+
 
             builder.AppendLine("4. Диагностики");
             foreach (VentIssueInfo issue in viewModel.Issues)
@@ -257,6 +280,69 @@ namespace VentCalc.UI.Services
                     maxVelocityMs = viewModel.Settings.MaxVelocityMs,
                     criticalVelocityMs = viewModel.Settings.CriticalVelocityMs
                 },
+                uiState = new
+                {
+                    selectedTab = "—",
+                    selectedSystemName = viewModel.SelectedCatalogSystem?.SystemName,
+                    loadedSystemName = viewModel.SystemName,
+                    selectedElementId = ToLongOrNull(viewModel.SelectedElementId),
+                    selectedPathIndex = viewModel.SelectedPath?.PathIndex,
+                    selectedLocalResistanceElementIds = viewModel.SelectedLocalResistanceRows.Select(row => row.ElementId).ToList(),
+                    manualZetaRowsCount = GetAllLocalResistances(viewModel).Count(row => row.ManualZeta.HasValue),
+                    lastActionMessage = viewModel.LastActionMessage,
+                    actionLogPath = VentCalcActionLogService.GetLogPath()
+                },
+                zetaEditorState = new
+                {
+                    totalRows = GetAllLocalResistances(viewModel).Count(),
+                    editableManualZetaRows = GetAllLocalResistances(viewModel).Count(row => row.CanEditManualZeta),
+                    rowsWithManualZeta = GetAllLocalResistances(viewModel).Count(row => row.ManualZeta.HasValue),
+                    rowsWithCommentZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Комментарии"),
+                    rowsWithRecommendedZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Рекомендовано"),
+                    rowsWithMissingZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Не определено"),
+                    canWriteSelectedRows = viewModel.SelectedLocalResistanceRows.Any(row => row.CanWriteComment),
+                    selectedRowsCount = viewModel.SelectedLocalResistanceRows.Count
+                },
+                zetaWriteActions = viewModel.ZetaWriteActions.Select(action => new
+                {
+                    timestamp = action.Timestamp,
+                    elementId = action.ElementId,
+                    pathIndex = action.PathIndex,
+                    oldComment = action.OldComment,
+                    newComment = action.NewComment,
+                    requestedZeta = action.RequestedZeta,
+                    parameterFound = action.ParameterFound,
+                    parameterName = action.ParameterName,
+                    parameterIsReadOnly = action.ParameterIsReadOnly,
+                    storageType = action.StorageType,
+                    writeSucceeded = action.WriteSucceeded,
+                    errorMessage = action.ErrorMessage
+                }),
+                zetaRecalculationActions = viewModel.ZetaRecalculationActions.Select(action => new
+                {
+                    timestamp = action.Timestamp,
+                    changedRowsCount = action.ChangedRowsCount,
+                    previousCriticalPathIndex = action.PreviousCriticalPathIndex,
+                    newCriticalPathIndex = action.NewCriticalPathIndex,
+                    previousCriticalPressurePa = action.PreviousCriticalPressurePa,
+                    newCriticalPressurePa = action.NewCriticalPressurePa
+                }),
+                localResistanceRows = GetLocalApplications(viewModel).Select(item => new
+                {
+                    elementId = item.Local.ElementId,
+                    pathIndex = item.PathIndex,
+                    pathRole = item.Local.PathRole,
+                    autoZeta = item.Local.AutoZeta,
+                    manualZeta = item.Local.ManualZeta,
+                    effectiveZeta = item.Local.EffectiveZeta,
+                    zetaSource = item.Local.ZetaSource,
+                    zetaComment = item.Local.ZetaComment,
+                    canEditManualZeta = item.Local.CanEditManualZeta,
+                    canWriteComment = item.Local.CanWriteComment,
+                    wasWrittenToRevitComment = item.Local.WasWrittenToRevitComment,
+                    lastWriteError = item.Local.LastWriteError,
+                    validationMessage = item.Local.ValidationMessage
+                }),
                 issues = viewModel.Issues.Select(issue => new
                 {
                     issue.Severity,
