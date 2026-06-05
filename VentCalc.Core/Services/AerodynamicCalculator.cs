@@ -115,7 +115,9 @@ namespace VentCalc.Core.Services
             }
 
             Dictionary<long, DuctCalculationInfo> ductCalculationsByElementId = result.Ducts.ToDictionary(duct => duct.ElementId);
-            result.LocalResistances.AddRange(localResistanceCalculator.CalculatePathLocalResistances(path, localDataByElementId, ductCalculationsByElementId));
+            Dictionary<long, DuctCalculationInfo> networkDuctCalculationsByElementId = ductDataByElementId
+                .ToDictionary(item => item.Key, item => CalculateDuct(item.Value, settings));
+            result.LocalResistances.AddRange(localResistanceCalculator.CalculatePathLocalResistances(path, localDataByElementId, ductCalculationsByElementId, networkDuctCalculationsByElementId));
 
             result.Sections.AddRange(sectionBuilder.Build(result));
 

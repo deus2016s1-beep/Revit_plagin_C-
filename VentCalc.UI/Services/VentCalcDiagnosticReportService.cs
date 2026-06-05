@@ -63,6 +63,7 @@ namespace VentCalc.UI.Services
                 UniqueRecommendedZetaElements = BuildUniqueLocalElements(localApplications, "Рекомендовано"),
                 UniqueCommentZetaElements = BuildUniqueLocalElements(localApplications, "Комментарии"),
                 MissingZetaElements = BuildMissingLocalElements(localApplications),
+                UnknownFittingElements = BuildUnknownFittingElements(localApplications),
                 TopLocalResistanceContribution = localApplications.OrderByDescending(item => item.Local.LocalPressureLossPa).FirstOrDefault(),
                 TopFrictionContribution = ductApplications.OrderByDescending(item => item.Duct.FrictionPressureLossPa).FirstOrDefault(),
                 MaxVelocityDuct = ductApplications.OrderByDescending(item => item.Duct.VelocityMs).FirstOrDefault(),
@@ -193,6 +194,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"Количество применений ζ из комментария по трассам: {commentApplicationCount}");
             AppendUniqueLocalGroup(builder, "Элементы без ζ", diagnostics.MissingZetaElements);
             builder.AppendLine($"Количество элементов без ζ: {diagnostics.MissingZetaElements.Count}");
+            AppendUnknownFittingGroup(builder, diagnostics.UnknownFittingElements);
             builder.AppendLine($"TeePass: {teePassCount}; TeeBranch: {teeBranchCount}; TransitionNarrowing: {transitionNarrowingCount}; TransitionExpansion: {transitionExpansionCount}; Unknown фитингов: {unknownFittingCount}");
             builder.AppendLine($"Коротких воздуховодов, присоединённых к участкам: {GetAllSections(viewModel).Count(section => section.ContainsShortDucts)}; выделено отдельным участком: {GetAllSections(viewModel).Count(section => section.ContainsShortDucts && section.ElementIds.Count == 1)}");
 
@@ -302,6 +304,7 @@ namespace VentCalc.UI.Services
                 uniqueRecommendedZetaElements = diagnostics.UniqueRecommendedZetaElements,
                 uniqueCommentZetaElements = diagnostics.UniqueCommentZetaElements,
                 missingZetaElements = diagnostics.MissingZetaElements,
+                unknownFittingElements = diagnostics.UnknownFittingElements,
                 localResistanceApplicationsCount = diagnostics.LocalApplications.Count,
                 recommendedZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано"),
                 commentZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Комментарии"),
@@ -379,6 +382,38 @@ namespace VentCalc.UI.Services
                 .ToList();
         }
 
+        private static IReadOnlyList<UnknownFittingElement> BuildUnknownFittingElements(IEnumerable<LocalResistanceApplication> applications)
+        {
+            return applications
+                .Where(item => IsUnknownLocalResistanceRole(item.Local))
+                .GroupBy(item => item.Local.ElementId)
+                .Select(group =>
+                {
+                    LocalResistanceCalculationInfo first = group.First().Local;
+                    return new UnknownFittingElement
+                    {
+                        ElementId = first.ElementId,
+                        FamilyName = first.FamilyName,
+                        TypeName = first.TypeName,
+                        ApplicationCount = group.Count(),
+                        PathIndexes = group.Select(item => item.PathIndex).Distinct().OrderBy(index => index).ToList(),
+                        WarningText = string.IsNullOrWhiteSpace(first.WarningText)
+                            ? "Роль фитинга не определена; ζ не применяется автоматически."
+                            : first.WarningText
+                    };
+                })
+                .OrderBy(item => item.ElementId)
+                .ToList();
+        }
+
+        private static bool IsUnknownLocalResistanceRole(LocalResistanceCalculationInfo local)
+        {
+            return local.Source == "Не найдено"
+                || local.Source == "Не определено"
+                || string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase)
+                || local.PathRole?.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
         private static void AppendUniqueLocalGroup(StringBuilder builder, string title, IReadOnlyList<UniqueLocalResistanceElement> elements)
         {
             builder.AppendLine($"{title}: {elements.Count}");
@@ -391,6 +426,21 @@ namespace VentCalc.UI.Services
             foreach (UniqueLocalResistanceElement element in elements)
             {
                 builder.AppendLine($"  {element.ElementId}; тип={element.TypeName}; семейство={element.FamilyName}; ζ={element.Zeta:0.###}; применений={element.ApplicationsCount}; трассы={string.Join(", ", element.PathIndexes)}");
+            }
+        }
+
+        private static void AppendUnknownFittingGroup(StringBuilder builder, IReadOnlyList<UnknownFittingElement> elements)
+        {
+            builder.AppendLine($"Уникальные фитинги с Unknown ролью: {elements.Count}");
+            if (elements.Count == 0)
+            {
+                builder.AppendLine("  —");
+                return;
+            }
+
+            foreach (UnknownFittingElement element in elements)
+            {
+                builder.AppendLine($"  {element.ElementId}; тип={element.TypeName}; семейство={element.FamilyName}; применений={element.ApplicationCount}; трассы={string.Join(", ", element.PathIndexes)}; предупреждение={element.WarningText}");
             }
         }
 
@@ -499,6 +549,8 @@ namespace VentCalc.UI.Services
 
             public IReadOnlyList<UniqueLocalResistanceElement> MissingZetaElements { get; set; } = Array.Empty<UniqueLocalResistanceElement>();
 
+            public IReadOnlyList<UnknownFittingElement> UnknownFittingElements { get; set; } = Array.Empty<UnknownFittingElement>();
+
             public LocalResistanceApplication? TopLocalResistanceContribution { get; set; }
 
             public DuctApplication? TopFrictionContribution { get; set; }
@@ -532,6 +584,22 @@ namespace VentCalc.UI.Services
             public int PathIndex { get; }
 
             public DuctCalculationInfo Duct { get; }
+        }
+
+
+        private sealed class UnknownFittingElement
+        {
+            public long ElementId { get; set; }
+
+            public string FamilyName { get; set; } = string.Empty;
+
+            public string TypeName { get; set; } = string.Empty;
+
+            public int ApplicationCount { get; set; }
+
+            public List<int> PathIndexes { get; set; } = new List<int>();
+
+            public string WarningText { get; set; } = string.Empty;
         }
 
         private sealed class UniqueLocalResistanceElement

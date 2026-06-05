@@ -20,6 +20,8 @@ namespace VentCalc.Core.Models
 
         public string Comments { get; set; } = string.Empty;
 
+        public List<FittingConnectedDuctInfo> ConnectedDucts { get; set; } = new List<FittingConnectedDuctInfo>();
+
         public List<string> Warnings { get; set; } = new List<string>();
     }
 }

@@ -38,6 +38,7 @@ namespace VentCalc.Core.Services
                     AppendDuct(current, duct, shortDuct);
                     if (shortDuct && !string.IsNullOrWhiteSpace(splitReason))
                     {
+                        current.SplitReason = AppendReason(current.SplitReason, "Короткий участок присоединён");
                         current.Warnings.Add($"Короткий воздуховод {duct.ElementId} ({duct.LengthM:0.###} м) присоединён к участку; причина возможного разделения: {splitReason}.");
                     }
                     continue;
@@ -98,23 +99,36 @@ namespace VentCalc.Core.Services
                 return "Начало трассы";
             }
 
+            var reasons = new List<string>();
             string nextShape = duct.IsRound ? "Круглый" : duct.IsRectangular ? "Прямоугольный" : "Не определено";
             if (!string.Equals(current.Shape, nextShape, StringComparison.OrdinalIgnoreCase))
             {
-                return "Изменилась форма воздуховода";
+                reasons.Add("Изменилась форма");
             }
 
             if (!SameSize(current, duct))
             {
-                return "Изменился размер воздуховода";
+                reasons.Add("Изменился размер");
             }
 
             if (!SameFlow(current.FlowM3h, duct.FlowM3h))
             {
-                return "Изменился расход воздуха";
+                reasons.Add("Изменился расход");
             }
 
-            return string.Empty;
+            return string.Join(" и ", reasons);
+        }
+
+        private static string AppendReason(string existingReason, string additionalReason)
+        {
+            if (string.IsNullOrWhiteSpace(existingReason))
+            {
+                return additionalReason;
+            }
+
+            return existingReason.IndexOf(additionalReason, StringComparison.OrdinalIgnoreCase) >= 0
+                ? existingReason
+                : $"{existingReason}; {additionalReason}";
         }
 
         private static bool SameSize(CalculationSectionInfo section, DuctCalculationInfo duct)

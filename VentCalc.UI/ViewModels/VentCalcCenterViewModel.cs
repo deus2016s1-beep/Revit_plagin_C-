@@ -479,7 +479,7 @@ namespace VentCalc.UI.ViewModels
             Replace(SystemSummaries, BuildSystemSummaries(data));
             SelectedSystemSummary = SystemSummaries.FirstOrDefault();
             Replace(SystemCatalog, data.SystemCatalog);
-            SelectedCatalogSystem = SystemCatalog.FirstOrDefault(item => string.Equals(item.SystemName, data.SelectedSystemName, StringComparison.OrdinalIgnoreCase) && string.Equals(item.SystemType, data.SelectedSystemType, StringComparison.OrdinalIgnoreCase)) ?? SystemCatalog.FirstOrDefault();
+            SynchronizeSelectedCatalogSystem(data);
             Replace(Issues, SortIssues(BuildIssues(data)));
             if (!string.IsNullOrWhiteSpace(settingsWarning))
             {
@@ -617,6 +617,46 @@ namespace VentCalc.UI.ViewModels
                 .ToList();
         }
 
+        private void SynchronizeSelectedCatalogSystem(VentCalcCenterData data)
+        {
+            string loadedSystemName = SystemName == "—" ? string.Empty : SystemName;
+            string loadedSystemType = SystemType == "—" ? string.Empty : SystemType;
+
+            VentSystemCatalogItem? matching = SystemCatalog.FirstOrDefault(item =>
+                string.Equals(item.SystemName, loadedSystemName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(item.SystemType, loadedSystemType, StringComparison.OrdinalIgnoreCase));
+
+            if (matching == null && !string.IsNullOrWhiteSpace(loadedSystemName))
+            {
+                matching = SystemCatalog.FirstOrDefault(item =>
+                    string.Equals(item.SystemName, loadedSystemName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (matching == null && !string.IsNullOrWhiteSpace(loadedSystemName))
+            {
+                matching = new VentSystemCatalogItem
+                {
+                    SystemName = loadedSystemName,
+                    SystemType = loadedSystemType,
+                    Direction = Direction == "—" ? string.Empty : Direction,
+                    ElementCount = NetworkInfo?.Elements.Count ?? 0,
+                    DuctCount = NetworkInfo?.DuctCount ?? 0,
+                    FittingCount = NetworkInfo?.FittingCount ?? 0,
+                    TerminalCount = NetworkInfo?.TerminalCount ?? 0,
+                    EquipmentCount = NetworkInfo?.EquipmentCount ?? 0
+                };
+                matching.DisplayName = string.IsNullOrWhiteSpace(loadedSystemType)
+                    ? $"{loadedSystemName} — {matching.ElementCount} элементов"
+                    : $"{loadedSystemName} — {loadedSystemType} — {matching.ElementCount} элементов";
+                SystemCatalog.Add(matching);
+                data.Warnings.Add($"Загруженная система {matching.DisplayName} отсутствовала в каталоге систем и временно добавлена в список.");
+            }
+
+            SelectedCatalogSystem = matching ?? SystemCatalog.FirstOrDefault();
+            data.SelectedSystemName = SelectedCatalogSystem?.SystemName ?? loadedSystemName;
+            data.SelectedSystemType = SelectedCatalogSystem?.SystemType ?? loadedSystemType;
+        }
+
         private IReadOnlyList<VentIssueInfo> BuildIssues(VentCalcCenterData data)
         {
             var result = new List<VentIssueInfo>();
@@ -735,22 +775,36 @@ namespace VentCalc.UI.ViewModels
                 }
             }
 
-            foreach (LocalResistanceCalculationInfo local in data.AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
+            var unknownLocalResistanceGroups = (data.AerodynamicSummary?.Paths ?? Enumerable.Empty<PathCalculationInfo>())
+                .SelectMany(path => path.LocalResistances
+                    .Where(IsUnknownLocalResistanceRole)
+                    .Select(local => new { path.PathIndex, Local = local }))
+                .GroupBy(item => item.Local.ElementId)
+                .OrderBy(group => group.Key);
+
+            foreach (var group in unknownLocalResistanceGroups)
             {
-                if (local.Source == "Не найдено" || local.Source == "Не определено" || string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase) || local.PathRole?.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase) == true)
+                List<int> pathIndexes = group.Select(item => (int)item.PathIndex).Distinct().OrderBy(index => index).ToList();
+                LocalResistanceCalculationInfo first = group.First().Local;
+                result.Add(new VentIssueInfo
                 {
-                    result.Add(new VentIssueInfo
-                    {
-                        Severity = "Warning",
-                        ElementId = local.ElementId.ToString(CultureInfo.InvariantCulture),
-                        Category = "Местные сопротивления",
-                        Message = string.IsNullOrWhiteSpace(local.PathRole) ? "Фитинг без понятного типа МС; требуется проверка ζ." : $"Роль фитинга в трассе не определена уверенно: {local.PathRole}.",
-                        Recommendation = "Заполните ζ в комментарии, например z=0.35."
-                    });
-                }
+                    Severity = "Warning",
+                    ElementId = group.Key.ToString(CultureInfo.InvariantCulture),
+                    Category = "Местные сопротивления",
+                    Message = $"Роль фитинга не определена в {group.Count()} применениях трасс. PathRole: {first.PathRole}.",
+                    Recommendation = $"Проверьте роль фитинга или заполните ζ в комментарии, например z=0.35. Трассы: {string.Join(", ", pathIndexes)}."
+                });
             }
 
             return result;
+        }
+
+        private static bool IsUnknownLocalResistanceRole(LocalResistanceCalculationInfo local)
+        {
+            return local.Source == "Не найдено"
+                || local.Source == "Не определено"
+                || string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase)
+                || local.PathRole?.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase) == true;
         }
 
         private static IReadOnlyList<VentIssueInfo> SortIssues(IEnumerable<VentIssueInfo> issues)

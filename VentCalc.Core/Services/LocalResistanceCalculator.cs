@@ -12,11 +12,12 @@ namespace VentCalc.Core.Services
         public IReadOnlyList<LocalResistanceCalculationInfo> CalculatePathLocalResistances(
             VentPathInfo path,
             IReadOnlyDictionary<long, LocalResistanceElementData> localDataByElementId,
-            IReadOnlyDictionary<long, DuctCalculationInfo> ductCalculationsByElementId)
+            IReadOnlyDictionary<long, DuctCalculationInfo> ductCalculationsByElementId,
+            IReadOnlyDictionary<long, DuctCalculationInfo>? networkDuctCalculationsByElementId = null)
         {
             var roleDetector = new FittingPathRoleDetector();
             Dictionary<long, FittingPathRoleInfo> rolesByElementId = roleDetector
-                .Detect(path, localDataByElementId, ductCalculationsByElementId)
+                .Detect(path, localDataByElementId, networkDuctCalculationsByElementId ?? ductCalculationsByElementId)
                 .GroupBy(role => role.ElementId)
                 .ToDictionary(group => group.Key, group => group.First());
             var result = new List<LocalResistanceCalculationInfo>();
