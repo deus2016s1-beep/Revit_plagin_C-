@@ -134,7 +134,7 @@ namespace VentCalc.UI.Services
             foreach (PathRow path in viewModel.Paths)
             {
                 double totalWithReserve = (path.Calculation?.TotalPressureLossPa ?? 0) * (1.0 + viewModel.Settings.PressureReservePercent / 100.0);
-                builder.AppendLine($"Трасса №{path.PathIndex}: Start={path.StartElementId}; End={path.EndElementId}; Элементов={path.TotalElementCount}; Воздуховодов={path.DuctCount}; Фитингов={path.FittingCount}; Длина={path.TotalDuctLengthM:0.###} м; Расход={path.FlowM3h}; Трение={(path.Calculation?.TotalFrictionPressureLossPa ?? 0):0.###} Па; МС={(path.Calculation?.TotalLocalPressureLossPa ?? 0):0.###} Па; Итого={path.TotalPressureLossPa:0.###} Па; Итого с запасом={totalWithReserve:0.###} Па");
+                builder.AppendLine($"Трасса №{path.PathIndex}: статус={path.CriticalStatus}; Δкрит={path.PressureLossDeltaFromCriticalPa:0.###} Па / {path.PressureLossDeltaFromCriticalPercent:0.##}%; Start={path.StartElementId}; End={path.EndElementId}; Элементов={path.TotalElementCount}; Воздуховодов={path.DuctCount}; Фитингов={path.FittingCount}; Длина={path.TotalDuctLengthM:0.###} м; Расход={path.FlowM3h}; Трение={(path.Calculation?.TotalFrictionPressureLossPa ?? 0):0.###} Па; МС={(path.Calculation?.TotalLocalPressureLossPa ?? 0):0.###} Па; Итого={path.TotalPressureLossPa:0.###} Па; Итого с запасом={totalWithReserve:0.###} Па");
                 builder.AppendLine("  Цепочка: " + string.Join(" → ", path.ElementIds));
             }
             builder.AppendLine();
@@ -153,6 +153,8 @@ namespace VentCalc.UI.Services
                 builder.AppendLine($"Итого: {criticalPath.TotalPressureLossPa:0.###} Па");
                 builder.AppendLine($"Итого с запасом: {criticalPath.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0):0.###} Па");
             }
+            IReadOnlyList<PathRow> nearCriticalRows = viewModel.Paths.Where(path => path.IsNearCritical && !path.IsCritical).ToList();
+            builder.AppendLine($"Почти критические трассы: {(nearCriticalRows.Count == 0 ? "—" : string.Join(", ", nearCriticalRows.Select(path => path.PathIndex)))}");
             builder.AppendLine();
 
             builder.AppendLine("7. Расчётные участки критической трассы");
@@ -172,7 +174,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine("8. Местные сопротивления критической трассы");
             foreach (LocalResistanceCalculationInfo local in criticalPath?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
-                builder.AppendLine($"{local.ElementId}; {local.TypeName}; {local.FamilyName}; {local.Size}; role={local.PathRole}; reason={local.RoleReason}; prev={local.PreviousDuctElementId}; next={local.NextDuctElementId}; prevA={local.PreviousAreaM2:0.####}; nextA={local.NextAreaM2:0.####}; prevQ={local.PreviousFlowM3h:0.###}; nextQ={local.NextFlowM3h:0.###}; ζ={local.Zeta:0.###}; источник={local.Source}; V={local.VelocityMs:0.###} м/с; Pv={local.DynamicPressurePa:0.###} Па; Z={local.LocalPressureLossPa:0.###} Па; warnings={local.WarningText}");
+                builder.AppendLine($"{local.ElementId}; {local.TypeName}; {local.FamilyName}; {local.Size}; role={local.PathRole}; reason={local.RoleReason}; prev={local.PreviousDuctElementId}; next={local.NextDuctElementId}; prevA={local.PreviousAreaM2:0.####}; nextA={local.NextAreaM2:0.####}; prevQ={local.PreviousFlowM3h:0.###}; nextQ={local.NextFlowM3h:0.###}; autoζ={local.AutoZeta:0.###}; manualζ={(local.ManualZeta.HasValue ? local.ManualZeta.Value.ToString("0.###", CultureInfo.InvariantCulture) : "—")}; effectiveζ={local.EffectiveZeta:0.###}; источник={local.ZetaSource}; zetaComment={local.ZetaComment}; written={local.WasWrittenToRevitComment}; V={local.VelocityMs:0.###} м/с; Pv={local.DynamicPressurePa:0.###} Па; Z={local.LocalPressureLossPa:0.###} Па; warnings={local.WarningText}");
             }
             builder.AppendLine();
 
@@ -279,8 +281,21 @@ namespace VentCalc.UI.Services
                     localPressureLossPa = path.Calculation?.TotalLocalPressureLossPa ?? 0,
                     totalPressureLossPa = path.TotalPressureLossPa,
                     totalPressureLossWithReservePa = path.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0),
+                    isCritical = path.IsCritical,
+                    isNearCritical = path.IsNearCritical,
+                    criticalStatus = path.CriticalStatus,
+                    pressureLossDeltaFromCriticalPa = path.PressureLossDeltaFromCriticalPa,
+                    pressureLossDeltaFromCriticalPercent = path.PressureLossDeltaFromCriticalPercent,
                     elementIds = ToElementIdList(path.ElementIds),
                     sections = path.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>()
+                }),
+                nearCriticalPaths = viewModel.Paths.Where(path => path.IsNearCritical).Select(path => new
+                {
+                    pathIndex = path.PathIndex,
+                    totalPressureLossPa = path.TotalPressureLossPa,
+                    pressureLossDeltaFromCriticalPa = path.PressureLossDeltaFromCriticalPa,
+                    pressureLossDeltaFromCriticalPercent = path.PressureLossDeltaFromCriticalPercent,
+                    elementIds = ToElementIdList(path.ElementIds)
                 }),
                 criticalPath = criticalPath == null ? null : new
                 {
@@ -476,7 +491,13 @@ namespace VentCalc.UI.Services
                     elementId = topLocal.Local.ElementId,
                     typeName = topLocal.Local.TypeName,
                     familyName = topLocal.Local.FamilyName,
+                    autoZeta = topLocal.Local.AutoZeta,
+                    manualZeta = topLocal.Local.ManualZeta,
+                    effectiveZeta = topLocal.Local.EffectiveZeta,
                     zeta = topLocal.Local.Zeta,
+                    zetaSource = topLocal.Local.ZetaSource,
+                    zetaComment = topLocal.Local.ZetaComment,
+                    wasWrittenToRevitComment = topLocal.Local.WasWrittenToRevitComment,
                     source = topLocal.Local.Source,
                     dynamicPressurePa = topLocal.Local.DynamicPressurePa,
                     localPressureLossPa = topLocal.Local.LocalPressureLossPa,

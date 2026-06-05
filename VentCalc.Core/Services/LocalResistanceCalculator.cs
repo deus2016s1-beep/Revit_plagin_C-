@@ -71,11 +71,17 @@ namespace VentCalc.Core.Services
                 result.Warnings.AddRange(role.Warnings);
             }
 
-            ZetaResult zeta = ResolveZeta(data, role);
-            result.Zeta = zeta.Value;
-            result.LocalKind = zeta.LocalKind;
-            result.Source = zeta.Source;
-            result.Warnings.AddRange(zeta.Warnings);
+            ZetaResult autoZeta = ResolveAutoZeta(data, role);
+            ZetaResult effectiveZeta = ResolveEffectiveZeta(data, autoZeta);
+            result.AutoZeta = autoZeta.Source == "Не определено" ? 0 : autoZeta.Value;
+            result.ManualZeta = null;
+            result.EffectiveZeta = effectiveZeta.Value;
+            result.Zeta = effectiveZeta.Value;
+            result.LocalKind = effectiveZeta.LocalKind;
+            result.Source = effectiveZeta.Source;
+            result.ZetaSource = effectiveZeta.Source;
+            result.ZetaComment = data.Comments;
+            result.Warnings.AddRange(effectiveZeta.Warnings);
 
             if (referenceDuct == null)
             {
@@ -129,6 +135,26 @@ namespace VentCalc.Core.Services
             }
 
             return nearest;
+        }
+
+        private static ZetaResult ResolveAutoZeta(LocalResistanceElementData data, FittingPathRoleInfo? role)
+        {
+            if (role != null && !string.IsNullOrWhiteSpace(role.PathRole))
+            {
+                return ResolveRoleZeta(role.PathRole);
+            }
+
+            return ResolveRecommendedZeta(data);
+        }
+
+        private static ZetaResult ResolveEffectiveZeta(LocalResistanceElementData data, ZetaResult autoZeta)
+        {
+            if (TryReadZetaFromComments(data.Comments, out double zetaFromComments))
+            {
+                return new ZetaResult(zetaFromComments, "Комментарии", "Значение ζ из параметра Комментарии.", Array.Empty<string>());
+            }
+
+            return autoZeta;
         }
 
         private static ZetaResult ResolveZeta(LocalResistanceElementData data, FittingPathRoleInfo? role)

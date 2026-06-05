@@ -51,6 +51,9 @@ namespace VentCalc.Revit.Commands
                 var selectHandler = new SelectElementExternalEventHandler(launchLogPath, () => ActivateWindow(activeWindow));
                 ExternalEvent selectExternalEvent = ExternalEvent.Create(selectHandler);
                 selectHandler.Initialize(selectExternalEvent);
+                var writeZetaHandler = new WriteZetaCommentsExternalEventHandler(loader, launchLogPath, () => ActivateWindow(activeWindow));
+                ExternalEvent writeZetaExternalEvent = ExternalEvent.Create(writeZetaHandler);
+                writeZetaHandler.Initialize(writeZetaExternalEvent);
 
                 var viewModel = new VentCalcCenterViewModel(
                     (vm, mode) => loadHandler.Request(
@@ -61,6 +64,7 @@ namespace VentCalc.Revit.Commands
                                 ? LoadSelectedSystemRequestMode.SystemCatalog
                                 : LoadSelectedSystemRequestMode.SelectedElement),
                     elementIds => selectHandler.Request(elementIds),
+                    (vm, rows) => writeZetaHandler.Request(vm, rows),
                     text => TaskDialog.Show("VentCalc", text),
                     settingsService,
                     exception => ErrorReporter.Report(uiApplication, "Ошибка ViewModel VentCalc Center", exception, launchLogPath));
@@ -78,6 +82,7 @@ namespace VentCalc.Revit.Commands
                     activeWindow = null;
                     loadExternalEvent.Dispose();
                     selectExternalEvent.Dispose();
+                    writeZetaExternalEvent.Dispose();
                     ErrorReporter.WriteTrace(launchLogPath, "VentCalc Center window closed");
                 };
                 activeWindow = window;

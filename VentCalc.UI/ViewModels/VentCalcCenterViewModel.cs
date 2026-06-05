@@ -19,6 +19,7 @@ namespace VentCalc.UI.ViewModels
     {
         private readonly Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem;
         private readonly Action<IEnumerable<long>>? selectElementsInRevit;
+        private readonly Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>>? writeZetaToRevitComments;
         private readonly Action<string>? showMessage;
         private readonly Action<Exception>? reportException;
         private readonly VentCalcSettingsService settingsService;
@@ -46,12 +47,14 @@ namespace VentCalc.UI.ViewModels
         public VentCalcCenterViewModel(
             Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem,
             Action<IEnumerable<long>>? selectElementsInRevit,
+            Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>>? writeZetaToRevitComments,
             Action<string>? showMessage,
             VentCalcSettingsService settingsService,
             Action<Exception>? reportException = null)
         {
             this.requestLoadSelectedSystem = requestLoadSelectedSystem;
             this.selectElementsInRevit = selectElementsInRevit;
+            this.writeZetaToRevitComments = writeZetaToRevitComments;
             this.showMessage = showMessage;
             this.reportException = reportException;
             this.settingsService = settingsService;
@@ -86,6 +89,9 @@ namespace VentCalc.UI.ViewModels
             PickHighVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.HighVelocityColorHex, value => Settings.HighVelocityColorHex = value));
             PickCriticalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.CriticalVelocityColorHex, value => Settings.CriticalVelocityColorHex = value));
             GenerateVerificationReportCommand = new RelayCommand(_ => GenerateVerificationReport(), _ => NetworkInfo != null || !string.IsNullOrWhiteSpace(ReportText));
+            RecalculateManualZetaCommand = new RelayCommand(_ => RecalculateWithManualZeta(), _ => AerodynamicSummary != null);
+            AcceptRecommendedZetaCommand = new RelayCommand(_ => AcceptRecommendedZeta(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
+            WriteZetaToCommentsCommand = new RelayCommand(_ => WriteSelectedZetaToComments(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
             OpenReportsFolderCommand = new RelayCommand(_ => OpenReportsFolder());
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
         }
@@ -107,6 +113,8 @@ namespace VentCalc.UI.ViewModels
         public ObservableCollection<DuctCalculationInfo> SelectedPathDucts { get; } = new ObservableCollection<DuctCalculationInfo>();
 
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedPathLocalResistances { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
+
+        public ObservableCollection<LocalResistanceCalculationInfo> SelectedLocalResistanceRows { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
 
         public ObservableCollection<VentIssueInfo> Issues { get; } = new ObservableCollection<VentIssueInfo>();
 
@@ -204,11 +212,21 @@ namespace VentCalc.UI.ViewModels
 
         public string CriticalPathText => CriticalPath == null
             ? "Критическая трасса пока не определена."
-            : $"Критическая трасса предварительно: №{CriticalPath.PathIndex}, итого {CriticalPath.TotalPressureLossPa:0.###} Па.";
+            : string.IsNullOrWhiteSpace(NearCriticalPathIndexes)
+                ? $"Критическая трасса предварительно: №{CriticalPath.PathIndex}, итого {CriticalPath.TotalPressureLossPa:0.###} Па."
+                : $"Критическая трасса: №{CriticalPath.PathIndex}; почти критические: {NearCriticalPathIndexes}; итого {CriticalPath.TotalPressureLossPa:0.###} Па.";
+
+        public string NearCriticalPathIndexes => string.Join(", ", Paths.Where(path => path.IsNearCritical && !path.IsCritical).Select(path => path.PathIndex));
 
         public string LoadedSystemDisplay => SystemName == "—" ? "Система не загружена" : $"{SystemName} | {SystemType} | {Direction}";
 
         public int CriticalPathIndex => CriticalPath?.PathIndex ?? 0;
+
+        public string CriticalPathDisplay => CriticalPath == null
+            ? "—"
+            : string.IsNullOrWhiteSpace(NearCriticalPathIndexes)
+                ? CriticalPath.PathIndex.ToString(CultureInfo.InvariantCulture)
+                : $"{CriticalPath.PathIndex}; почти: {NearCriticalPathIndexes}";
 
         public double CriticalPathTotalPressureLossPa => CriticalPath?.TotalPressureLossPa ?? 0;
 
@@ -408,6 +426,12 @@ namespace VentCalc.UI.ViewModels
 
         public ICommand GenerateVerificationReportCommand { get; }
 
+        public ICommand RecalculateManualZetaCommand { get; }
+
+        public ICommand AcceptRecommendedZetaCommand { get; }
+
+        public ICommand WriteZetaToCommentsCommand { get; }
+
         public ICommand OpenReportsFolderCommand { get; }
 
         public ICommand StubCommand { get; }
@@ -475,7 +499,7 @@ namespace VentCalc.UI.ViewModels
             }
 
             Replace(NetworkElements, BuildNetworkRows(data));
-            Replace(Paths, BuildPathRows(data));
+            Replace(Paths, BuildPathRows(data.PathSummary, data.AerodynamicSummary));
             Replace(SystemSummaries, BuildSystemSummaries(data));
             SelectedSystemSummary = SystemSummaries.FirstOrDefault();
             Replace(SystemCatalog, data.SystemCatalog);
@@ -513,6 +537,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(CriticalPathText));
             OnPropertyChanged(nameof(LoadedSystemDisplay));
             OnPropertyChanged(nameof(CriticalPathIndex));
+            OnPropertyChanged(nameof(CriticalPathDisplay));
             OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
             OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
             OnPropertyChanged(nameof(LastLoadedElementId));
@@ -600,19 +625,21 @@ namespace VentCalc.UI.ViewModels
             return string.Join("; ", warnings);
         }
 
-        private static IReadOnlyList<PathRow> BuildPathRows(VentCalcCenterData data)
+        private static IReadOnlyList<PathRow> BuildPathRows(VentPathSummary? pathSummary, AerodynamicCalculationSummary? aerodynamicSummary)
         {
-            if (data.PathSummary == null)
+            if (pathSummary == null)
             {
                 return Array.Empty<PathRow>();
             }
 
-            Dictionary<int, PathCalculationInfo> calculations = data.AerodynamicSummary?.Paths.ToDictionary(path => path.PathIndex) ?? new Dictionary<int, PathCalculationInfo>();
-            return data.PathSummary.Paths
+            Dictionary<int, PathCalculationInfo> calculations = aerodynamicSummary?.Paths.ToDictionary(path => path.PathIndex) ?? new Dictionary<int, PathCalculationInfo>();
+            PathCalculationInfo? critical = aerodynamicSummary?.CriticalPathByTotalPressure;
+            double criticalLoss = critical?.TotalPressureLossPa ?? 0;
+            return pathSummary.Paths
                 .Select(path =>
                 {
                     calculations.TryGetValue(path.PathIndex, out PathCalculationInfo? calculation);
-                    return new PathRow(path, calculation);
+                    return new PathRow(path, calculation, critical?.PathIndex, criticalLoss);
                 })
                 .ToList();
         }
@@ -832,6 +859,7 @@ namespace VentCalc.UI.ViewModels
         {
             selectedPathDuct = null;
             selectedPathLocalResistance = null;
+            SelectedLocalResistanceRows.Clear();
             selectedPathSection = null;
             OnPropertyChanged(nameof(SelectedPathDuct));
             OnPropertyChanged(nameof(SelectedPathLocalResistance));
@@ -1102,6 +1130,130 @@ namespace VentCalc.UI.ViewModels
             }
         }
 
+        private void AcceptRecommendedZeta()
+        {
+            IReadOnlyList<LocalResistanceCalculationInfo> rows = GetSelectedLocalResistanceRows();
+            if (rows.Count == 0)
+            {
+                StatusText = "Выберите строки МС.";
+                return;
+            }
+
+            int updated = 0;
+            foreach (LocalResistanceCalculationInfo local in rows.Where(local => local.AutoZeta > 0 || local.ZetaSource != "Не определено"))
+            {
+                local.ManualZeta = local.AutoZeta;
+                local.ZetaSource = "Вручную";
+                updated++;
+            }
+
+            StatusText = updated == 0
+                ? "Для выбранных МС нет рекомендованных ζ."
+                : $"Рекомендованные ζ приняты вручную для {updated} строк. Нажмите «Пересчитать с ручными ζ».";
+        }
+
+        private void RecalculateWithManualZeta()
+        {
+            if (AerodynamicSummary == null)
+            {
+                StatusText = "Сначала загрузите систему.";
+                return;
+            }
+
+            foreach (PathCalculationInfo path in AerodynamicSummary.Paths)
+            {
+                foreach (LocalResistanceCalculationInfo local in path.LocalResistances)
+                {
+                    if (local.ManualZeta.HasValue)
+                    {
+                        local.EffectiveZeta = local.ManualZeta.Value;
+                        local.Zeta = local.ManualZeta.Value;
+                        local.Source = "Вручную";
+                        local.ZetaSource = "Вручную";
+                    }
+                    else
+                    {
+                        local.EffectiveZeta = local.Zeta;
+                        local.ZetaSource = local.Source;
+                    }
+
+                    local.LocalPressureLossPa = local.EffectiveZeta * local.DynamicPressurePa;
+                }
+
+                path.TotalLocalPressureLossPa = path.LocalResistances.Sum(local => local.LocalPressureLossPa);
+                path.TotalPressureLossPa = path.TotalFrictionPressureLossPa + path.TotalLocalPressureLossPa;
+            }
+
+            CriticalPath = AerodynamicSummary.CriticalPathByTotalPressure;
+            PathRow? previouslySelected = SelectedPath;
+            Replace(Paths, BuildPathRows(PathSummary, AerodynamicSummary));
+            SelectedPath = previouslySelected == null
+                ? Paths.FirstOrDefault(path => path.PathIndex == CriticalPath?.PathIndex) ?? Paths.FirstOrDefault()
+                : Paths.FirstOrDefault(path => path.PathIndex == previouslySelected.PathIndex) ?? Paths.FirstOrDefault();
+            Replace(Issues, SortIssues(BuildIssues(new VentCalcCenterData
+            {
+                Success = true,
+                NetworkInfo = NetworkInfo,
+                PathSummary = PathSummary,
+                AerodynamicSummary = AerodynamicSummary
+            })));
+
+            OnPropertyChanged(nameof(CriticalPathText));
+            OnPropertyChanged(nameof(NearCriticalPathIndexes));
+            OnPropertyChanged(nameof(CriticalPathIndex));
+            OnPropertyChanged(nameof(CriticalPathDisplay));
+            OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
+            OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
+            OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
+            OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            StatusText = "Расчёт обновлён с ручными ζ. Запись в Revit не выполнялась.";
+        }
+
+        private void WriteSelectedZetaToComments()
+        {
+            IReadOnlyList<LocalResistanceCalculationInfo> rows = GetSelectedLocalResistanceRows();
+            if (rows.Count == 0)
+            {
+                StatusText = "Выберите строки МС.";
+                return;
+            }
+
+            writeZetaToRevitComments?.Invoke(this, rows);
+            StatusText = "Ожидание Revit: запись ζ в комментарии выбранных МС.";
+        }
+
+        public void SetSelectedLocalResistanceRows(IEnumerable<LocalResistanceCalculationInfo> rows)
+        {
+            Replace(SelectedLocalResistanceRows, rows);
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        private IReadOnlyList<LocalResistanceCalculationInfo> GetSelectedLocalResistanceRows()
+        {
+            if (SelectedLocalResistanceRows.Count > 0)
+            {
+                return SelectedLocalResistanceRows.ToList();
+            }
+
+            return SelectedPathLocalResistance == null
+                ? Array.Empty<LocalResistanceCalculationInfo>()
+                : new[] { SelectedPathLocalResistance };
+        }
+
+        public void CompleteZetaCommentWrite(IReadOnlyCollection<long> writtenElementIds, string message)
+        {
+            foreach (LocalResistanceCalculationInfo local in AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
+            {
+                if (writtenElementIds.Contains(local.ElementId))
+                {
+                    local.WasWrittenToRevitComment = true;
+                }
+            }
+
+            StatusText = message;
+        }
+
         private void SaveSettings()
         {
             settingsService.Save(Settings);
@@ -1254,10 +1406,19 @@ namespace VentCalc.UI.ViewModels
 
     public sealed class PathRow
     {
-        public PathRow(VentPathInfo path, PathCalculationInfo? calculation)
+        public const double NearCriticalTolerancePa = 1.0;
+        public const double NearCriticalTolerancePercent = 2.0;
+
+        public PathRow(VentPathInfo path, PathCalculationInfo? calculation, int? criticalPathIndex, double criticalPressureLossPa)
         {
             Path = path;
             Calculation = calculation;
+            IsCritical = criticalPathIndex.HasValue && path.PathIndex == criticalPathIndex.Value;
+            PressureLossDeltaFromCriticalPa = Math.Max(0, criticalPressureLossPa - TotalPressureLossPa);
+            PressureLossDeltaFromCriticalPercent = criticalPressureLossPa > 0 ? PressureLossDeltaFromCriticalPa / criticalPressureLossPa * 100.0 : 0;
+            IsNearCritical = !IsCritical
+                && criticalPressureLossPa > 0
+                && (PressureLossDeltaFromCriticalPa <= NearCriticalTolerancePa || PressureLossDeltaFromCriticalPercent <= NearCriticalTolerancePercent);
         }
 
         public VentPathInfo Path { get; }
@@ -1285,6 +1446,16 @@ namespace VentCalc.UI.ViewModels
         public double FlowM3hNumeric => TryParseFlow(Path.MaxFlowM3h);
 
         public double TotalPressureLossPa => Calculation?.TotalPressureLossPa ?? 0;
+
+        public bool IsCritical { get; }
+
+        public bool IsNearCritical { get; }
+
+        public double PressureLossDeltaFromCriticalPa { get; }
+
+        public double PressureLossDeltaFromCriticalPercent { get; }
+
+        public string CriticalStatus => IsCritical ? "Критическая" : IsNearCritical ? "Почти критическая" : "Обычная";
 
 
         public IReadOnlyList<string> ElementIds => Path.ElementIds;

@@ -42,6 +42,21 @@ namespace VentCalc.Core.Models
 
         public string SplitReason { get; set; } = string.Empty;
 
+        public string SplitReasonShort
+        {
+            get
+            {
+                if (SplitReason.Contains("Начало", System.StringComparison.OrdinalIgnoreCase)) return "Старт";
+                bool size = SplitReason.Contains("размер", System.StringComparison.OrdinalIgnoreCase);
+                bool flow = SplitReason.Contains("расход", System.StringComparison.OrdinalIgnoreCase);
+                if (SplitReason.Contains("Короткий", System.StringComparison.OrdinalIgnoreCase)) return "Короткий участок присоединён";
+                if (size && flow) return "Размер + расход";
+                if (size) return "Размер";
+                if (flow) return "Расход";
+                return SplitReason;
+            }
+        }
+
         public bool ContainsShortDucts { get; set; }
 
         public List<string> Warnings { get; set; } = new List<string>();

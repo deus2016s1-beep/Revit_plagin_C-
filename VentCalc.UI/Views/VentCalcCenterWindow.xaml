@@ -56,7 +56,7 @@
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Направление" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding Direction}" /></StackPanel>
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Элементов" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding TotalElements}" /></StackPanel>
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Трасс" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding PathCount}" /></StackPanel>
-                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathIndex}" /></StackPanel>
+                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDisplay}" /></StackPanel>
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итоговые потери" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                 </UniformGrid>
                 <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Foreground="#FF555555" />
@@ -161,6 +161,7 @@
                                     <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalDuctLengthM, StringFormat={}{0:0.###}}" Width="90" />
                                     <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3hNumeric, StringFormat={}{0:0.###}}" Width="110" />
                                     <DataGridTextColumn Header="Потери, Па" Binding="{Binding TotalPressureLossPa, StringFormat={}{0:0.###}}" Width="100" />
+                            <DataGridTextColumn Header="Δ крит., Па" Binding="{Binding PressureLossDeltaFromCriticalPa, StringFormat={}{0:0.###}}" Width="90" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
@@ -175,6 +176,7 @@
                     <DataGrid ItemsSource="{Binding Paths}" SelectedItem="{Binding SelectedPath, Mode=TwoWay}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="№" Binding="{Binding PathIndex}" Width="50" />
+                            <DataGridTextColumn Header="Статус" Binding="{Binding CriticalStatus}" Width="130" />
                             <DataGridTextColumn Header="Start" Binding="{Binding StartElementId}" Width="100" />
                             <DataGridTextColumn Header="End" Binding="{Binding EndElementId}" Width="100" />
                             <DataGridTextColumn Header="Элем." Binding="{Binding TotalElementCount}" Width="70" />
@@ -196,7 +198,7 @@
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Направление" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding Direction}" /></StackPanel>
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Выбранная трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPath.PathIndex}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathIndex}" /></StackPanel>
+                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDisplay}" /></StackPanel>
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Трение" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathFrictionPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Местные" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathLocalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итого" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
@@ -223,7 +225,8 @@
                                     <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
                                     <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
                                     <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="Причина разделения" Binding="{Binding SplitReason}" Width="160" />
+                                    <DataGridTextColumn Header="Причина" Binding="{Binding SplitReasonShort}" Width="140" />
+                                    <DataGridTextColumn Header="Подробно" Binding="{Binding SplitReason}" Width="220" />
                                     <DataGridTextColumn Header="Предупреждения" Binding="{Binding WarningText}" Width="*" />
                                 </DataGrid.Columns>
                             </DataGrid>
@@ -253,12 +256,13 @@
             <TabItem Header="Местные сопротивления">
                 <DockPanel Margin="6">
                     <WrapPanel DockPanel.Dock="Top">
-                        <Button Content="Принять рекомендованные ζ" IsEnabled="False" />
-                        <Button Content="Записать ζ в комментарии" IsEnabled="False" />
+                        <Button Content="Принять рекомендованные ζ" Command="{Binding AcceptRecommendedZetaCommand}" />
+                        <Button Content="Пересчитать с ручными ζ" Command="{Binding RecalculateManualZetaCommand}" />
+                        <Button Content="Записать ζ в комментарии" Command="{Binding WriteZetaToCommentsCommand}" />
                         <Button Content="Обновить МС" Command="{Binding RefreshCommand}" />
                         <Button Content="Показать выбранный элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
                     </WrapPanel>
-                    <DataGrid ItemsSource="{Binding SelectedPathLocalResistances}" SelectedItem="{Binding SelectedPathLocalResistance, Mode=TwoWay}">
+                    <DataGrid x:Name="LocalResistancesGrid" ItemsSource="{Binding SelectedPathLocalResistances}" SelectedItem="{Binding SelectedPathLocalResistance, Mode=TwoWay}" CanUserAddRows="False" SelectionMode="Extended" SelectionChanged="LocalResistancesGrid_SelectionChanged">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
                             <DataGridTextColumn Header="Тип" Binding="{Binding TypeName}" Width="140" />
@@ -273,8 +277,11 @@
                             <DataGridTextColumn Header="NextArea" Binding="{Binding NextAreaM2, StringFormat={}{0:0.####}}" Width="80" />
                             <DataGridTextColumn Header="PrevFlow" Binding="{Binding PreviousFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="NextFlow" Binding="{Binding NextFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="ζ" Binding="{Binding Zeta, StringFormat={}{0:0.###}}" Width="60" />
-                            <DataGridTextColumn Header="Источник ζ" Binding="{Binding Source}" Width="110" />
+                            <DataGridTextColumn Header="AutoZeta" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="80" IsReadOnly="True" />
+                            <DataGridTextColumn Header="ManualZeta" Binding="{Binding ManualZeta, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.###}}" Width="90" />
+                            <DataGridTextColumn Header="EffectiveZeta" Binding="{Binding EffectiveZeta, StringFormat={}{0:0.###}}" Width="95" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Источник ζ" Binding="{Binding ZetaSource}" Width="110" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Комментарий ζ" Binding="{Binding ZetaComment}" Width="140" IsReadOnly="True" />
                             <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
                             <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
                             <DataGridTextColumn Header="Z, Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
