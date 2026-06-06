@@ -26,6 +26,8 @@ namespace VentCalc.Core.Models
 
         public List<ZetaOverrideInfo> ZetaOverrides { get; set; } = new List<ZetaOverrideInfo>();
 
+        public List<ProjectZetaCatalogItem> ProjectZetaCatalog { get; set; } = new List<ProjectZetaCatalogItem>();
+
         public List<FittingConnectedDuctInfo> ConnectedDucts { get; set; } = new List<FittingConnectedDuctInfo>();
 
         public List<string> Warnings { get; set; } = new List<string>();

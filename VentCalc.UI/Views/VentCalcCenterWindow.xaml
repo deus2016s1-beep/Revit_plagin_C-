@@ -262,15 +262,34 @@
                         <TextBlock Text="{Binding LocalResistanceRecognitionSummary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,4" />
                         <WrapPanel>
                             <Button Content="Сохранить переопределения" Command="{Binding SaveZetaOverridesCommand}" />
-                            <Button Content="Сбросить выбранные" Command="{Binding ResetSelectedZetaCommand}" />
+                            <Button Content="Очистить ручное" Command="{Binding ResetSelectedZetaCommand}" ToolTip="Удаляет только несохранённое ручное значение текущей сессии." />
+                            <Button Content="Вернуть к Auto" Command="{Binding ResetToAutoCommand}" />
                             <Button Content="Показать элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
                         </WrapPanel>
                         <Expander Header="Дополнительные действия" IsExpanded="False" Margin="0,4,0,0">
                             <WrapPanel>
                                 <Button Content="Принять рекомендованные ζ" Command="{Binding AcceptRecommendedZetaCommand}" />
                                 <Button Content="Пересчитать с ручными ζ" Command="{Binding RecalculateManualZetaCommand}" />
-                                <Button Content="Обновить МС" Command="{Binding RefreshCommand}" />
+                                <Button Content="Вернуть весь проект к Auto" Command="{Binding ResetProjectToAutoCommand}" />
+                                <Button Content="Обновить данные" Command="{Binding RefreshCommand}" />
+                                <Button Content="Техническая диагностика" Command="{Binding GenerateVerificationReportCommand}" />
                             </WrapPanel>
+                        </Expander>
+                        <Expander Header="Каталог ζ проекта" IsExpanded="False" Margin="0,4,0,0">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Top" Content="Сохранить каталог ζ проекта" Command="{Binding SaveProjectZetaCatalogCommand}" HorizontalAlignment="Left" />
+                                <DataGrid ItemsSource="{Binding ProjectZetaCatalogRows}" CanUserAddRows="False" AutoGenerateColumns="False" MaxHeight="220">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Роль фитинга" Binding="{Binding PathRole}" Width="140" IsReadOnly="True" />
+                                        <DataGridTextColumn Header="Встроенное Auto ζ" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="120" IsReadOnly="True" />
+                                        <DataGridTextColumn Header="ζ проекта" Binding="{Binding ProjectZetaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90" />
+                                        <DataGridTextColumn Header="Используемое ζ проекта" Binding="{Binding EffectiveProjectZeta, StringFormat={}{0:0.###}}" Width="140" IsReadOnly="True" />
+                                        <DataGridTextColumn Header="Количество применений" Binding="{Binding ApplicationCount}" Width="130" IsReadOnly="True" />
+                                        <DataGridTextColumn Header="Количество систем" Binding="{Binding SystemCount}" Width="120" IsReadOnly="True" />
+                                        <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120" IsReadOnly="True" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
                         </Expander>
                     </StackPanel>
                     <DataGrid x:Name="LocalResistancesGrid" ItemsSource="{Binding SelectedPathLocalResistances}" SelectedItem="{Binding SelectedPathLocalResistance, Mode=TwoWay}" CanUserAddRows="False" SelectionMode="Extended" SelectionChanged="LocalResistancesGrid_SelectionChanged">

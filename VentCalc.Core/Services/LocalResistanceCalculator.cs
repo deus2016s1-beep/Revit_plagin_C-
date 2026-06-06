@@ -165,6 +165,12 @@ namespace VentCalc.Core.Services
                 return new ZetaResult(zetaFromComments, "Комментарии", autoZeta.LocalKind, Array.Empty<string>());
             }
 
+            ProjectZetaCatalogItem? catalogItem = data.ProjectZetaCatalog.FirstOrDefault(item => string.Equals(item.PathRole, role?.PathRole ?? string.Empty, StringComparison.Ordinal));
+            if (catalogItem?.ProjectZeta.HasValue == true)
+            {
+                return new ZetaResult(catalogItem.ProjectZeta.GetValueOrDefault(), "Каталог проекта", autoZeta.LocalKind, Array.Empty<string>());
+            }
+
             return autoZeta.Source == "Рекомендовано" ? new ZetaResult(autoZeta.Value, "Автоматически", autoZeta.LocalKind, autoZeta.Warnings) : autoZeta;
         }
 

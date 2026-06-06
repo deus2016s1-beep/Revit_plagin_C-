@@ -19,7 +19,7 @@ namespace VentCalc.UI.ViewModels
     {
         private readonly Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem;
         private readonly Action<IEnumerable<long>>? selectElementsInRevit;
-        private readonly Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>>? writeZetaToRevitComments;
+        private readonly Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>, ZetaOverrideRequestMode>? writeZetaToRevitComments;
         private readonly Action<string>? showMessage;
         private readonly Action<Exception>? reportException;
         private readonly VentCalcSettingsService settingsService;
@@ -48,7 +48,7 @@ namespace VentCalc.UI.ViewModels
         public VentCalcCenterViewModel(
             Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem,
             Action<IEnumerable<long>>? selectElementsInRevit,
-            Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>>? writeZetaToRevitComments,
+            Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>, ZetaOverrideRequestMode>? writeZetaToRevitComments,
             Action<string>? showMessage,
             VentCalcSettingsService settingsService,
             Action<Exception>? reportException = null)
@@ -92,7 +92,10 @@ namespace VentCalc.UI.ViewModels
             PickCriticalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.CriticalVelocityColorHex, value => Settings.CriticalVelocityColorHex = value));
             GenerateVerificationReportCommand = new RelayCommand(_ => GenerateVerificationReport(), _ => NetworkInfo != null || !string.IsNullOrWhiteSpace(ReportText));
             SaveZetaOverridesCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
-            ResetSelectedZetaCommand = new RelayCommand(_ => ResetSelectedZetaOverrides(), _ => GetSelectedLocalResistanceRows().Count > 0);
+            ResetSelectedZetaCommand = new RelayCommand(_ => ClearSelectedManualZeta(), _ => GetSelectedLocalResistanceRows().Count > 0);
+            ResetToAutoCommand = new RelayCommand(_ => ResetSelectedZetaToAuto(), _ => GetSelectedLocalResistanceRows().Count > 0);
+            ResetProjectToAutoCommand = new RelayCommand(_ => ResetProjectToAuto());
+            SaveProjectZetaCatalogCommand = new RelayCommand(_ => SaveProjectZetaCatalog(), _ => ProjectZetaCatalogRows.Any(row => row.ProjectZeta.HasValue));
             RecalculateManualZetaCommand = new RelayCommand(_ => RecalculateWithManualZeta(), _ => AerodynamicSummary != null);
             AcceptRecommendedZetaCommand = new RelayCommand(_ => AcceptRecommendedZeta(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
             WriteZetaToCommentsCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
@@ -119,6 +122,8 @@ namespace VentCalc.UI.ViewModels
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedPathLocalResistances { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
 
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedLocalResistanceRows { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
+
+        public ObservableCollection<ProjectZetaCatalogRow> ProjectZetaCatalogRows { get; } = new ObservableCollection<ProjectZetaCatalogRow>();
 
         public ObservableCollection<ZetaWriteActionInfo> ZetaWriteActions { get; } = new ObservableCollection<ZetaWriteActionInfo>();
 
@@ -452,6 +457,12 @@ namespace VentCalc.UI.ViewModels
 
         public ICommand ResetSelectedZetaCommand { get; }
 
+        public ICommand ResetToAutoCommand { get; }
+
+        public ICommand ResetProjectToAutoCommand { get; }
+
+        public ICommand SaveProjectZetaCatalogCommand { get; }
+
         public ICommand RecalculateManualZetaCommand { get; }
 
         public ICommand AcceptRecommendedZetaCommand { get; }
@@ -574,6 +585,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             OnPropertyChanged(nameof(ReportText));
+            BuildProjectZetaCatalogRows();
             OnPropertyChanged(nameof(LocalResistanceRecognitionSummary));
             OnPropertyChanged(nameof(LoadModeDisplay));
             OnPropertyChanged(nameof(SystemComponentCount));
@@ -1325,6 +1337,26 @@ namespace VentCalc.UI.ViewModels
             LogAction(StatusText);
         }
 
+
+        private void BuildProjectZetaCatalogRows()
+        {
+            string[] roles = new[]
+            {
+                "Elbow15", "Elbow30", "Elbow45", "Elbow60", "Elbow90",
+                "TeePass", "TeeBranch", "CrossPass", "CrossBranch",
+                "TransitionNarrowing", "TransitionExpansion", "TapBranch",
+                "Grille", "Hood", "Damper", "FireDamper", "BackdraftDamper"
+            };
+            var locals = AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances).ToList() ?? new List<LocalResistanceCalculationInfo>();
+            Replace(ProjectZetaCatalogRows, roles.Select(role =>
+            {
+                LocalResistanceCalculationInfo? first = locals.FirstOrDefault(local => local.PathRole == role);
+                double autoZeta = first?.AutoZeta ?? 0;
+                double? projectZeta = first?.ZetaSource == "Каталог проекта" ? first.EffectiveZeta : null;
+                return new ProjectZetaCatalogRow(role, autoZeta, projectZeta, locals.Count(local => local.PathRole == role), locals.Where(local => local.PathRole == role).Select(local => local.ElementId).Distinct().Count());
+            }));
+        }
+
         private void SaveManualZetaOverrides()
         {
             IReadOnlyList<LocalResistanceCalculationInfo> rows = GetChangedLocalResistanceRows();
@@ -1334,13 +1366,13 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            writeZetaToRevitComments?.Invoke(this, rows);
+            writeZetaToRevitComments?.Invoke(this, rows, ZetaOverrideRequestMode.SaveOverrides);
             int dataStorageCount = rows.Count(row => row.PathDependent);
             int commentCount = rows.Count - dataStorageCount;
             StatusText = $"Ожидание Revit: сохранение переопределений ζ. Комментарии: {commentCount}; DataStorage: {dataStorageCount}.";
         }
 
-        private void ResetSelectedZetaOverrides()
+        private void ClearSelectedManualZeta()
         {
             IReadOnlyList<LocalResistanceCalculationInfo> rows = GetSelectedLocalResistanceRows();
             if (rows.Count == 0)
@@ -1360,8 +1392,34 @@ namespace VentCalc.UI.ViewModels
             }
 
             RecalculateWithManualZeta();
-            StatusText = $"Сброшены ручные ζ для выбранных строк: {rows.Count}.";
+            StatusText = $"Очищены несохранённые ручные ζ для выбранных строк: {rows.Count}.";
             LogAction(StatusText);
+        }
+
+        private void ResetSelectedZetaToAuto()
+        {
+            IReadOnlyList<LocalResistanceCalculationInfo> rows = GetSelectedLocalResistanceRows();
+            if (rows.Count == 0)
+            {
+                StatusText = "Выберите строки МС.";
+                return;
+            }
+
+            writeZetaToRevitComments?.Invoke(this, rows, ZetaOverrideRequestMode.ResetToAuto);
+            StatusText = $"Ожидание Revit: возврат к Auto для выбранных строк: {rows.Count}.";
+        }
+
+        private void ResetProjectToAuto()
+        {
+            showMessage?.Invoke("Будут удалены все VentCalc-переопределения ζ и все фрагменты z=/ζ=/zeta= из комментариев поддерживаемых фитингов проекта. Остальной текст комментариев сохранится.");
+            writeZetaToRevitComments?.Invoke(this, Array.Empty<LocalResistanceCalculationInfo>(), ZetaOverrideRequestMode.ResetProjectToAuto);
+            StatusText = "Ожидание Revit: возврат всего проекта к Auto.";
+        }
+
+        private void SaveProjectZetaCatalog()
+        {
+            writeZetaToRevitComments?.Invoke(this, Array.Empty<LocalResistanceCalculationInfo>(), ZetaOverrideRequestMode.SaveProjectCatalog);
+            StatusText = "Ожидание Revit: сохранение каталога ζ проекта.";
         }
 
         public void SetSelectedLocalResistanceRows(IEnumerable<LocalResistanceCalculationInfo> rows)
@@ -1414,6 +1472,11 @@ namespace VentCalc.UI.ViewModels
                 local.WasSavedToVentCalcStorage = action.WriteSucceeded && action.OverrideStorageType == "DataStorage";
                 local.LastWriteError = action.ErrorMessage;
                 local.ManualZeta = null;
+                if (action.OverrideStorageType.Contains("Reset", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 if (action.WriteSucceeded)
                 {
                     local.EffectiveZeta = action.RequestedZeta;
@@ -1521,6 +1584,14 @@ namespace VentCalc.UI.ViewModels
                 collection.Add(item);
             }
         }
+    }
+
+    public enum ZetaOverrideRequestMode
+    {
+        SaveOverrides,
+        ResetToAuto,
+        ResetProjectToAuto,
+        SaveProjectCatalog
     }
 
     public enum VentCalcLoadRequestMode
@@ -1649,6 +1720,64 @@ namespace VentCalc.UI.ViewModels
             string number = new string((value ?? string.Empty).Replace(',', '.').Where(ch => char.IsDigit(ch) || ch == '.' || ch == '-').ToArray());
             return double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) ? parsed : 0;
         }
+    }
+
+    public sealed class ProjectZetaCatalogRow : NotifyObject
+    {
+        private double? projectZeta;
+
+        public ProjectZetaCatalogRow(string pathRole, double autoZeta, double? projectZeta, int applicationCount, int systemCount)
+        {
+            PathRole = pathRole;
+            AutoZeta = autoZeta;
+            this.projectZeta = projectZeta;
+            ApplicationCount = applicationCount;
+            SystemCount = systemCount;
+        }
+
+        public string PathRole { get; }
+
+        public double AutoZeta { get; }
+
+        public double? ProjectZeta
+        {
+            get => projectZeta;
+            set
+            {
+                if (SetProperty(ref projectZeta, value))
+                {
+                    OnPropertyChanged(nameof(ProjectZetaText));
+                    OnPropertyChanged(nameof(EffectiveProjectZeta));
+                    OnPropertyChanged(nameof(Status));
+                }
+            }
+        }
+
+        public string ProjectZetaText
+        {
+            get => ProjectZeta.HasValue ? ProjectZeta.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    ProjectZeta = null;
+                    return;
+                }
+
+                if (double.TryParse(value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) && parsed >= 0)
+                {
+                    ProjectZeta = parsed;
+                }
+            }
+        }
+
+        public double EffectiveProjectZeta => ProjectZeta ?? AutoZeta;
+
+        public int ApplicationCount { get; }
+
+        public int SystemCount { get; }
+
+        public string Status => ProjectZeta.HasValue ? "Каталог проекта" : "Auto";
     }
 
     public sealed class ZetaWriteActionInfo

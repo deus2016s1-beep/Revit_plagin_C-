@@ -14,6 +14,7 @@ namespace VentCalc.Revit.Services
             var overridesByElementId = RevitZetaOverrideStorage.ReadOverrides(document)
                 .GroupBy(item => item.ElementId)
                 .ToDictionary(group => group.Key, group => group.ToList());
+            IReadOnlyList<ProjectZetaCatalogItem> projectCatalog = RevitZetaOverrideStorage.ReadProjectCatalog(document);
             var result = new Dictionary<long, LocalResistanceElementData>();
             foreach (VentNetworkNode node in networkInfo.Elements)
             {
@@ -33,6 +34,7 @@ namespace VentCalc.Revit.Services
                 {
                     data.ZetaOverrides.AddRange(overrides);
                 }
+                data.ProjectZetaCatalog.AddRange(projectCatalog);
                 result[data.ElementId] = data;
             }
 

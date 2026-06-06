@@ -64,7 +64,7 @@ namespace VentCalc.Revit.Commands
                                 ? LoadSelectedSystemRequestMode.SystemCatalog
                                 : LoadSelectedSystemRequestMode.SelectedElement),
                     elementIds => selectHandler.Request(elementIds),
-                    (vm, rows) => writeZetaHandler.Request(vm, rows),
+                    (vm, rows, mode) => writeZetaHandler.Request(vm, rows, mode),
                     text => TaskDialog.Show("VentCalc", text),
                     settingsService,
                     exception => ErrorReporter.Report(uiApplication, "Ошибка ViewModel VentCalc Center", exception, launchLogPath));

@@ -19,6 +19,7 @@ namespace VentCalc.Revit.ExternalEvents
         private ExternalEvent? externalEvent;
         private VentCalcCenterViewModel? pendingViewModel;
         private List<LocalResistanceCalculationInfo> pendingRows = new List<LocalResistanceCalculationInfo>();
+        private ZetaOverrideRequestMode pendingMode = ZetaOverrideRequestMode.SaveOverrides;
 
         public WriteZetaCommentsExternalEventHandler(RevitVentCalcCenterDataLoader dataLoader, string launchLogPath, Action? focusWindow = null)
         {
@@ -32,15 +33,21 @@ namespace VentCalc.Revit.ExternalEvents
             externalEvent = createdExternalEvent;
         }
 
-        public void Request(VentCalcCenterViewModel viewModel, IReadOnlyList<LocalResistanceCalculationInfo> rows)
+        public void Request(VentCalcCenterViewModel viewModel, IReadOnlyList<LocalResistanceCalculationInfo> rows, ZetaOverrideRequestMode mode)
         {
             pendingViewModel = viewModel;
-            pendingRows = rows
-                .Where(row => row.ManualZeta.HasValue)
-                .GroupBy(row => row.PathDependent ? row.OverrideKey : row.ElementId.ToString(CultureInfo.InvariantCulture), StringComparer.Ordinal)
-                .Select(group => group.First())
-                .ToList();
-            ErrorReporter.WriteTrace(launchLogPath, $"WriteZetaComments requested: {pendingRows.Count} rows");
+            pendingMode = mode;
+            pendingRows = mode == ZetaOverrideRequestMode.SaveOverrides
+                ? rows
+                    .Where(row => row.ManualZeta.HasValue)
+                    .GroupBy(row => row.PathDependent ? row.OverrideKey : row.ElementId.ToString(CultureInfo.InvariantCulture), StringComparer.Ordinal)
+                    .Select(group => group.First())
+                    .ToList()
+                : rows
+                    .GroupBy(row => row.PathDependent ? row.OverrideKey : row.ElementId.ToString(CultureInfo.InvariantCulture), StringComparer.Ordinal)
+                    .Select(group => group.First())
+                    .ToList();
+            ErrorReporter.WriteTrace(launchLogPath, $"WriteZetaComments requested: mode={pendingMode}; rows={pendingRows.Count}");
             externalEvent?.Raise();
         }
 
@@ -62,19 +69,41 @@ namespace VentCalc.Revit.ExternalEvents
                     return;
                 }
 
+                if (pendingMode == ZetaOverrideRequestMode.SaveProjectCatalog)
+                {
+                    int saved = SaveProjectCatalog(uiDocument.Document, viewModel);
+                    actions.Add(new ZetaWriteActionInfo { Timestamp = DateTime.Now, OverrideStorageType = "ProjectCatalog", WriteSucceeded = true, VerifiedAfterCommit = true, ActualCommentAfterCommit = $"Project catalog rows={saved}" });
+                    Complete(viewModel, actions, "Каталог ζ проекта сохранён.");
+                    return;
+                }
+
+                if (pendingMode == ZetaOverrideRequestMode.ResetProjectToAuto)
+                {
+                    ResetWholeProjectToAuto(uiDocument.Document, actions);
+                    ReloadIfPossible(viewModel, uiDocument, actions);
+                    Complete(viewModel, actions, $"Возвращён весь проект к Auto: {actions.Count(action => action.WriteSucceeded)}, ошибок: {actions.Count(action => !action.WriteSucceeded)}.");
+                    return;
+                }
+
                 if (pendingRows.Count == 0)
                 {
                     Complete(viewModel, actions, "Запись ζ: успешно 0, ошибок 1. Выберите строки МС.");
                     return;
                 }
 
-                using (var transaction = new Transaction(uiDocument.Document, "VentCalc: записать ζ в комментарии"))
+                using (var transaction = new Transaction(uiDocument.Document, pendingMode == ZetaOverrideRequestMode.ResetToAuto ? "VentCalc: вернуть ζ к Auto" : "VentCalc: записать ζ в комментарии"))
                 {
                     transaction.Start();
                     foreach (LocalResistanceCalculationInfo row in pendingRows)
                     {
                         ZetaWriteActionInfo action = CreateBaseAction(row);
                         actions.Add(action);
+
+                        if (pendingMode == ZetaOverrideRequestMode.ResetToAuto)
+                        {
+                            ResetRowToAuto(uiDocument.Document, row, action);
+                            continue;
+                        }
 
                         if (!TryResolveRequestedZeta(row, out double zeta, out string zetaError))
                         {
@@ -141,12 +170,7 @@ namespace VentCalc.Revit.ExternalEvents
                 VerifyCommittedComments(uiDocument.Document, actions);
                 VerifyStoredOverrides(uiDocument.Document, actions);
 
-                long? lastLoadedElementId = viewModel.LastLoadedElementId;
-                if (actions.Any(action => action.WriteSucceeded) && lastLoadedElementId.HasValue)
-                {
-                    VentCalcCenterData data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings(), new ElementId(lastLoadedElementId.GetValueOrDefault()));
-                    InvokeOnUiThread(viewModel, () => viewModel.CompleteLoad(data));
-                }
+                ReloadIfPossible(viewModel, uiDocument, actions);
 
                 int successCount = actions.Count(action => action.WriteSucceeded);
                 int errorCount = actions.Count - successCount;
@@ -243,6 +267,132 @@ namespace VentCalc.Revit.ExternalEvents
             return string.IsNullOrWhiteSpace(existingComment)
                 ? $"z={zetaText}"
                 : $"{existingComment.TrimEnd()} z={zetaText}";
+        }
+
+        private void ReloadIfPossible(VentCalcCenterViewModel viewModel, UIDocument uiDocument, IReadOnlyCollection<ZetaWriteActionInfo> actions)
+        {
+            long? lastLoadedElementId = viewModel.LastLoadedElementId;
+            if (actions.Any(action => action.WriteSucceeded) && lastLoadedElementId.HasValue)
+            {
+                VentCalcCenterData data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings(), new ElementId(lastLoadedElementId.GetValueOrDefault()));
+                InvokeOnUiThread(viewModel, () => viewModel.CompleteLoad(data));
+            }
+        }
+
+        private static int SaveProjectCatalog(Document document, VentCalcCenterViewModel viewModel)
+        {
+            var items = viewModel.ProjectZetaCatalogRows
+                .Where(row => row.ProjectZeta.HasValue)
+                .Select(row => new ProjectZetaCatalogItem
+                {
+                    PathRole = row.PathRole,
+                    AutoZeta = row.AutoZeta,
+                    ProjectZeta = row.ProjectZeta
+                })
+                .ToList();
+            using var transaction = new Transaction(document, "VentCalc: сохранить каталог ζ проекта");
+            transaction.Start();
+            RevitZetaOverrideStorage.SaveProjectCatalog(document, items);
+            transaction.Commit();
+            return items.Count;
+        }
+
+        private static void ResetRowToAuto(Document document, LocalResistanceCalculationInfo row, ZetaWriteActionInfo action)
+        {
+            action.RequestedZeta = row.AutoZeta;
+            if (row.PathDependent)
+            {
+                RevitZetaOverrideStorage.DeleteOverrides(document, new[] { row.OverrideKey });
+                action.OverrideStorageType = "DataStorageReset";
+                action.WriteSucceeded = true;
+                action.VerifiedAfterCommit = !RevitZetaOverrideStorage.ReadOverrides(document).Any(item => string.Equals(item.OverrideKey, row.OverrideKey, StringComparison.Ordinal));
+                action.ActualCommentAfterCommit = action.VerifiedAfterCommit ? "DataStorage override removed" : "DataStorage override still exists";
+                action.ErrorMessage = action.VerifiedAfterCommit ? string.Empty : "DataStorage override не удалён.";
+                action.WriteSucceeded = action.VerifiedAfterCommit;
+                return;
+            }
+
+            Element? element = document.GetElement(new ElementId(row.ElementId));
+            if (element == null)
+            {
+                action.ErrorMessage = "Элемент не найден.";
+                return;
+            }
+
+            Parameter? comments = FindCommentsParameter(element, out string parameterName);
+            action.ParameterFound = comments != null;
+            action.ParameterName = parameterName;
+            action.ParameterIsReadOnly = comments?.IsReadOnly ?? false;
+            action.StorageType = comments?.StorageType.ToString() ?? string.Empty;
+            action.OverrideStorageType = "CommentReset";
+            if (comments == null || comments.IsReadOnly || comments.StorageType != StorageType.String)
+            {
+                action.ErrorMessage = comments == null ? "Параметр Комментарии не найден." : comments.IsReadOnly ? "Параметр Комментарии недоступен для записи." : $"Параметр Комментарии имеет тип {comments.StorageType}, ожидался String.";
+                return;
+            }
+
+            action.OldComment = comments.AsString() ?? string.Empty;
+            action.NewComment = RemoveZetaComment(action.OldComment);
+            comments.Set(action.NewComment);
+            action.ActualCommentAfterCommit = comments.AsString() ?? string.Empty;
+            action.VerifiedAfterCommit = !ContainsAnyZeta(action.ActualCommentAfterCommit);
+            action.WriteSucceeded = action.VerifiedAfterCommit;
+            action.ErrorMessage = action.WriteSucceeded ? string.Empty : "После удаления комментарий всё ещё содержит z/ζ/zeta.";
+        }
+
+        private static void ResetWholeProjectToAuto(Document document, List<ZetaWriteActionInfo> actions)
+        {
+            using var transaction = new Transaction(document, "VentCalc: вернуть весь проект к Auto");
+            transaction.Start();
+            RevitZetaOverrideStorage.ClearOverrides(document);
+            RevitZetaOverrideStorage.ClearProjectCatalog(document);
+            foreach (Element element in new FilteredElementCollector(document)
+                .WhereElementIsNotElementType()
+                .Where(element => element.Category != null && IsSupportedLocalResistanceCategory((BuiltInCategory)element.Category.Id.Value)))
+            {
+                var action = new ZetaWriteActionInfo { Timestamp = DateTime.Now, ElementId = element.Id.Value, OverrideStorageType = "ProjectReset" };
+                actions.Add(action);
+                Parameter? comments = FindCommentsParameter(element, out string parameterName);
+                action.ParameterFound = comments != null;
+                action.ParameterName = parameterName;
+                if (comments == null || comments.IsReadOnly || comments.StorageType != StorageType.String)
+                {
+                    action.WriteSucceeded = comments == null;
+                    action.ErrorMessage = comments == null ? string.Empty : "Комментарии недоступны для очистки.";
+                    continue;
+                }
+
+                action.OldComment = comments.AsString() ?? string.Empty;
+                action.NewComment = RemoveZetaComment(action.OldComment);
+                if (!string.Equals(action.OldComment, action.NewComment, StringComparison.Ordinal))
+                {
+                    comments.Set(action.NewComment);
+                }
+                action.ActualCommentAfterCommit = comments.AsString() ?? string.Empty;
+                action.WriteSucceeded = !ContainsAnyZeta(action.ActualCommentAfterCommit);
+                action.VerifiedAfterCommit = action.WriteSucceeded;
+                action.ErrorMessage = action.WriteSucceeded ? string.Empty : "После очистки комментарий всё ещё содержит z/ζ/zeta.";
+            }
+            transaction.Commit();
+        }
+
+        private static bool IsSupportedLocalResistanceCategory(BuiltInCategory category)
+        {
+            return category == BuiltInCategory.OST_DuctFitting
+                || category == BuiltInCategory.OST_DuctAccessory
+                || category == BuiltInCategory.OST_DuctTerminal
+                || category == BuiltInCategory.OST_MechanicalEquipment;
+        }
+
+        private static string RemoveZetaComment(string existingComment)
+        {
+            string withoutZeta = Regex.Replace(existingComment ?? string.Empty, @"(?:ζ|zeta|z)\s*=\s*[-+]?\d+(?:[\.,]\d+)?", string.Empty, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return Regex.Replace(withoutZeta, @"\s{2,}", " ").Trim();
+        }
+
+        private static bool ContainsAnyZeta(string comment)
+        {
+            return Regex.IsMatch(comment ?? string.Empty, @"(?:ζ|zeta|z)\s*=\s*[-+]?\d+(?:[\.,]\d+)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 
         private static void SavePathDependentOverride(Document document, LocalResistanceCalculationInfo row, double zeta)

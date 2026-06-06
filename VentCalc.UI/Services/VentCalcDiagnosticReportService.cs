@@ -134,6 +134,21 @@ namespace VentCalc.UI.Services
             {
                 builder.AppendLine($"  ERROR: {error}");
             }
+            builder.AppendLine("Каталог ζ проекта:");
+            foreach (ProjectZetaCatalogRow row in viewModel.ProjectZetaCatalogRows)
+            {
+                builder.AppendLine($"  {row.PathRole}: Auto={row.AutoZeta:0.###}; Project={(row.ProjectZeta.HasValue ? row.ProjectZeta.Value.ToString("0.###", CultureInfo.InvariantCulture) : "—")}; Used={row.EffectiveProjectZeta:0.###}; Applications={row.ApplicationCount}; Systems={row.SystemCount}; Status={row.Status}");
+            }
+            builder.AppendLine("Возврат к Auto / массовые действия:");
+            foreach (ZetaWriteActionInfo action in viewModel.ZetaWriteActions.Where(action => action.OverrideStorageType.Contains("Reset", StringComparison.OrdinalIgnoreCase) || action.OverrideStorageType == "ProjectCatalog").TakeLast(20))
+            {
+                builder.AppendLine($"  {action.Timestamp:yyyy-MM-dd HH:mm:ss}; ElementId={action.ElementId}; storage={action.OverrideStorageType}; key={action.OverrideKey}; ok={action.WriteSucceeded}; error={action.ErrorMessage}; old='{action.OldComment}'; new='{action.NewComment}'");
+            }
+            builder.AppendLine("Последние внутренние действия:");
+            foreach (string logEntry in VentCalcActionLogService.ReadLastEntries(20))
+            {
+                builder.AppendLine($"  {logEntry}");
+            }
             builder.AppendLine("Строки с ручными ζ:");
             foreach (LocalResistanceCalculationInfo row in allLocalRows.Where(row => row.ManualZeta.HasValue))
             {
@@ -298,19 +313,41 @@ namespace VentCalc.UI.Services
                     savedOverrideCount = viewModel.ZetaWriteActions.Count(action => action.WriteSucceeded),
                     failedOverrideCount = viewModel.ZetaWriteActions.Count(action => !action.WriteSucceeded),
                     lastActionMessage = viewModel.LastActionMessage,
-                    actionLogPath = VentCalcActionLogService.GetLogPath()
+                    actionLogPath = VentCalcActionLogService.GetLogPath(),
+                    lastInternalLogEntries = VentCalcActionLogService.ReadLastEntries(50)
                 },
                 zetaEditorState = new
                 {
                     totalRows = GetAllLocalResistances(viewModel).Count(),
                     editableManualZetaRows = GetAllLocalResistances(viewModel).Count(row => row.CanEditManualZeta),
-                    rowsWithManualZeta = GetAllLocalResistances(viewModel).Count(row => row.ManualZeta.HasValue),
-                    rowsWithCommentZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Комментарии"),
-                    rowsWithRecommendedZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Рекомендовано"),
+                    rowsWithSessionManualZeta = GetAllLocalResistances(viewModel).Count(row => row.ManualZeta.HasValue),
+                    rowsWithPathOverrides = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Переопределение VentCalc" || row.ZetaSource == "Переопределение трассы"),
+                    rowsWithCommentZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Комментарии" || row.ZetaSource == "Комментарии элемента"),
+                    rowsWithProjectCatalogZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Каталог проекта"),
+                    rowsWithFamilyTypeZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Семейство/тип"),
+                    rowsWithAutoZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Auto" || row.ZetaSource == "Автоматически" || row.ZetaSource == "Рекомендовано"),
                     rowsWithMissingZeta = GetAllLocalResistances(viewModel).Count(row => row.ZetaSource == "Не определено"),
                     canWriteSelectedRows = viewModel.SelectedLocalResistanceRows.Any(row => row.CanWriteComment),
                     selectedRowsCount = viewModel.SelectedLocalResistanceRows.Count
                 },
+                projectZetaCatalog = viewModel.ProjectZetaCatalogRows.Select(row => new
+                {
+                    pathRole = row.PathRole,
+                    autoZeta = row.AutoZeta,
+                    projectZeta = row.ProjectZeta,
+                    effectiveProjectZeta = row.EffectiveProjectZeta,
+                    applicationCount = row.ApplicationCount,
+                    systemCount = row.SystemCount,
+                    status = row.Status
+                }),
+                projectZetaCatalogActions = viewModel.ZetaWriteActions.Where(action => action.OverrideStorageType == "ProjectCatalog"),
+                bulkZetaActions = Array.Empty<object>(),
+                resetToAutoActions = viewModel.ZetaWriteActions.Where(action => action.OverrideStorageType == "CommentReset" || action.OverrideStorageType == "DataStorageReset" || action.OverrideStorageType == "ProjectReset"),
+                resetProjectActions = viewModel.ZetaWriteActions.Where(action => action.OverrideStorageType == "ProjectReset"),
+                sourceCounts = GetAllLocalResistances(viewModel).GroupBy(row => row.ZetaSource).ToDictionary(group => group.Key, group => group.Count()),
+                affectedSystems = viewModel.NetworkInfo?.Elements.Select(element => element.SystemName).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().ToList() ?? new List<string>(),
+                affectedElementsCount = GetAllLocalResistances(viewModel).Select(row => row.ElementId).Distinct().Count(),
+                lastInternalLogEntries = VentCalcActionLogService.ReadLastEntries(50),
                 zetaWriteActions = viewModel.ZetaWriteActions.Select(action => new
                 {
                     timestamp = action.Timestamp,
