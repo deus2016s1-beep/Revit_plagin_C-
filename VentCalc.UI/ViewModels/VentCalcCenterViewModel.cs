@@ -1332,7 +1332,7 @@ namespace VentCalc.UI.ViewModels
             foreach (ZetaWriteActionInfo action in actions)
             {
                 ZetaWriteActions.Add(action);
-                VentCalcActionLogService.Append($"Запись ζ: ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; ok={action.WriteSucceeded}; parameter={action.ParameterName}; error={action.ErrorMessage}");
+                VentCalcActionLogService.Append($"Запись ζ: ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; ok={action.WriteSucceeded}; verified={action.VerifiedAfterCommit}; parameter={action.ParameterName}; actual='{action.ActualCommentAfterCommit}'; error={action.ErrorMessage}");
             }
 
             foreach (LocalResistanceCalculationInfo local in AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
@@ -1583,6 +1583,8 @@ namespace VentCalc.UI.ViewModels
         public bool ParameterIsReadOnly { get; set; }
         public string StorageType { get; set; } = string.Empty;
         public bool WriteSucceeded { get; set; }
+        public bool VerifiedAfterCommit { get; set; }
+        public string ActualCommentAfterCommit { get; set; } = string.Empty;
         public string ErrorMessage { get; set; } = string.Empty;
     }
 

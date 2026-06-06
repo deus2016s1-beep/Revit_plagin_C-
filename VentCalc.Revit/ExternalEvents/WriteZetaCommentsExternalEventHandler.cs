@@ -113,7 +113,7 @@ namespace VentCalc.Revit.ExternalEvents
                         action.NewComment = UpdateZetaComment(action.OldComment, zeta);
                         comments.Set(action.NewComment);
                         string verifyComment = comments.AsString() ?? string.Empty;
-                        action.WriteSucceeded = ContainsZetaValue(verifyComment, zeta);
+                        action.WriteSucceeded = ContainsExpectedZeta(verifyComment, zeta);
                         action.ErrorMessage = action.WriteSucceeded ? string.Empty : "После записи комментарий не содержит ожидаемое z=...";
                         row.WasWrittenToRevitComment = action.WriteSucceeded;
                         row.LastWriteError = action.ErrorMessage;
@@ -224,10 +224,66 @@ namespace VentCalc.Revit.ExternalEvents
                 : $"{existingComment.TrimEnd()} z={zetaText}";
         }
 
-        private static bool ContainsZetaValue(string comment, double zeta)
+        private static void VerifyCommittedComments(Document document, IEnumerable<ZetaWriteActionInfo> actions)
         {
-            string expected = zeta.ToString("0.###", CultureInfo.InvariantCulture);
-            return Regex.IsMatch(comment, $@"(?:ζ|zeta|z)\s*=\s*{Regex.Escape(expected)}(?:\D|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            foreach (ZetaWriteActionInfo action in actions.Where(action => action.WriteSucceeded))
+            {
+                try
+                {
+                    Element? element = document.GetElement(new ElementId(action.ElementId));
+                    if (element == null)
+                    {
+                        action.WriteSucceeded = false;
+                        action.VerifiedAfterCommit = false;
+                        action.ErrorMessage = "Элемент не найден после Transaction.Commit().";
+                        continue;
+                    }
+
+                    Parameter? comments = FindCommentsParameter(element, out string parameterName);
+                    action.ParameterFound = comments != null;
+                    action.ParameterName = string.IsNullOrWhiteSpace(action.ParameterName) ? parameterName : action.ParameterName;
+                    action.ParameterIsReadOnly = comments?.IsReadOnly ?? action.ParameterIsReadOnly;
+                    action.StorageType = comments?.StorageType.ToString() ?? action.StorageType;
+                    if (comments == null)
+                    {
+                        action.WriteSucceeded = false;
+                        action.VerifiedAfterCommit = false;
+                        action.ErrorMessage = "Параметр комментариев не найден после записи.";
+                        continue;
+                    }
+
+                    string actualComment = comments.AsString() ?? string.Empty;
+                    action.ActualCommentAfterCommit = actualComment;
+                    action.VerifiedAfterCommit = ContainsExpectedZeta(actualComment, action.RequestedZeta);
+                    action.WriteSucceeded = action.VerifiedAfterCommit;
+                    if (!action.VerifiedAfterCommit)
+                    {
+                        action.ErrorMessage = $"После commit ожидаемое ζ={action.RequestedZeta.ToString("0.###", CultureInfo.InvariantCulture)} не найдено. Фактический комментарий: '{actualComment}'.";
+                    }
+                }
+                catch (Exception exception)
+                {
+                    action.WriteSucceeded = false;
+                    action.VerifiedAfterCommit = false;
+                    action.ErrorMessage = exception.Message;
+                }
+            }
+        }
+
+        private static bool ContainsExpectedZeta(string comment, double expectedZeta)
+        {
+            const string pattern = @"(?:ζ|zeta|z)\s*=\s*(?<value>[-+]?\d+(?:[\.,]\d+)?)";
+            foreach (Match match in Regex.Matches(comment ?? string.Empty, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                string? value = match.Groups["value"].Value;
+                if (double.TryParse(value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double actualZeta)
+                    && Math.Abs(actualZeta - expectedZeta) <= 0.0001)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void Complete(VentCalcCenterViewModel viewModel, IReadOnlyCollection<ZetaWriteActionInfo> actions, string message)

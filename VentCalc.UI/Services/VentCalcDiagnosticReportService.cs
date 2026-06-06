@@ -136,7 +136,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine("Последние действия записи ζ:");
             foreach (ZetaWriteActionInfo action in viewModel.ZetaWriteActions.TakeLast(20))
             {
-                builder.AppendLine($"  {action.Timestamp:yyyy-MM-dd HH:mm:ss}; ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; ok={action.WriteSucceeded}; parameter={action.ParameterName}; error={action.ErrorMessage}; old='{action.OldComment}'; new='{action.NewComment}'");
+                builder.AppendLine($"  {action.Timestamp:yyyy-MM-dd HH:mm:ss}; ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; ok={action.WriteSucceeded}; verified={action.VerifiedAfterCommit}; parameter={action.ParameterName}; error={action.ErrorMessage}; old='{action.OldComment}'; new='{action.NewComment}'; actual='{action.ActualCommentAfterCommit}'");
             }
             builder.AppendLine("Ошибки записи ζ:");
             foreach (ZetaWriteActionInfo action in viewModel.ZetaWriteActions.Where(action => !action.WriteSucceeded && !string.IsNullOrWhiteSpace(action.ErrorMessage)).TakeLast(20))
@@ -316,6 +316,8 @@ namespace VentCalc.UI.Services
                     parameterIsReadOnly = action.ParameterIsReadOnly,
                     storageType = action.StorageType,
                     writeSucceeded = action.WriteSucceeded,
+                    verifiedAfterCommit = action.VerifiedAfterCommit,
+                    actualCommentAfterCommit = action.ActualCommentAfterCommit,
                     errorMessage = action.ErrorMessage
                 }),
                 zetaRecalculationActions = viewModel.ZetaRecalculationActions.Select(action => new
