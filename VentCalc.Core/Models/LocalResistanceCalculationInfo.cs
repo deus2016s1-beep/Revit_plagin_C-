@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -22,6 +23,8 @@ namespace VentCalc.Core.Models
         private bool wasSavedToVentCalcStorage;
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
+        public int DisplayNumber { get; set; }
 
         public long ElementId { get; set; }
 
@@ -70,7 +73,13 @@ namespace VentCalc.Core.Models
         public double AutoZeta
         {
             get => autoZeta;
-            set => SetProperty(ref autoZeta, value);
+            set
+            {
+                if (SetProperty(ref autoZeta, value))
+                {
+                    OnPropertyChanged(nameof(AutoZetaText));
+                }
+            }
         }
 
         public double? ProjectCatalogZeta { get; set; }
@@ -87,6 +96,7 @@ namespace VentCalc.Core.Models
 
                 manualZetaText = value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
                 OnPropertyChanged(nameof(ManualZetaText));
+                OnPropertyChanged(nameof(UsedZetaText));
                 OnPropertyChanged(nameof(HasManualOverride));
                 if (value.HasValue)
                 {
@@ -116,8 +126,10 @@ namespace VentCalc.Core.Models
                     ZetaSource = Source;
                     LocalPressureLossPa = EffectiveZeta * DynamicPressurePa;
                     OnPropertyChanged(nameof(ManualZeta));
+                    OnPropertyChanged(nameof(UsedZetaText));
                     OnPropertyChanged(nameof(HasManualOverride));
                     OnPropertyChanged(nameof(StatusText));
+                    OnPropertyChanged(nameof(LocalizedSource));
                     return;
                 }
 
@@ -134,16 +146,44 @@ namespace VentCalc.Core.Models
             }
         }
 
+        public string UsedZetaText
+        {
+            get => (ManualZeta ?? EffectiveZeta).ToString("0.###", CultureInfo.InvariantCulture);
+            set => ManualZetaText = value;
+        }
+
+        public string AutoZetaText => AutoZeta.ToString("0.###", CultureInfo.InvariantCulture);
+
+        public string AngleDisplay => RoundedAngleDeg.HasValue && PathRole.StartsWith("Elbow", StringComparison.OrdinalIgnoreCase)
+            ? $"{RoundedAngleDeg.Value:0.#}°"
+            : string.Empty;
+
+        public string LocalizedKind => LocalizeRole(PathRole, LocalKind);
+
+        public string LocalizedSource => LocalizeSource(ZetaSource);
+
         public double EffectiveZeta
         {
             get => effectiveZeta;
-            set => SetProperty(ref effectiveZeta, value);
+            set
+            {
+                if (SetProperty(ref effectiveZeta, value))
+                {
+                    OnPropertyChanged(nameof(UsedZetaText));
+                }
+            }
         }
 
         public string ZetaSource
         {
             get => zetaSource;
-            set => SetProperty(ref zetaSource, value);
+            set
+            {
+                if (SetProperty(ref zetaSource, value))
+                {
+                    OnPropertyChanged(nameof(LocalizedSource));
+                }
+            }
         }
 
         public string ZetaComment

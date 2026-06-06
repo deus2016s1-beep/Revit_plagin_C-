@@ -185,7 +185,9 @@ namespace VentCalc.Revit.ExternalEvents
                 int successCount = actions.Count(action => action.WriteSucceeded);
                 int errorCount = actions.Count - successCount;
                 string errors = string.Join("; ", actions.Where(action => !action.WriteSucceeded && !string.IsNullOrWhiteSpace(action.ErrorMessage)).Select(action => $"{action.ElementId}: {action.ErrorMessage}"));
-                string message = $"Запись ζ: успешно {successCount}, ошибок {errorCount}." + (string.IsNullOrWhiteSpace(errors) ? string.Empty : $" {errors}");
+                string message = pendingMode == ZetaOverrideRequestMode.SaveOverrides
+                    ? $"Сохранено: {successCount}. Ошибок: {errorCount}." + (string.IsNullOrWhiteSpace(errors) ? string.Empty : $" {errors}")
+                    : $"Возвращено к Auto: {successCount}. Ошибок: {errorCount}." + (string.IsNullOrWhiteSpace(errors) ? string.Empty : $" {errors}");
                 Complete(viewModel, actions, message);
             }
             catch (Exception exception)

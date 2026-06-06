@@ -27,6 +27,16 @@ namespace VentCalc.UI.Views
             viewModel.SetSelectedLocalResistanceRows(grid.SelectedItems.OfType<LocalResistanceCalculationInfo>());
         }
 
+        private void OpenProjectZetaCatalog_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new ProjectZetaCatalogWindow
+            {
+                Owner = this,
+                DataContext = DataContext
+            };
+            window.ShowDialog();
+        }
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             if (isLoadedOnce || DataContext is not VentCalcCenterViewModel viewModel)

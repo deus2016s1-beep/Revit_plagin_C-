@@ -33,6 +33,8 @@ namespace VentCalc.UI.ViewModels
         private CalculationSectionInfo? selectedPathSection;
         private ProjectZetaCatalogRow? selectedProjectZetaCatalogRow;
         private bool isSynchronizingManualZeta;
+        private string localResistanceScopeMode = "CurrentPath";
+        private bool showAllProjectZetaCatalogRoles;
         private string selectedElementId = "—";
         private string systemName = "—";
         private string systemType = "—";
@@ -125,9 +127,39 @@ namespace VentCalc.UI.ViewModels
 
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedPathLocalResistances { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
 
+        public ObservableCollection<LocalResistanceCalculationInfo> DisplayedLocalResistances { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
+
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedLocalResistanceRows { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
 
         public ObservableCollection<ProjectZetaCatalogRow> ProjectZetaCatalogRows { get; } = new ObservableCollection<ProjectZetaCatalogRow>();
+
+        public IEnumerable<ProjectZetaCatalogRow> VisibleProjectZetaCatalogRows => ShowAllProjectZetaCatalogRoles
+            ? ProjectZetaCatalogRows
+            : ProjectZetaCatalogRows.Where(row => row.ApplicationCount > 0 || row.ProjectZeta.HasValue);
+
+        public bool ShowAllProjectZetaCatalogRoles
+        {
+            get => showAllProjectZetaCatalogRoles;
+            set
+            {
+                if (SetProperty(ref showAllProjectZetaCatalogRoles, value))
+                {
+                    OnPropertyChanged(nameof(VisibleProjectZetaCatalogRows));
+                }
+            }
+        }
+
+        public string LocalResistanceScopeMode
+        {
+            get => localResistanceScopeMode;
+            set
+            {
+                if (SetProperty(ref localResistanceScopeMode, string.IsNullOrWhiteSpace(value) ? "CurrentPath" : value))
+                {
+                    RefreshDisplayedLocalResistances();
+                }
+            }
+        }
 
         public ProjectZetaCatalogRow? SelectedProjectZetaCatalogRow
         {
@@ -606,6 +638,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             OnPropertyChanged(nameof(ReportText));
             BuildProjectZetaCatalogRows();
+            RefreshDisplayedLocalResistances();
             OnPropertyChanged(nameof(LocalResistanceRecognitionSummary));
             OnPropertyChanged(nameof(LoadModeDisplay));
             OnPropertyChanged(nameof(SystemComponentCount));
@@ -930,6 +963,7 @@ namespace VentCalc.UI.ViewModels
             Replace(SelectedPathSections, SelectedPath?.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>());
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
             SubscribeLocalResistanceRows();
+            RefreshDisplayedLocalResistances();
 
             UpdatePathsThroughCurrentElement();
             OnPropertyChanged(nameof(SelectedPathChain));
@@ -973,6 +1007,7 @@ namespace VentCalc.UI.ViewModels
                 OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
                 OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
                 OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+                NotifyLocalResistanceUiChanged();
                 CommandManager.InvalidateRequerySuggested();
 
                 if ((e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZeta)
@@ -1258,6 +1293,50 @@ namespace VentCalc.UI.ViewModels
             }
         }
 
+        public int LocalResistanceSummaryCount => DisplayedLocalResistances.Count;
+
+        public double LocalResistanceSummaryLossPa => DisplayedLocalResistances.Sum(local => local.LocalPressureLossPa);
+
+        public int LocalResistanceManualCount => DisplayedLocalResistances.Count(local => local.ManualZeta.HasValue);
+
+        public int LocalResistanceErrorCount => DisplayedLocalResistances.Count(local => !string.IsNullOrWhiteSpace(local.ValidationMessage) || local.ZetaSource == "Не определено" || local.Warnings.Any(w => w.IndexOf("не определ", StringComparison.OrdinalIgnoreCase) >= 0));
+
+        public string LocalResistanceTrackSummary => SelectedPath == null
+            ? "Трасса не выбрана"
+            : $"Текущая трасса №{SelectedPath.PathIndex} · {SelectedPath.CriticalStatus}";
+
+        public string LocalResistanceHealthText => LocalResistanceErrorCount == 0
+            ? "Все коэффициенты определены"
+            : $"Для {LocalResistanceErrorCount} элементов требуется проверка коэффициента ζ";
+
+        private void NotifyLocalResistanceUiChanged()
+        {
+            OnPropertyChanged(nameof(LocalResistanceSummaryCount));
+            OnPropertyChanged(nameof(LocalResistanceSummaryLossPa));
+            OnPropertyChanged(nameof(LocalResistanceManualCount));
+            OnPropertyChanged(nameof(LocalResistanceErrorCount));
+            OnPropertyChanged(nameof(LocalResistanceTrackSummary));
+            OnPropertyChanged(nameof(LocalResistanceHealthText));
+        }
+
+        private void RefreshDisplayedLocalResistances()
+        {
+            IEnumerable<LocalResistanceCalculationInfo> rows = LocalResistanceScopeMode == "WholeSystem"
+                ? AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>()
+                : SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>();
+
+            List<LocalResistanceCalculationInfo> displayRows = rows.ToList();
+            for (int index = 0; index < displayRows.Count; index++)
+            {
+                displayRows[index].DisplayNumber = index + 1;
+                displayRows[index].PropertyChanged -= LocalResistance_PropertyChanged;
+                displayRows[index].PropertyChanged += LocalResistance_PropertyChanged;
+            }
+
+            Replace(DisplayedLocalResistances, displayRows);
+            NotifyLocalResistanceUiChanged();
+        }
+
         private void NotifySelectionChanged()
         {
             CommandManager.InvalidateRequerySuggested();
@@ -1387,6 +1466,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            RefreshDisplayedLocalResistances();
             OnPropertyChanged(nameof(LocalResistanceRecognitionSummary));
             var action = new ZetaRecalculationActionInfo
             {
@@ -1420,6 +1500,7 @@ namespace VentCalc.UI.ViewModels
                 double? projectZeta = first?.ProjectCatalogZeta;
                 return new ProjectZetaCatalogRow(role, autoZeta, projectZeta, locals.Count(local => local.PathRole == role), locals.Where(local => local.PathRole == role).Select(local => local.ElementId).Distinct().Count());
             }));
+            OnPropertyChanged(nameof(VisibleProjectZetaCatalogRows));
         }
 
         private void SaveManualZetaOverrides()
@@ -1860,6 +1941,28 @@ namespace VentCalc.UI.ViewModels
         }
 
         public string PathRole { get; }
+
+        public string LocalizedRole => PathRole switch
+        {
+            "Elbow15" => "Отвод 15°",
+            "Elbow30" => "Отвод 30°",
+            "Elbow45" => "Отвод 45°",
+            "Elbow60" => "Отвод 60°",
+            "Elbow90" => "Отвод 90°",
+            "TeePass" => "Тройник — проход",
+            "TeeBranch" => "Тройник — ответвление",
+            "CrossPass" => "Крестовина — проход",
+            "CrossBranch" => "Крестовина — ответвление",
+            "TransitionNarrowing" => "Переход — сужение",
+            "TransitionExpansion" => "Переход — расширение",
+            "TapBranch" => "Врезка",
+            "Grille" => "Решётка",
+            "Hood" => "Зонт",
+            "Damper" => "Клапан",
+            "FireDamper" => "Противопожарный клапан",
+            "BackdraftDamper" => "Обратный клапан",
+            _ => PathRole
+        };
 
         public double AutoZeta { get; }
 

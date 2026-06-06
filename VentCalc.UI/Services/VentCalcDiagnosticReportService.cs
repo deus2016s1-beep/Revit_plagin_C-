@@ -21,7 +21,7 @@ namespace VentCalc.UI.Services
 
     public static class VentCalcDiagnosticReportService
     {
-        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { WriteIndented = true };
+        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         public static string GetReportsDirectory()
         {
@@ -76,9 +76,27 @@ namespace VentCalc.UI.Services
             var builder = new StringBuilder();
             PathCalculationInfo? criticalPath = viewModel.CriticalPath;
             IReadOnlyList<string> systemPairs = GetSystemPairs(viewModel).ToList();
+            SelfCheckInfo selfCheck = BuildSelfCheck(viewModel, diagnostics);
 
             builder.AppendLine("VentCalc v2.0 — отчёт для проверки");
             builder.AppendLine(new string('=', 60));
+            builder.AppendLine();
+            builder.AppendLine("САМОПРОВЕРКА VENTCALC");
+            builder.AppendLine($"Статус: {selfCheck.Status.ToUpperInvariant()}");
+            builder.AppendLine($"Система: {viewModel.SystemName}");
+            builder.AppendLine($"Трасс: {viewModel.PathCount}");
+            builder.AppendLine($"Неопределённых МС: {selfCheck.UnknownFittingCount}");
+            builder.AppendLine($"МС без ζ: {selfCheck.MissingZetaCount}");
+            builder.AppendLine($"Ошибок согласованности: {selfCheck.StateConsistencyErrorCount}");
+            builder.AppendLine($"Итог критической трассы: {selfCheck.CriticalPressureLossPa:0.###} Па");
+            foreach (string error in selfCheck.Errors)
+            {
+                builder.AppendLine($"ERROR: {error}");
+            }
+            foreach (string warning in selfCheck.Warnings)
+            {
+                builder.AppendLine($"WARNING: {warning}");
+            }
             builder.AppendLine();
             builder.AppendLine("1. Общая информация");
             builder.AppendLine($"Дата/время: {createdAt:yyyy-MM-dd HH:mm:ss}");
@@ -250,8 +268,17 @@ namespace VentCalc.UI.Services
         private static string BuildJsonReport(VentCalcCenterViewModel viewModel, DateTime createdAt, ReportDiagnostics diagnostics)
         {
             PathCalculationInfo? criticalPath = viewModel.CriticalPath;
+            SelfCheckInfo selfCheck = BuildSelfCheck(viewModel, diagnostics);
             var payload = new
             {
+                selfCheck = selfCheck,
+                buildInfo = new
+                {
+                    version = "2.0-preview",
+                    commit = "unknown",
+                    localResistanceUiVersion = "preview-1",
+                    reportSchemaVersion = 2
+                },
                 app = new
                 {
                     name = "VentCalc",
@@ -486,6 +513,65 @@ namespace VentCalc.UI.Services
             };
 
             return JsonSerializer.Serialize(payload, JsonOptions);
+        }
+
+
+        private static SelfCheckInfo BuildSelfCheck(VentCalcCenterViewModel viewModel, ReportDiagnostics diagnostics)
+        {
+            IReadOnlyList<LocalResistanceCalculationInfo> allLocals = GetAllLocalResistances(viewModel).ToList();
+            IReadOnlyList<string> consistencyErrors = GetStateConsistencyErrors(allLocals);
+            bool calculationHasNaN = HasInvalidNumber(viewModel, double.IsNaN);
+            bool calculationHasInfinity = HasInvalidNumber(viewModel, double.IsInfinity);
+            int unknownCount = diagnostics.LocalApplications.Count(item => IsUnknownLocalResistanceRole(item.Local));
+            int missingZetaCount = diagnostics.LocalApplications.Count(item => item.Local.ZetaSource == "Не определено" || item.Local.EffectiveZeta == 0 && item.Local.AutoZeta == 0 && !item.Local.PathRole.Equals("Cap", StringComparison.OrdinalIgnoreCase));
+            bool resetVerified = viewModel.ZetaWriteActions
+                .Where(action => action.OverrideStorageType.Contains("Reset", StringComparison.OrdinalIgnoreCase))
+                .All(action => action.VerifiedAfterCommit || action.WriteSucceeded);
+            bool catalogWriteSucceeded = viewModel.ZetaWriteActions
+                .Where(action => action.OverrideStorageType == "ProjectCatalog")
+                .All(action => action.WriteSucceeded);
+
+            var warnings = new List<string>();
+            var errors = new List<string>();
+            if (unknownCount > 0) warnings.Add($"Неопределённых фитингов: {unknownCount}.");
+            if (missingZetaCount > 0) warnings.Add($"МС без ζ: {missingZetaCount}.");
+            if (consistencyErrors.Count > 0) errors.AddRange(consistencyErrors);
+            if (!viewModel.Paths.Any()) errors.Add("Трассы не построены.");
+            if (viewModel.CriticalPath == null) errors.Add("Критическая трасса не найдена.");
+            if (calculationHasNaN) errors.Add("В расчёте есть NaN.");
+            if (calculationHasInfinity) errors.Add("В расчёте есть Infinity.");
+
+            string status = errors.Count > 0 ? "Failed" : warnings.Count > 0 ? "Warning" : "Passed";
+            return new SelfCheckInfo
+            {
+                Status = status,
+                SystemLoaded = viewModel.NetworkInfo != null,
+                PathsBuilt = viewModel.Paths.Any(),
+                CriticalPathFound = viewModel.CriticalPath != null,
+                UnknownFittingCount = unknownCount,
+                MissingZetaCount = missingZetaCount,
+                StateConsistencyErrorCount = consistencyErrors.Count,
+                ResetToAutoVerified = resetVerified,
+                ProjectCatalogReadSucceeded = viewModel.ProjectZetaCatalogRows.Count > 0,
+                ProjectCatalogWriteSucceeded = catalogWriteSucceeded,
+                PathIndependentValuesConsistent = !consistencyErrors.Any(error => error.StartsWith("Path-independent", StringComparison.OrdinalIgnoreCase)),
+                PathDependentValuesConsistent = !consistencyErrors.Any(error => error.StartsWith("Path-dependent", StringComparison.OrdinalIgnoreCase)),
+                CalculationHasNaN = calculationHasNaN,
+                CalculationHasInfinity = calculationHasInfinity,
+                CriticalPressureLossPa = viewModel.CriticalPath?.TotalPressureLossPa ?? 0,
+                Warnings = warnings,
+                Errors = errors
+            };
+        }
+
+        private static bool HasInvalidNumber(VentCalcCenterViewModel viewModel, Func<double, bool> predicate)
+        {
+            return viewModel.AerodynamicSummary?.Paths.Any(path =>
+                predicate(path.TotalPressureLossPa)
+                || predicate(path.TotalFrictionPressureLossPa)
+                || predicate(path.TotalLocalPressureLossPa)
+                || path.Ducts.Any(duct => predicate(duct.VelocityMs) || predicate(duct.FrictionPressureLossPa))
+                || path.LocalResistances.Any(local => predicate(local.EffectiveZeta) || predicate(local.LocalPressureLossPa))) == true;
         }
 
         private static IEnumerable<DuctCalculationInfo> GetAllDucts(VentCalcCenterViewModel viewModel)
@@ -724,6 +810,27 @@ namespace VentCalc.UI.Services
                 .Distinct()
                 .OrderBy(value => value, StringComparer.Ordinal)
                 ?? Enumerable.Empty<string>();
+        }
+
+        private sealed class SelfCheckInfo
+        {
+            public string Status { get; set; } = "Failed";
+            public bool SystemLoaded { get; set; }
+            public bool PathsBuilt { get; set; }
+            public bool CriticalPathFound { get; set; }
+            public int UnknownFittingCount { get; set; }
+            public int MissingZetaCount { get; set; }
+            public int StateConsistencyErrorCount { get; set; }
+            public bool ResetToAutoVerified { get; set; }
+            public bool ProjectCatalogReadSucceeded { get; set; }
+            public bool ProjectCatalogWriteSucceeded { get; set; }
+            public bool PathIndependentValuesConsistent { get; set; }
+            public bool PathDependentValuesConsistent { get; set; }
+            public bool CalculationHasNaN { get; set; }
+            public bool CalculationHasInfinity { get; set; }
+            public double CriticalPressureLossPa { get; set; }
+            public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
+            public IReadOnlyList<string> Errors { get; set; } = Array.Empty<string>();
         }
 
         private sealed class ReportDiagnostics
