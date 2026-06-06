@@ -19,6 +19,7 @@ namespace VentCalc.Core.Models
         private string lastWriteError = string.Empty;
         private double localPressureLossPa;
         private bool wasWrittenToRevitComment;
+        private bool wasSavedToVentCalcStorage;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -76,6 +77,7 @@ namespace VentCalc.Core.Models
 
                 manualZetaText = value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
                 OnPropertyChanged(nameof(ManualZetaText));
+                OnPropertyChanged(nameof(HasManualOverride));
                 if (value.HasValue)
                 {
                     ValidationMessage = string.Empty;
@@ -98,7 +100,14 @@ namespace VentCalc.Core.Models
                 {
                     manualZeta = null;
                     ValidationMessage = string.Empty;
+                    EffectiveZeta = OriginalEffectiveZeta;
+                    Zeta = OriginalEffectiveZeta;
+                    Source = string.IsNullOrWhiteSpace(OriginalZetaSource) ? Source : OriginalZetaSource;
+                    ZetaSource = Source;
+                    LocalPressureLossPa = EffectiveZeta * DynamicPressurePa;
                     OnPropertyChanged(nameof(ManualZeta));
+                    OnPropertyChanged(nameof(HasManualOverride));
+                    OnPropertyChanged(nameof(StatusText));
                     return;
                 }
 
@@ -133,6 +142,22 @@ namespace VentCalc.Core.Models
             set => SetProperty(ref zetaComment, value);
         }
 
+        public bool PathDependent { get; set; }
+
+        public string OverrideKey { get; set; } = string.Empty;
+
+        public string OverrideStorageType { get; set; } = string.Empty;
+
+        public double OriginalEffectiveZeta { get; set; }
+
+        public string OriginalZetaSource { get; set; } = string.Empty;
+
+        public string StatusText => string.IsNullOrWhiteSpace(ValidationMessage) ? (PathDependent ? "Path-specific" : "Element") : ValidationMessage;
+
+        public string DisplayRole => string.IsNullOrWhiteSpace(PathRole) ? LocalKind : PathRole;
+
+        public string TechnicalDetails => $"Prev={PreviousDuctElementId}; Next={NextDuctElementId}; PrevA={PreviousAreaM2:0.####}; NextA={NextAreaM2:0.####}; PrevQ={PreviousFlowM3h:0.###}; NextQ={NextFlowM3h:0.###}; Reason={RoleReason}; Comment={ZetaComment}; Verification={ValidationMessage}";
+
         public string ValidationMessage
         {
             get => validationMessage;
@@ -154,6 +179,14 @@ namespace VentCalc.Core.Models
             get => wasWrittenToRevitComment;
             set => SetProperty(ref wasWrittenToRevitComment, value);
         }
+
+        public bool WasSavedToVentCalcStorage
+        {
+            get => wasSavedToVentCalcStorage;
+            set => SetProperty(ref wasSavedToVentCalcStorage, value);
+        }
+
+        public bool HasManualOverride => ManualZeta.HasValue;
 
         public double FlowM3h { get; set; }
 
@@ -185,7 +218,10 @@ namespace VentCalc.Core.Models
             Zeta = value;
             Source = "Вручную";
             ZetaSource = "Вручную";
+            OverrideStorageType = PathDependent ? "DataStorage" : "Comment";
             LocalPressureLossPa = value * DynamicPressurePa;
+            OnPropertyChanged(nameof(HasManualOverride));
+            OnPropertyChanged(nameof(StatusText));
         }
 
         private bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)

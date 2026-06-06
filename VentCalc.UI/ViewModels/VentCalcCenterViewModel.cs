@@ -91,9 +91,11 @@ namespace VentCalc.UI.ViewModels
             PickHighVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.HighVelocityColorHex, value => Settings.HighVelocityColorHex = value));
             PickCriticalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.CriticalVelocityColorHex, value => Settings.CriticalVelocityColorHex = value));
             GenerateVerificationReportCommand = new RelayCommand(_ => GenerateVerificationReport(), _ => NetworkInfo != null || !string.IsNullOrWhiteSpace(ReportText));
+            SaveZetaOverridesCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
+            ResetSelectedZetaCommand = new RelayCommand(_ => ResetSelectedZetaOverrides(), _ => GetSelectedLocalResistanceRows().Count > 0);
             RecalculateManualZetaCommand = new RelayCommand(_ => RecalculateWithManualZeta(), _ => AerodynamicSummary != null);
             AcceptRecommendedZetaCommand = new RelayCommand(_ => AcceptRecommendedZeta(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
-            WriteZetaToCommentsCommand = new RelayCommand(_ => WriteSelectedZetaToComments(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
+            WriteZetaToCommentsCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
             OpenReportsFolderCommand = new RelayCommand(_ => OpenReportsFolder());
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
         }
@@ -446,6 +448,10 @@ namespace VentCalc.UI.ViewModels
 
         public ICommand GenerateVerificationReportCommand { get; }
 
+        public ICommand SaveZetaOverridesCommand { get; }
+
+        public ICommand ResetSelectedZetaCommand { get; }
+
         public ICommand RecalculateManualZetaCommand { get; }
 
         public ICommand AcceptRecommendedZetaCommand { get; }
@@ -568,6 +574,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             OnPropertyChanged(nameof(ReportText));
+            OnPropertyChanged(nameof(LocalResistanceRecognitionSummary));
             OnPropertyChanged(nameof(LoadModeDisplay));
             OnPropertyChanged(nameof(SystemComponentCount));
             OnPropertyChanged(nameof(TraceDirectionSummary));
@@ -934,14 +941,16 @@ namespace VentCalc.UI.ViewModels
                 OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
                 OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
                 OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+                CommandManager.InvalidateRequerySuggested();
 
-                if (e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZeta)
+                if ((e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZeta)
                     || e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZetaText))
+                    && local.ManualZeta.HasValue
+                    && string.IsNullOrWhiteSpace(local.ValidationMessage))
                 {
-                    string zetaText = local.ManualZeta.HasValue
-                        ? local.ManualZeta.Value.ToString("0.###", CultureInfo.InvariantCulture)
-                        : local.ManualZetaText;
-                    LogAction($"ManualZeta изменён: ElementId {local.ElementId}, ζ={zetaText}");
+                    string zetaText = local.ManualZeta.Value.ToString("0.###", CultureInfo.InvariantCulture);
+                    RecalculateWithManualZeta();
+                    LogAction($"ManualZeta изменён: ElementId {local.ElementId}, ζ={zetaText}. Расчёт обновлён автоматически.");
                 }
             }
         }
@@ -1156,6 +1165,23 @@ namespace VentCalc.UI.ViewModels
 
         public double PathsThroughElementMaxFlowM3h => PathsThroughSelectedElement.Count == 0 ? 0 : PathsThroughSelectedElement.Max(path => path.FlowM3hNumeric);
 
+        public string LocalResistanceRecognitionSummary
+        {
+            get
+            {
+                IReadOnlyList<LocalResistanceCalculationInfo> locals = AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances).ToList() ?? new List<LocalResistanceCalculationInfo>();
+                int elbowCount = locals.Count(local => local.PathRole.StartsWith("Elbow", StringComparison.OrdinalIgnoreCase));
+                int teePassCount = locals.Count(local => local.PathRole == "TeePass");
+                int teeBranchCount = locals.Count(local => local.PathRole == "TeeBranch");
+                int transitionNarrowingCount = locals.Count(local => local.PathRole == "TransitionNarrowing");
+                int transitionExpansionCount = locals.Count(local => local.PathRole == "TransitionExpansion");
+                int tapCount = locals.Count(local => local.PathRole == "TapBranch");
+                int grilleCount = locals.Count(local => local.PathRole == "Grille");
+                int unknownCount = locals.Count(local => string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase) || local.PathRole.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase));
+                return $"Отводы: {elbowCount}; Тройники проход: {teePassCount}; Тройники ответвление: {teeBranchCount}; Переходы сужение: {transitionNarrowingCount}; Переходы расширение: {transitionExpansionCount}; Врезки: {tapCount}; Решётки: {grilleCount}; Не определено: {unknownCount}";
+            }
+        }
+
         private void NotifySelectionChanged()
         {
             CommandManager.InvalidateRequerySuggested();
@@ -1249,7 +1275,8 @@ namespace VentCalc.UI.ViewModels
                     else
                     {
                         local.EffectiveZeta = local.Zeta;
-                        local.ZetaSource = local.Source;
+                        local.Source = string.IsNullOrWhiteSpace(local.OriginalZetaSource) ? local.Source : local.OriginalZetaSource;
+                local.ZetaSource = local.Source;
                     }
 
                     local.LocalPressureLossPa = local.EffectiveZeta * local.DynamicPressurePa;
@@ -1282,6 +1309,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            OnPropertyChanged(nameof(LocalResistanceRecognitionSummary));
             var action = new ZetaRecalculationActionInfo
             {
                 Timestamp = DateTime.Now,
@@ -1296,7 +1324,22 @@ namespace VentCalc.UI.ViewModels
             LogAction(StatusText);
         }
 
-        private void WriteSelectedZetaToComments()
+        private void SaveManualZetaOverrides()
+        {
+            IReadOnlyList<LocalResistanceCalculationInfo> rows = GetChangedLocalResistanceRows();
+            if (rows.Count == 0)
+            {
+                StatusText = "Нет изменённых ручных ζ для сохранения.";
+                return;
+            }
+
+            writeZetaToRevitComments?.Invoke(this, rows);
+            int dataStorageCount = rows.Count(row => row.PathDependent);
+            int commentCount = rows.Count - dataStorageCount;
+            StatusText = $"Ожидание Revit: сохранение переопределений ζ. Комментарии: {commentCount}; DataStorage: {dataStorageCount}.";
+        }
+
+        private void ResetSelectedZetaOverrides()
         {
             IReadOnlyList<LocalResistanceCalculationInfo> rows = GetSelectedLocalResistanceRows();
             if (rows.Count == 0)
@@ -1305,14 +1348,35 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            writeZetaToRevitComments?.Invoke(this, rows);
-            StatusText = "Ожидание Revit: запись ζ в комментарии выбранных МС.";
+            foreach (LocalResistanceCalculationInfo local in rows)
+            {
+                local.ManualZeta = null;
+                local.EffectiveZeta = local.OriginalEffectiveZeta;
+                local.Zeta = local.OriginalEffectiveZeta;
+                local.Source = string.IsNullOrWhiteSpace(local.OriginalZetaSource) ? local.Source : local.OriginalZetaSource;
+                local.ZetaSource = local.Source;
+                local.LocalPressureLossPa = local.EffectiveZeta * local.DynamicPressurePa;
+            }
+
+            RecalculateWithManualZeta();
+            StatusText = $"Сброшены ручные ζ для выбранных строк: {rows.Count}.";
+            LogAction(StatusText);
         }
 
         public void SetSelectedLocalResistanceRows(IEnumerable<LocalResistanceCalculationInfo> rows)
         {
             Replace(SelectedLocalResistanceRows, rows);
             CommandManager.InvalidateRequerySuggested();
+        }
+
+        private IReadOnlyList<LocalResistanceCalculationInfo> GetChangedLocalResistanceRows()
+        {
+            return AerodynamicSummary?.Paths
+                .SelectMany(path => path.LocalResistances)
+                .Where(local => local.ManualZeta.HasValue && Math.Abs(local.ManualZeta.Value - local.OriginalEffectiveZeta) > 0.0001)
+                .GroupBy(local => local.PathDependent ? local.OverrideKey : local.ElementId.ToString(CultureInfo.InvariantCulture), StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToList() ?? Array.Empty<LocalResistanceCalculationInfo>();
         }
 
         private IReadOnlyList<LocalResistanceCalculationInfo> GetSelectedLocalResistanceRows()
@@ -1332,19 +1396,35 @@ namespace VentCalc.UI.ViewModels
             foreach (ZetaWriteActionInfo action in actions)
             {
                 ZetaWriteActions.Add(action);
-                VentCalcActionLogService.Append($"Запись ζ: ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; ok={action.WriteSucceeded}; verified={action.VerifiedAfterCommit}; parameter={action.ParameterName}; actual='{action.ActualCommentAfterCommit}'; error={action.ErrorMessage}");
+                VentCalcActionLogService.Append($"Сохранение ζ: ElementId={action.ElementId}; ζ={action.RequestedZeta:0.###}; storage={action.OverrideStorageType}; key='{action.OverrideKey}'; ok={action.WriteSucceeded}; verified={action.VerifiedAfterCommit}; actual='{action.ActualCommentAfterCommit}'; error={action.ErrorMessage}");
             }
 
             foreach (LocalResistanceCalculationInfo local in AerodynamicSummary?.Paths.SelectMany(path => path.LocalResistances) ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
-                ZetaWriteActionInfo? action = actions.LastOrDefault(item => item.ElementId == local.ElementId);
+                ZetaWriteActionInfo? action = actions.LastOrDefault(item => item.PathDependent
+                    ? string.Equals(item.OverrideKey, local.OverrideKey, StringComparison.Ordinal)
+                    : item.ElementId == local.ElementId);
                 if (action == null)
                 {
                     continue;
                 }
 
-                local.WasWrittenToRevitComment = action.WriteSucceeded;
+                local.WasWrittenToRevitComment = action.WriteSucceeded && action.OverrideStorageType == "Comment";
+                local.WasSavedToVentCalcStorage = action.WriteSucceeded && action.OverrideStorageType == "DataStorage";
                 local.LastWriteError = action.ErrorMessage;
+                local.ManualZeta = null;
+                if (action.WriteSucceeded)
+                {
+                    local.EffectiveZeta = action.RequestedZeta;
+                    local.Zeta = action.RequestedZeta;
+                    local.ZetaSource = action.OverrideStorageType == "DataStorage" ? "Переопределение VentCalc" : "Комментарии";
+                    local.OverrideStorageType = action.OverrideStorageType;
+                    local.OriginalEffectiveZeta = local.EffectiveZeta;
+                    local.OriginalZetaSource = local.ZetaSource;
+                    local.LocalPressureLossPa = local.EffectiveZeta * local.DynamicPressurePa;
+                    action.EffectiveZetaAfterReload = local.EffectiveZeta;
+                    action.SourceAfterReload = local.ZetaSource;
+                }
             }
 
             StatusText = message;
@@ -1582,9 +1662,14 @@ namespace VentCalc.UI.ViewModels
         public string ParameterName { get; set; } = string.Empty;
         public bool ParameterIsReadOnly { get; set; }
         public string StorageType { get; set; } = string.Empty;
+        public string OverrideStorageType { get; set; } = string.Empty;
+        public string OverrideKey { get; set; } = string.Empty;
+        public bool PathDependent { get; set; }
         public bool WriteSucceeded { get; set; }
         public bool VerifiedAfterCommit { get; set; }
         public string ActualCommentAfterCommit { get; set; } = string.Empty;
+        public double EffectiveZetaAfterReload { get; set; }
+        public string SourceAfterReload { get; set; } = string.Empty;
         public string ErrorMessage { get; set; } = string.Empty;
     }
 

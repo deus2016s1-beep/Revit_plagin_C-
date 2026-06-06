@@ -258,29 +258,28 @@
 
             <TabItem Header="Местные сопротивления">
                 <DockPanel Margin="6">
-                    <WrapPanel DockPanel.Dock="Top">
-                        <Button Content="Принять рекомендованные ζ" Command="{Binding AcceptRecommendedZetaCommand}" />
-                        <Button Content="Пересчитать с ручными ζ" Command="{Binding RecalculateManualZetaCommand}" />
-                        <Button Content="Записать ζ в комментарии" Command="{Binding WriteZetaToCommentsCommand}" />
-                        <Button Content="Обновить МС" Command="{Binding RefreshCommand}" />
-                        <Button Content="Показать выбранный элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
-                    </WrapPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <TextBlock Text="{Binding LocalResistanceRecognitionSummary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,4" />
+                        <WrapPanel>
+                            <Button Content="Сохранить переопределения" Command="{Binding SaveZetaOverridesCommand}" />
+                            <Button Content="Сбросить выбранные" Command="{Binding ResetSelectedZetaCommand}" />
+                            <Button Content="Показать элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
+                        </WrapPanel>
+                        <Expander Header="Дополнительные действия" IsExpanded="False" Margin="0,4,0,0">
+                            <WrapPanel>
+                                <Button Content="Принять рекомендованные ζ" Command="{Binding AcceptRecommendedZetaCommand}" />
+                                <Button Content="Пересчитать с ручными ζ" Command="{Binding RecalculateManualZetaCommand}" />
+                                <Button Content="Обновить МС" Command="{Binding RefreshCommand}" />
+                            </WrapPanel>
+                        </Expander>
+                    </StackPanel>
                     <DataGrid x:Name="LocalResistancesGrid" ItemsSource="{Binding SelectedPathLocalResistances}" SelectedItem="{Binding SelectedPathLocalResistance, Mode=TwoWay}" CanUserAddRows="False" SelectionMode="Extended" SelectionChanged="LocalResistancesGrid_SelectionChanged">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                            <DataGridTextColumn Header="Тип" Binding="{Binding TypeName}" Width="140" />
-                            <DataGridTextColumn Header="Семейство" Binding="{Binding FamilyName}" Width="150" />
+                            <DataGridTextColumn Header="Вид МС" Binding="{Binding LocalKind}" Width="130" />
+                            <DataGridTextColumn Header="Роль" Binding="{Binding DisplayRole}" Width="120" />
                             <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                            <DataGridTextColumn Header="Вид МС" Binding="{Binding LocalKind}" Width="140" />
-                            <DataGridTextColumn Header="PathRole" Binding="{Binding PathRole}" Width="140" />
-                            <DataGridTextColumn Header="Reason" Binding="{Binding RoleReason}" Width="220" />
-                            <DataGridTextColumn Header="PrevDuct" Binding="{Binding PreviousDuctElementId}" Width="90" />
-                            <DataGridTextColumn Header="NextDuct" Binding="{Binding NextDuctElementId}" Width="90" />
-                            <DataGridTextColumn Header="PrevArea" Binding="{Binding PreviousAreaM2, StringFormat={}{0:0.####}}" Width="80" />
-                            <DataGridTextColumn Header="NextArea" Binding="{Binding NextAreaM2, StringFormat={}{0:0.####}}" Width="80" />
-                            <DataGridTextColumn Header="PrevFlow" Binding="{Binding PreviousFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="NextFlow" Binding="{Binding NextFlowM3h, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="AutoZeta" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="80" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Auto ζ" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="70" IsReadOnly="True" />
                             <DataGridTemplateColumn Header="ManualZeta" Width="90">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -288,14 +287,11 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="EffectiveZeta" Binding="{Binding EffectiveZeta, StringFormat={}{0:0.###}}" Width="95" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Источник ζ" Binding="{Binding ZetaSource}" Width="110" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Комментарий ζ" Binding="{Binding ZetaComment}" Width="140" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Проверка ζ" Binding="{Binding ValidationMessage}" Width="130" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
-                            <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="Z, Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
-                            <DataGridTextColumn Header="Предупреждения" Binding="{Binding WarningText}" Width="*" />
+                            <DataGridTextColumn Header="Используемое ζ" Binding="{Binding EffectiveZeta, StringFormat={}{0:0.###}}" Width="100" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Источник" Binding="{Binding ZetaSource}" Width="140" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Потери, Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="90" />
+                            <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="120" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Подробно" Binding="{Binding TechnicalDetails}" Width="*" IsReadOnly="True" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

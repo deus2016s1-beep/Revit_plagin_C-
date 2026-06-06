@@ -11,6 +11,9 @@ namespace VentCalc.Revit.Services
     {
         public IReadOnlyDictionary<long, LocalResistanceElementData> ReadElements(Document document, VentNetworkInfo networkInfo)
         {
+            var overridesByElementId = RevitZetaOverrideStorage.ReadOverrides(document)
+                .GroupBy(item => item.ElementId)
+                .ToDictionary(group => group.Key, group => group.ToList());
             var result = new Dictionary<long, LocalResistanceElementData>();
             foreach (VentNetworkNode node in networkInfo.Elements)
             {
@@ -26,6 +29,10 @@ namespace VentCalc.Revit.Services
 
                 Element? element = document.GetElement(new ElementId(elementIdValue));
                 LocalResistanceElementData data = ReadElement(node, element);
+                if (overridesByElementId.TryGetValue(data.ElementId, out List<ZetaOverrideInfo>? overrides))
+                {
+                    data.ZetaOverrides.AddRange(overrides);
+                }
                 result[data.ElementId] = data;
             }
 
@@ -46,7 +53,9 @@ namespace VentCalc.Revit.Services
                 TypeName = node.TypeName,
                 Name = node.Name,
                 Size = node.Size,
-                Comments = element == null ? string.Empty : ReadComments(element)
+                Comments = element == null ? string.Empty : ReadComments(element),
+                SystemName = node.SystemName,
+                SystemType = node.SystemType
             };
 
             if (element != null)

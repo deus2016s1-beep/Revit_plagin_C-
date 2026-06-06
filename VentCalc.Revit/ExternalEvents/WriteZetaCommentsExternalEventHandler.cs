@@ -35,7 +35,11 @@ namespace VentCalc.Revit.ExternalEvents
         public void Request(VentCalcCenterViewModel viewModel, IReadOnlyList<LocalResistanceCalculationInfo> rows)
         {
             pendingViewModel = viewModel;
-            pendingRows = rows.DistinctBy(row => row.ElementId).ToList();
+            pendingRows = rows
+                .Where(row => row.ManualZeta.HasValue)
+                .GroupBy(row => row.PathDependent ? row.OverrideKey : row.ElementId.ToString(CultureInfo.InvariantCulture), StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToList();
             ErrorReporter.WriteTrace(launchLogPath, $"WriteZetaComments requested: {pendingRows.Count} rows");
             externalEvent?.Raise();
         }
@@ -79,6 +83,17 @@ namespace VentCalc.Revit.ExternalEvents
                         }
 
                         action.RequestedZeta = zeta;
+                        if (row.PathDependent)
+                        {
+                            SavePathDependentOverride(uiDocument.Document, row, zeta);
+                            action.OverrideStorageType = "DataStorage";
+                            action.WriteSucceeded = true;
+                            action.ErrorMessage = string.Empty;
+                            row.WasSavedToVentCalcStorage = true;
+                            row.LastWriteError = string.Empty;
+                            continue;
+                        }
+
                         Element? element = uiDocument.Document.GetElement(new ElementId(row.ElementId));
                         if (element == null)
                         {
@@ -91,6 +106,7 @@ namespace VentCalc.Revit.ExternalEvents
                         action.ParameterName = parameterName;
                         action.ParameterIsReadOnly = comments?.IsReadOnly ?? false;
                         action.StorageType = comments?.StorageType.ToString() ?? string.Empty;
+                        action.OverrideStorageType = "Comment";
                         if (comments == null)
                         {
                             action.ErrorMessage = "Параметр Комментарии не найден.";
@@ -123,6 +139,7 @@ namespace VentCalc.Revit.ExternalEvents
                 }
 
                 VerifyCommittedComments(uiDocument.Document, actions);
+                VerifyStoredOverrides(uiDocument.Document, actions);
 
                 if (actions.Any(action => action.WriteSucceeded) && viewModel.LastLoadedElementId.HasValue)
                 {
@@ -160,7 +177,10 @@ namespace VentCalc.Revit.ExternalEvents
                 Timestamp = DateTime.Now,
                 ElementId = row.ElementId,
                 PathIndex = row.PathIndex,
-                RequestedZeta = 0
+                RequestedZeta = 0,
+                OverrideKey = row.OverrideKey,
+                PathDependent = row.PathDependent,
+                OverrideStorageType = row.PathDependent ? "DataStorage" : "Comment"
             };
         }
 
@@ -222,6 +242,43 @@ namespace VentCalc.Revit.ExternalEvents
             return string.IsNullOrWhiteSpace(existingComment)
                 ? $"z={zetaText}"
                 : $"{existingComment.TrimEnd()} z={zetaText}";
+        }
+
+        private static void SavePathDependentOverride(Document document, LocalResistanceCalculationInfo row, double zeta)
+        {
+            var zetaOverride = new ZetaOverrideInfo
+            {
+                SystemName = ExtractSystemName(row.OverrideKey),
+                ElementId = row.ElementId,
+                PathRole = row.PathRole,
+                PreviousDuctElementId = row.PreviousDuctElementId,
+                NextDuctElementId = row.NextDuctElementId,
+                Zeta = zeta,
+                OverrideKey = row.OverrideKey
+            };
+            RevitZetaOverrideStorage.SaveOverrides(document, new[] { zetaOverride });
+        }
+
+        private static void VerifyStoredOverrides(Document document, IEnumerable<ZetaWriteActionInfo> actions)
+        {
+            IReadOnlyList<ZetaOverrideInfo> overrides = RevitZetaOverrideStorage.ReadOverrides(document);
+            foreach (ZetaWriteActionInfo action in actions.Where(action => action.PathDependent && action.WriteSucceeded))
+            {
+                ZetaOverrideInfo? found = overrides.FirstOrDefault(item => string.Equals(item.OverrideKey, action.OverrideKey, StringComparison.Ordinal));
+                action.VerifiedAfterCommit = found != null && Math.Abs(found.Zeta - action.RequestedZeta) <= 0.0001;
+                action.WriteSucceeded = action.VerifiedAfterCommit;
+                action.ActualCommentAfterCommit = found == null ? string.Empty : $"DataStorage ζ={found.Zeta.ToString("0.###", CultureInfo.InvariantCulture)}";
+                if (!action.VerifiedAfterCommit)
+                {
+                    action.ErrorMessage = "После commit переопределение VentCalc DataStorage не найдено.";
+                }
+            }
+        }
+
+        private static string ExtractSystemName(string overrideKey)
+        {
+            int separator = (overrideKey ?? string.Empty).IndexOf('|');
+            return separator < 0 ? string.Empty : overrideKey.Substring(0, separator);
         }
 
         private static void VerifyCommittedComments(Document document, IEnumerable<ZetaWriteActionInfo> actions)

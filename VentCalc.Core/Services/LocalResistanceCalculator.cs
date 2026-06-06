@@ -72,16 +72,21 @@ namespace VentCalc.Core.Services
                 result.Warnings.AddRange(role.Warnings);
             }
 
+            result.PathDependent = IsPathDependentRole(result.PathRole);
+            result.OverrideKey = BuildOverrideKey(data.SystemName, result.ElementId, result.PathRole, result.PreviousDuctElementId, result.NextDuctElementId);
             ZetaResult autoZeta = ResolveAutoZeta(data, role);
-            ZetaResult effectiveZeta = ResolveEffectiveZeta(data, autoZeta);
+            ZetaResult effectiveZeta = ResolveEffectiveZeta(data, role, autoZeta);
             result.AutoZeta = autoZeta.Source == "Не определено" ? 0 : autoZeta.Value;
             result.ManualZeta = null;
             result.EffectiveZeta = effectiveZeta.Value;
             result.Zeta = effectiveZeta.Value;
+            result.OriginalEffectiveZeta = effectiveZeta.Value;
+            result.OriginalZetaSource = effectiveZeta.Source;
             result.LocalKind = effectiveZeta.LocalKind;
             result.Source = effectiveZeta.Source;
             result.ZetaSource = effectiveZeta.Source;
             result.ZetaComment = data.Comments;
+            result.OverrideStorageType = effectiveZeta.Source == "Переопределение VentCalc" ? "DataStorage" : effectiveZeta.Source == "Комментарии" ? "Comment" : string.Empty;
             result.Warnings.AddRange(effectiveZeta.Warnings);
 
             if (referenceDuct == null)
@@ -148,14 +153,19 @@ namespace VentCalc.Core.Services
             return ResolveRecommendedZeta(data);
         }
 
-        private static ZetaResult ResolveEffectiveZeta(LocalResistanceElementData data, ZetaResult autoZeta)
+        private static ZetaResult ResolveEffectiveZeta(LocalResistanceElementData data, FittingPathRoleInfo? role, ZetaResult autoZeta)
         {
-            if (TryReadZetaFromComments(data.Comments, out double zetaFromComments))
+            if (TryFindVentCalcOverride(data, role, out ZetaOverrideInfo? zetaOverride))
             {
-                return new ZetaResult(zetaFromComments, "Комментарии", "Значение ζ из параметра Комментарии.", Array.Empty<string>());
+                return new ZetaResult(zetaOverride.Zeta, "Переопределение VentCalc", autoZeta.LocalKind, Array.Empty<string>());
             }
 
-            return autoZeta;
+            if (!IsPathDependentRole(role?.PathRole ?? string.Empty) && TryReadZetaFromComments(data.Comments, out double zetaFromComments))
+            {
+                return new ZetaResult(zetaFromComments, "Комментарии", autoZeta.LocalKind, Array.Empty<string>());
+            }
+
+            return autoZeta.Source == "Рекомендовано" ? new ZetaResult(autoZeta.Value, "Автоматически", autoZeta.LocalKind, autoZeta.Warnings) : autoZeta;
         }
 
         private static ZetaResult ResolveZeta(LocalResistanceElementData data, FittingPathRoleInfo? role)
@@ -178,6 +188,43 @@ namespace VentCalc.Core.Services
 
             ZetaResult recommended = ResolveRecommendedZeta(data);
             return recommended;
+        }
+
+        public static bool IsPathDependentRole(string pathRole)
+        {
+            return pathRole == "TeePass"
+                || pathRole == "TeeBranch"
+                || pathRole == "TeeUnknown"
+                || pathRole == "CrossPass"
+                || pathRole == "CrossBranch"
+                || pathRole == "CrossUnknown"
+                || pathRole == "TransitionNarrowing"
+                || pathRole == "TransitionExpansion"
+                || pathRole == "TransitionUnknown"
+                || pathRole == "TapBranch";
+        }
+
+        public static string BuildOverrideKey(string systemName, long elementId, string pathRole, long? previousDuctElementId, long? nextDuctElementId)
+        {
+            return string.Join("|",
+                systemName ?? string.Empty,
+                elementId.ToString(CultureInfo.InvariantCulture),
+                pathRole ?? string.Empty,
+                previousDuctElementId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                nextDuctElementId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+        }
+
+        private static bool TryFindVentCalcOverride(LocalResistanceElementData data, FittingPathRoleInfo? role, out ZetaOverrideInfo? zetaOverride)
+        {
+            zetaOverride = null;
+            if (role == null)
+            {
+                return false;
+            }
+
+            string key = BuildOverrideKey(data.SystemName, data.ElementId, role.PathRole, role.PreviousDuctElementId, role.NextDuctElementId);
+            zetaOverride = data.ZetaOverrides.FirstOrDefault(item => string.Equals(item.OverrideKey, key, StringComparison.Ordinal));
+            return zetaOverride != null;
         }
 
         private static bool TryReadZetaFromComments(string comments, out double zeta)

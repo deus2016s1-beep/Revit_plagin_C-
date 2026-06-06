@@ -20,6 +20,12 @@ namespace VentCalc.Core.Models
 
         public string Comments { get; set; } = string.Empty;
 
+        public string SystemName { get; set; } = string.Empty;
+
+        public string SystemType { get; set; } = string.Empty;
+
+        public List<ZetaOverrideInfo> ZetaOverrides { get; set; } = new List<ZetaOverrideInfo>();
+
         public List<FittingConnectedDuctInfo> ConnectedDucts { get; set; } = new List<FittingConnectedDuctInfo>();
 
         public List<string> Warnings { get; set; } = new List<string>();
