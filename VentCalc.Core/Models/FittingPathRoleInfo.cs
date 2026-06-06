@@ -26,6 +26,14 @@ namespace VentCalc.Core.Models
 
         public double NextFlowM3h { get; set; }
 
+        public double? ActualAngleDeg { get; set; }
+
+        public double? RoundedAngleDeg { get; set; }
+
+        public bool AngleWasRounded { get; set; }
+
+        public string AngleRoundingWarning { get; set; } = string.Empty;
+
         public List<string> Warnings { get; set; } = new List<string>();
 
         public string WarningText => string.Join("; ", Warnings);

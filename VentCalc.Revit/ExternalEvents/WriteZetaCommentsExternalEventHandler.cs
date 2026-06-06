@@ -72,8 +72,17 @@ namespace VentCalc.Revit.ExternalEvents
                 if (pendingMode == ZetaOverrideRequestMode.SaveProjectCatalog)
                 {
                     int saved = SaveProjectCatalog(uiDocument.Document, viewModel);
-                    actions.Add(new ZetaWriteActionInfo { Timestamp = DateTime.Now, OverrideStorageType = "ProjectCatalog", WriteSucceeded = true, VerifiedAfterCommit = true, ActualCommentAfterCommit = $"Project catalog rows={saved}" });
-                    Complete(viewModel, actions, "Каталог ζ проекта сохранён.");
+                    actions.Add(new ZetaWriteActionInfo
+                    {
+                        Timestamp = DateTime.Now,
+                        OverrideStorageType = "ProjectCatalog",
+                        VerificationMode = ZetaVerificationMode.ClearProjectCatalogValue,
+                        WriteSucceeded = true,
+                        VerifiedAfterCommit = true,
+                        ActualCommentAfterCommit = $"Project catalog rows={saved}"
+                    });
+                    ReloadIfPossible(viewModel, uiDocument, actions);
+                    Complete(viewModel, actions, $"Каталог сохранён: ролей {saved}, ошибок 0.");
                     return;
                 }
 
@@ -158,6 +167,7 @@ namespace VentCalc.Revit.ExternalEvents
                         action.NewComment = UpdateZetaComment(action.OldComment, zeta);
                         comments.Set(action.NewComment);
                         string verifyComment = comments.AsString() ?? string.Empty;
+                        action.ZetaTokenExistsAfterCommit = ContainsAnyZeta(verifyComment);
                         action.WriteSucceeded = ContainsExpectedZeta(verifyComment, zeta);
                         action.ErrorMessage = action.WriteSucceeded ? string.Empty : "После записи комментарий не содержит ожидаемое z=...";
                         row.WasWrittenToRevitComment = action.WriteSucceeded;
@@ -205,7 +215,8 @@ namespace VentCalc.Revit.ExternalEvents
                 RequestedZeta = 0,
                 OverrideKey = row.OverrideKey,
                 PathDependent = row.PathDependent,
-                OverrideStorageType = row.PathDependent ? "DataStorage" : "Comment"
+                OverrideStorageType = row.PathDependent ? "DataStorage" : "Comment",
+                VerificationMode = row.PathDependent ? ZetaVerificationMode.RemoveDataStorageOverride : ZetaVerificationMode.WriteExpectedZeta
             };
         }
 
@@ -304,6 +315,7 @@ namespace VentCalc.Revit.ExternalEvents
             {
                 RevitZetaOverrideStorage.DeleteOverrides(document, new[] { row.OverrideKey });
                 action.OverrideStorageType = "DataStorageReset";
+                action.VerificationMode = ZetaVerificationMode.RemoveDataStorageOverride;
                 action.WriteSucceeded = true;
                 action.VerifiedAfterCommit = !RevitZetaOverrideStorage.ReadOverrides(document).Any(item => string.Equals(item.OverrideKey, row.OverrideKey, StringComparison.Ordinal));
                 action.ActualCommentAfterCommit = action.VerifiedAfterCommit ? "DataStorage override removed" : "DataStorage override still exists";
@@ -325,6 +337,7 @@ namespace VentCalc.Revit.ExternalEvents
             action.ParameterIsReadOnly = comments?.IsReadOnly ?? false;
             action.StorageType = comments?.StorageType.ToString() ?? string.Empty;
             action.OverrideStorageType = "CommentReset";
+            action.VerificationMode = ZetaVerificationMode.RemoveZetaToken;
             if (comments == null || comments.IsReadOnly || comments.StorageType != StorageType.String)
             {
                 action.ErrorMessage = comments == null ? "Параметр Комментарии не найден." : comments.IsReadOnly ? "Параметр Комментарии недоступен для записи." : $"Параметр Комментарии имеет тип {comments.StorageType}, ожидался String.";
@@ -335,7 +348,8 @@ namespace VentCalc.Revit.ExternalEvents
             action.NewComment = RemoveZetaComment(action.OldComment);
             comments.Set(action.NewComment);
             action.ActualCommentAfterCommit = comments.AsString() ?? string.Empty;
-            action.VerifiedAfterCommit = !ContainsAnyZeta(action.ActualCommentAfterCommit);
+            action.ZetaTokenExistsAfterCommit = ContainsAnyZeta(action.ActualCommentAfterCommit);
+            action.VerifiedAfterCommit = !action.ZetaTokenExistsAfterCommit;
             action.WriteSucceeded = action.VerifiedAfterCommit;
             action.ErrorMessage = action.WriteSucceeded ? string.Empty : "После удаления комментарий всё ещё содержит z/ζ/zeta.";
         }
@@ -350,7 +364,7 @@ namespace VentCalc.Revit.ExternalEvents
                 .WhereElementIsNotElementType()
                 .Where(element => element.Category != null && IsSupportedLocalResistanceCategory((BuiltInCategory)element.Category.Id.Value)))
             {
-                var action = new ZetaWriteActionInfo { Timestamp = DateTime.Now, ElementId = element.Id.Value, OverrideStorageType = "ProjectReset" };
+                var action = new ZetaWriteActionInfo { Timestamp = DateTime.Now, ElementId = element.Id.Value, OverrideStorageType = "ProjectReset", VerificationMode = ZetaVerificationMode.RemoveZetaToken };
                 actions.Add(action);
                 Parameter? comments = FindCommentsParameter(element, out string parameterName);
                 action.ParameterFound = comments != null;
@@ -358,6 +372,8 @@ namespace VentCalc.Revit.ExternalEvents
                 if (comments == null || comments.IsReadOnly || comments.StorageType != StorageType.String)
                 {
                     action.WriteSucceeded = comments == null;
+                    action.VerifiedAfterCommit = comments == null;
+                    action.VerificationMode = comments == null ? ZetaVerificationMode.ClearProjectCatalogValue : action.VerificationMode;
                     action.ErrorMessage = comments == null ? string.Empty : "Комментарии недоступны для очистки.";
                     continue;
                 }
@@ -369,7 +385,8 @@ namespace VentCalc.Revit.ExternalEvents
                     comments.Set(action.NewComment);
                 }
                 action.ActualCommentAfterCommit = comments.AsString() ?? string.Empty;
-                action.WriteSucceeded = !ContainsAnyZeta(action.ActualCommentAfterCommit);
+                action.ZetaTokenExistsAfterCommit = ContainsAnyZeta(action.ActualCommentAfterCommit);
+                action.WriteSucceeded = !action.ZetaTokenExistsAfterCommit;
                 action.VerifiedAfterCommit = action.WriteSucceeded;
                 action.ErrorMessage = action.WriteSucceeded ? string.Empty : "После очистки комментарий всё ещё содержит z/ζ/zeta.";
             }
@@ -416,6 +433,15 @@ namespace VentCalc.Revit.ExternalEvents
             foreach (ZetaWriteActionInfo action in actions.Where(action => action.PathDependent && action.WriteSucceeded))
             {
                 ZetaOverrideInfo? found = overrides.FirstOrDefault(item => string.Equals(item.OverrideKey, action.OverrideKey, StringComparison.Ordinal));
+                if (action.VerificationMode == ZetaVerificationMode.RemoveDataStorageOverride)
+                {
+                    action.VerifiedAfterCommit = found == null;
+                    action.WriteSucceeded = action.VerifiedAfterCommit;
+                    action.ActualCommentAfterCommit = found == null ? "DataStorage override removed" : "DataStorage override still exists";
+                    action.ErrorMessage = action.VerifiedAfterCommit ? string.Empty : "После commit переопределение VentCalc DataStorage не удалено.";
+                    continue;
+                }
+
                 action.VerifiedAfterCommit = found != null && Math.Abs(found.Zeta - action.RequestedZeta) <= 0.0001;
                 action.WriteSucceeded = action.VerifiedAfterCommit;
                 action.ActualCommentAfterCommit = found == null ? string.Empty : $"DataStorage ζ={found.Zeta.ToString("0.###", CultureInfo.InvariantCulture)}";
@@ -434,7 +460,9 @@ namespace VentCalc.Revit.ExternalEvents
 
         private static void VerifyCommittedComments(Document document, IEnumerable<ZetaWriteActionInfo> actions)
         {
-            foreach (ZetaWriteActionInfo action in actions.Where(action => action.WriteSucceeded))
+            foreach (ZetaWriteActionInfo action in actions.Where(action => action.WriteSucceeded
+                && (action.VerificationMode == ZetaVerificationMode.WriteExpectedZeta || action.VerificationMode == ZetaVerificationMode.RemoveZetaToken)
+                && (action.OverrideStorageType == "Comment" || action.OverrideStorageType == "CommentReset" || action.OverrideStorageType == "ProjectReset")))
             {
                 try
                 {
@@ -462,11 +490,16 @@ namespace VentCalc.Revit.ExternalEvents
 
                     string actualComment = comments.AsString() ?? string.Empty;
                     action.ActualCommentAfterCommit = actualComment;
-                    action.VerifiedAfterCommit = ContainsExpectedZeta(actualComment, action.RequestedZeta);
+                    action.ZetaTokenExistsAfterCommit = ContainsAnyZeta(actualComment);
+                    action.VerifiedAfterCommit = action.VerificationMode == ZetaVerificationMode.RemoveZetaToken
+                        ? !action.ZetaTokenExistsAfterCommit
+                        : ContainsExpectedZeta(actualComment, action.RequestedZeta);
                     action.WriteSucceeded = action.VerifiedAfterCommit;
                     if (!action.VerifiedAfterCommit)
                     {
-                        action.ErrorMessage = $"После commit ожидаемое ζ={action.RequestedZeta.ToString("0.###", CultureInfo.InvariantCulture)} не найдено. Фактический комментарий: '{actualComment}'.";
+                        action.ErrorMessage = action.VerificationMode == ZetaVerificationMode.RemoveZetaToken
+                            ? $"После commit комментарий всё ещё содержит z/ζ/zeta. Фактический комментарий: '{actualComment}'."
+                            : $"После commit ожидаемое ζ={action.RequestedZeta.ToString("0.###", CultureInfo.InvariantCulture)} не найдено. Фактический комментарий: '{actualComment}'.";
                     }
                 }
                 catch (Exception exception)

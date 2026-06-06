@@ -181,9 +181,19 @@ namespace VentCalc.Core.Services
             }
 
             double? angle = TryCalculateConnectorAngle(data, previous?.ElementId, next?.ElementId);
-            if (angle.HasValue && TryClassifyElbowAngle(angle.Value, out string roleFromConnectors))
+            if (angle.HasValue && TryClassifyElbowAngle(angle.Value, out string roleFromConnectors, out double roundedAngle, out string roundingWarning))
             {
-                role.Reason = $"Угол отвода определён по направлениям коннекторов: {angle.Value:0.#}°.";
+                role.ActualAngleDeg = angle.Value;
+                role.RoundedAngleDeg = roundedAngle;
+                role.AngleWasRounded = Math.Abs(angle.Value - roundedAngle) > 0.1;
+                role.AngleRoundingWarning = roundingWarning;
+                role.Reason = role.AngleWasRounded
+                    ? $"Фактический угол {angle.Value:0.#}° округлён до расчётного угла {roundedAngle:0.#}°."
+                    : $"Угол отвода определён по направлениям коннекторов: {angle.Value:0.#}°.";
+                if (!string.IsNullOrWhiteSpace(roundingWarning))
+                {
+                    role.Warnings.Add(roundingWarning);
+                }
                 return roleFromConnectors;
             }
 
@@ -292,8 +302,7 @@ namespace VentCalc.Core.Services
             }
 
             double dot = Math.Clamp(Dot(previous, next), -1.0, 1.0);
-            double angle = Math.Acos(dot) * 180.0 / Math.PI;
-            return angle > 90.0 ? 180.0 - angle : angle;
+            return Math.Acos(dot) * 180.0 / Math.PI;
         }
 
         private static bool TryResolveAngleFromText(string text, out string pathRole)
@@ -312,19 +321,39 @@ namespace VentCalc.Core.Services
             return false;
         }
 
-        private static bool TryClassifyElbowAngle(double angle, out string pathRole)
+        private static bool TryClassifyElbowAngle(double angle, out string pathRole, out double roundedAngle, out string warning)
         {
-            foreach ((double candidateAngle, string role) in ElbowAngleRoles)
+            warning = string.Empty;
+            if (double.IsNaN(angle) || double.IsInfinity(angle))
             {
-                if (Math.Abs(angle - candidateAngle) <= 7.0)
-                {
-                    pathRole = role;
-                    return true;
-                }
+                pathRole = string.Empty;
+                roundedAngle = 0;
+                return false;
             }
 
-            pathRole = string.Empty;
-            return false;
+            if (angle < 7.5)
+            {
+                roundedAngle = 15.0;
+                pathRole = "Elbow15";
+                warning = "Малый угол округлён до 15°.";
+                return true;
+            }
+
+            if (angle > 90.0)
+            {
+                roundedAngle = 90.0;
+                pathRole = "Elbow90";
+                warning = "Угол больше 90° ограничен расчётным значением 90°. Требуется проверка.";
+                return true;
+            }
+
+            (double Angle, string Role) best = ElbowAngleRoles
+                .OrderBy(candidate => Math.Abs(angle - candidate.Angle))
+                .ThenByDescending(candidate => candidate.Angle)
+                .First();
+            roundedAngle = best.Angle;
+            pathRole = best.Role;
+            return true;
         }
 
         private static double Dot(FittingConnectedDuctInfo first, FittingConnectedDuctInfo second)

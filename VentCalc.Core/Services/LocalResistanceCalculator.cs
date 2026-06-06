@@ -64,7 +64,11 @@ namespace VentCalc.Core.Services
                 PreviousAreaM2 = role?.PreviousAreaM2 ?? 0,
                 NextAreaM2 = role?.NextAreaM2 ?? 0,
                 PreviousFlowM3h = role?.PreviousFlowM3h ?? 0,
-                NextFlowM3h = role?.NextFlowM3h ?? 0
+                NextFlowM3h = role?.NextFlowM3h ?? 0,
+                ActualAngleDeg = role?.ActualAngleDeg,
+                RoundedAngleDeg = role?.RoundedAngleDeg,
+                AngleWasRounded = role?.AngleWasRounded ?? false,
+                AngleRoundingWarning = role?.AngleRoundingWarning ?? string.Empty
             };
             result.Warnings.AddRange(data.Warnings);
             if (role != null)
@@ -74,6 +78,8 @@ namespace VentCalc.Core.Services
 
             result.PathDependent = IsPathDependentRole(result.PathRole);
             result.OverrideKey = BuildOverrideKey(data.SystemName, result.ElementId, result.PathRole, result.PreviousDuctElementId, result.NextDuctElementId);
+            ProjectZetaCatalogItem? projectCatalogItem = data.ProjectZetaCatalog.FirstOrDefault(item => string.Equals(item.PathRole, result.PathRole, StringComparison.Ordinal));
+            result.ProjectCatalogZeta = projectCatalogItem?.ProjectZeta;
             ZetaResult autoZeta = ResolveAutoZeta(data, role);
             ZetaResult effectiveZeta = ResolveEffectiveZeta(data, role, autoZeta);
             result.AutoZeta = autoZeta.Source == "Не определено" ? 0 : autoZeta.Value;

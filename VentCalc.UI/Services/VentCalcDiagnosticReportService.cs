@@ -142,7 +142,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine("Возврат к Auto / массовые действия:");
             foreach (ZetaWriteActionInfo action in viewModel.ZetaWriteActions.Where(action => action.OverrideStorageType.Contains("Reset", StringComparison.OrdinalIgnoreCase) || action.OverrideStorageType == "ProjectCatalog").TakeLast(20))
             {
-                builder.AppendLine($"  {action.Timestamp:yyyy-MM-dd HH:mm:ss}; ElementId={action.ElementId}; storage={action.OverrideStorageType}; key={action.OverrideKey}; ok={action.WriteSucceeded}; error={action.ErrorMessage}; old='{action.OldComment}'; new='{action.NewComment}'");
+                builder.AppendLine($"  {action.Timestamp:yyyy-MM-dd HH:mm:ss}; ElementId={action.ElementId}; storage={action.OverrideStorageType}; verification={action.VerificationMode}; zetaTokenAfter={action.ZetaTokenExistsAfterCommit}; key={action.OverrideKey}; ok={action.WriteSucceeded}; error={action.ErrorMessage}; old='{action.OldComment}'; new='{action.NewComment}'");
             }
             builder.AppendLine("Последние внутренние действия:");
             foreach (string logEntry in VentCalcActionLogService.ReadLastEntries(20))
@@ -218,7 +218,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine("8. Местные сопротивления критической трассы");
             foreach (LocalResistanceCalculationInfo local in criticalPath?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
-                builder.AppendLine($"{local.ElementId}; {local.TypeName}; {local.FamilyName}; {local.Size}; role={local.PathRole}; pathDependent={local.PathDependent}; storage={local.OverrideStorageType}; overrideKey={local.OverrideKey}; reason={local.RoleReason}; prev={local.PreviousDuctElementId}; next={local.NextDuctElementId}; autoζ={local.AutoZeta:0.###}; manualζ={(local.ManualZeta.HasValue ? local.ManualZeta.Value.ToString("0.###", CultureInfo.InvariantCulture) : "—")}; effectiveζ={local.EffectiveZeta:0.###}; источник={local.ZetaSource}; zetaComment={local.ZetaComment}; written={local.WasWrittenToRevitComment}; savedStorage={local.WasSavedToVentCalcStorage}; V={local.VelocityMs:0.###} м/с; Pv={local.DynamicPressurePa:0.###} Па; Z={local.LocalPressureLossPa:0.###} Па; warnings={local.WarningText}");
+                builder.AppendLine($"{local.ElementId}; {local.TypeName}; {local.FamilyName}; {local.Size}; role={local.PathRole}; pathDependent={local.PathDependent}; storage={local.OverrideStorageType}; overrideKey={local.OverrideKey}; reason={local.RoleReason}; actualAngle={local.ActualAngleDeg:0.#}; roundedAngle={local.RoundedAngleDeg:0.#}; angleRounded={local.AngleWasRounded}; angleWarning={local.AngleRoundingWarning}; prev={local.PreviousDuctElementId}; next={local.NextDuctElementId}; autoζ={local.AutoZeta:0.###}; manualζ={(local.ManualZeta.HasValue ? local.ManualZeta.Value.ToString("0.###", CultureInfo.InvariantCulture) : "—")}; effectiveζ={local.EffectiveZeta:0.###}; источник={local.ZetaSource}; zetaComment={local.ZetaComment}; written={local.WasWrittenToRevitComment}; savedStorage={local.WasSavedToVentCalcStorage}; V={local.VelocityMs:0.###} м/с; Pv={local.DynamicPressurePa:0.###} Па; Z={local.LocalPressureLossPa:0.###} Па; warnings={local.WarningText}");
             }
             builder.AppendLine();
 
@@ -357,6 +357,8 @@ namespace VentCalc.UI.Services
                     newComment = action.NewComment,
                     requestedZeta = action.RequestedZeta,
                     storageType = action.OverrideStorageType,
+                    verificationMode = action.VerificationMode.ToString(),
+                    zetaTokenExistsAfterCommit = action.ZetaTokenExistsAfterCommit,
                     overrideKey = action.OverrideKey,
                     pathDependent = action.PathDependent,
                     parameterFound = action.ParameterFound,
@@ -389,6 +391,10 @@ namespace VentCalc.UI.Services
                     effectiveZeta = item.Local.EffectiveZeta,
                     zetaSource = item.Local.ZetaSource,
                     zetaComment = item.Local.ZetaComment,
+                    actualAngleDeg = item.Local.ActualAngleDeg,
+                    roundedAngleDeg = item.Local.RoundedAngleDeg,
+                    angleWasRounded = item.Local.AngleWasRounded,
+                    angleRoundingWarning = item.Local.AngleRoundingWarning,
                     storageType = item.Local.OverrideStorageType,
                     overrideKey = item.Local.OverrideKey,
                     pathDependent = item.Local.PathDependent,
@@ -494,12 +500,20 @@ namespace VentCalc.UI.Services
 
         private static IReadOnlyList<string> GetStateConsistencyErrors(IReadOnlyList<LocalResistanceCalculationInfo> localRows)
         {
-            return localRows
+            var errors = new List<string>();
+            errors.AddRange(localRows
                 .Where(row => !row.PathDependent)
                 .GroupBy(row => row.ElementId)
                 .Where(group => group.Select(row => Math.Round(row.EffectiveZeta, 4)).Distinct().Count() > 1)
-                .Select(group => $"Path-independent ElementId {group.Key} имеет разные EffectiveZeta: {string.Join(", ", group.Select(row => $"path {row.PathIndex}: {row.EffectiveZeta:0.###}"))}")
-                .ToList();
+                .Select(group => $"Path-independent ElementId {group.Key} имеет разные EffectiveZeta: {string.Join(", ", group.Select(row => $"path {row.PathIndex}: {row.EffectiveZeta:0.###}"))}"));
+
+            errors.AddRange(localRows
+                .Where(row => row.PathDependent && !string.IsNullOrWhiteSpace(row.OverrideKey))
+                .GroupBy(row => row.OverrideKey, StringComparer.Ordinal)
+                .Where(group => group.Select(row => Math.Round(row.EffectiveZeta, 4)).Distinct().Count() > 1)
+                .Select(group => $"Path-dependent overrideKey {group.Key} имеет разные EffectiveZeta: {string.Join(", ", group.Select(row => $"path {row.PathIndex}: {row.EffectiveZeta:0.###}"))}"));
+
+            return errors;
         }
 
         private static IEnumerable<LocalResistanceCalculationInfo> GetAllLocalResistances(VentCalcCenterViewModel viewModel)

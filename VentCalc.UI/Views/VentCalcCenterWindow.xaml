@@ -277,8 +277,12 @@
                         </Expander>
                         <Expander Header="Каталог ζ проекта" IsExpanded="False" Margin="0,4,0,0">
                             <DockPanel>
-                                <Button DockPanel.Dock="Top" Content="Сохранить каталог ζ проекта" Command="{Binding SaveProjectZetaCatalogCommand}" HorizontalAlignment="Left" />
-                                <DataGrid ItemsSource="{Binding ProjectZetaCatalogRows}" CanUserAddRows="False" AutoGenerateColumns="False" MaxHeight="220">
+                                <WrapPanel DockPanel.Dock="Top">
+                                    <Button Content="Сохранить каталог" Command="{Binding SaveProjectZetaCatalogCommand}" />
+                                    <Button Content="Вернуть выбранную роль к Auto" Command="{Binding ResetSelectedCatalogRoleCommand}" />
+                                    <Button Content="Вернуть весь каталог к Auto" Command="{Binding ResetWholeCatalogCommand}" />
+                                </WrapPanel>
+                                <DataGrid ItemsSource="{Binding ProjectZetaCatalogRows}" SelectedItem="{Binding SelectedProjectZetaCatalogRow, Mode=TwoWay}" CanUserAddRows="False" AutoGenerateColumns="False" IsReadOnly="False" MaxHeight="220">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Роль фитинга" Binding="{Binding PathRole}" Width="140" IsReadOnly="True" />
                                         <DataGridTextColumn Header="Встроенное Auto ζ" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="120" IsReadOnly="True" />
@@ -286,7 +290,8 @@
                                         <DataGridTextColumn Header="Используемое ζ проекта" Binding="{Binding EffectiveProjectZeta, StringFormat={}{0:0.###}}" Width="140" IsReadOnly="True" />
                                         <DataGridTextColumn Header="Количество применений" Binding="{Binding ApplicationCount}" Width="130" IsReadOnly="True" />
                                         <DataGridTextColumn Header="Количество систем" Binding="{Binding SystemCount}" Width="120" IsReadOnly="True" />
-                                        <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120" IsReadOnly="True" />
+                                        <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="150" IsReadOnly="True" />
+                                        <DataGridTextColumn Header="Примечание" Binding="{Binding ValidationMessage}" Width="170" IsReadOnly="True" />
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </DockPanel>
@@ -297,6 +302,8 @@
                             <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
                             <DataGridTextColumn Header="Вид МС" Binding="{Binding LocalKind}" Width="130" />
                             <DataGridTextColumn Header="Роль" Binding="{Binding DisplayRole}" Width="120" />
+                            <DataGridTextColumn Header="Факт. угол" Binding="{Binding ActualAngleDeg, StringFormat={}{0:0.#}}" Width="80" />
+                            <DataGridTextColumn Header="Расч. угол" Binding="{Binding RoundedAngleDeg, StringFormat={}{0:0.#}}" Width="80" />
                             <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
                             <DataGridTextColumn Header="Auto ζ" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="70" IsReadOnly="True" />
                             <DataGridTemplateColumn Header="ManualZeta" Width="90">

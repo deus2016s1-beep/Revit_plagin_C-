@@ -31,6 +31,8 @@ namespace VentCalc.UI.ViewModels
         private VentSystemSummary? selectedSystemSummary;
         private VentSystemCatalogItem? selectedCatalogSystem;
         private CalculationSectionInfo? selectedPathSection;
+        private ProjectZetaCatalogRow? selectedProjectZetaCatalogRow;
+        private bool isSynchronizingManualZeta;
         private string selectedElementId = "—";
         private string systemName = "—";
         private string systemType = "—";
@@ -95,7 +97,9 @@ namespace VentCalc.UI.ViewModels
             ResetSelectedZetaCommand = new RelayCommand(_ => ClearSelectedManualZeta(), _ => GetSelectedLocalResistanceRows().Count > 0);
             ResetToAutoCommand = new RelayCommand(_ => ResetSelectedZetaToAuto(), _ => GetSelectedLocalResistanceRows().Count > 0);
             ResetProjectToAutoCommand = new RelayCommand(_ => ResetProjectToAuto());
-            SaveProjectZetaCatalogCommand = new RelayCommand(_ => SaveProjectZetaCatalog(), _ => ProjectZetaCatalogRows.Any(row => row.ProjectZeta.HasValue));
+            SaveProjectZetaCatalogCommand = new RelayCommand(_ => SaveProjectZetaCatalog());
+            ResetSelectedCatalogRoleCommand = new RelayCommand(_ => ResetSelectedCatalogRoleToAuto(), _ => SelectedProjectZetaCatalogRow != null);
+            ResetWholeCatalogCommand = new RelayCommand(_ => ResetWholeCatalogToAuto());
             RecalculateManualZetaCommand = new RelayCommand(_ => RecalculateWithManualZeta(), _ => AerodynamicSummary != null);
             AcceptRecommendedZetaCommand = new RelayCommand(_ => AcceptRecommendedZeta(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
             WriteZetaToCommentsCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
@@ -124,6 +128,18 @@ namespace VentCalc.UI.ViewModels
         public ObservableCollection<LocalResistanceCalculationInfo> SelectedLocalResistanceRows { get; } = new ObservableCollection<LocalResistanceCalculationInfo>();
 
         public ObservableCollection<ProjectZetaCatalogRow> ProjectZetaCatalogRows { get; } = new ObservableCollection<ProjectZetaCatalogRow>();
+
+        public ProjectZetaCatalogRow? SelectedProjectZetaCatalogRow
+        {
+            get => selectedProjectZetaCatalogRow;
+            set
+            {
+                if (SetProperty(ref selectedProjectZetaCatalogRow, value))
+                {
+                    CommandManager.InvalidateRequerySuggested();
+                }
+            }
+        }
 
         public ObservableCollection<ZetaWriteActionInfo> ZetaWriteActions { get; } = new ObservableCollection<ZetaWriteActionInfo>();
 
@@ -462,6 +478,10 @@ namespace VentCalc.UI.ViewModels
         public ICommand ResetProjectToAutoCommand { get; }
 
         public ICommand SaveProjectZetaCatalogCommand { get; }
+
+        public ICommand ResetSelectedCatalogRoleCommand { get; }
+
+        public ICommand ResetWholeCatalogCommand { get; }
 
         public ICommand RecalculateManualZetaCommand { get; }
 
@@ -957,13 +977,57 @@ namespace VentCalc.UI.ViewModels
 
                 if ((e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZeta)
                     || e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZetaText))
-                    && local.ManualZeta.HasValue
-                    && string.IsNullOrWhiteSpace(local.ValidationMessage))
+                    && string.IsNullOrWhiteSpace(local.ValidationMessage)
+                    && !isSynchronizingManualZeta)
                 {
-                    string zetaText = local.ManualZeta.GetValueOrDefault().ToString("0.###", CultureInfo.InvariantCulture);
+                    SynchronizeManualZetaApplications(local);
                     RecalculateWithManualZeta();
+                    string zetaText = local.ManualZeta.HasValue
+                        ? local.ManualZeta.GetValueOrDefault().ToString("0.###", CultureInfo.InvariantCulture)
+                        : "Auto";
                     LogAction($"ManualZeta изменён: ElementId {local.ElementId}, ζ={zetaText}. Расчёт обновлён автоматически.");
                 }
+            }
+        }
+
+        private void SynchronizeManualZetaApplications(LocalResistanceCalculationInfo changedRow)
+        {
+            if (AerodynamicSummary == null)
+            {
+                return;
+            }
+
+            isSynchronizingManualZeta = true;
+            try
+            {
+                IEnumerable<LocalResistanceCalculationInfo> matchingRows = AerodynamicSummary.Paths
+                    .SelectMany(path => path.LocalResistances)
+                    .Where(row => ReferenceEquals(row, changedRow)
+                        || (changedRow.PathDependent
+                            ? string.Equals(row.OverrideKey, changedRow.OverrideKey, StringComparison.Ordinal)
+                            : row.ElementId == changedRow.ElementId && !row.PathDependent));
+
+                foreach (LocalResistanceCalculationInfo row in matchingRows)
+                {
+                    if (ReferenceEquals(row, changedRow))
+                    {
+                        continue;
+                    }
+
+                    row.ManualZeta = changedRow.ManualZeta;
+                    if (!changedRow.ManualZeta.HasValue)
+                    {
+                        row.EffectiveZeta = row.OriginalEffectiveZeta;
+                        row.Zeta = row.OriginalEffectiveZeta;
+                        row.Source = string.IsNullOrWhiteSpace(row.OriginalZetaSource) ? row.Source : row.OriginalZetaSource;
+                        row.ZetaSource = row.Source;
+                        row.LocalPressureLossPa = row.EffectiveZeta * row.DynamicPressurePa;
+                    }
+                }
+            }
+            finally
+            {
+                isSynchronizingManualZeta = false;
             }
         }
 
@@ -1287,9 +1351,10 @@ namespace VentCalc.UI.ViewModels
                     }
                     else
                     {
-                        local.EffectiveZeta = local.Zeta;
+                        local.EffectiveZeta = local.OriginalEffectiveZeta;
+                        local.Zeta = local.OriginalEffectiveZeta;
                         local.Source = string.IsNullOrWhiteSpace(local.OriginalZetaSource) ? local.Source : local.OriginalZetaSource;
-                local.ZetaSource = local.Source;
+                        local.ZetaSource = local.Source;
                     }
 
                     local.LocalPressureLossPa = local.EffectiveZeta * local.DynamicPressurePa;
@@ -1352,7 +1417,7 @@ namespace VentCalc.UI.ViewModels
             {
                 LocalResistanceCalculationInfo? first = locals.FirstOrDefault(local => local.PathRole == role);
                 double autoZeta = first?.AutoZeta ?? 0;
-                double? projectZeta = first?.ZetaSource == "Каталог проекта" ? first.EffectiveZeta : null;
+                double? projectZeta = first?.ProjectCatalogZeta;
                 return new ProjectZetaCatalogRow(role, autoZeta, projectZeta, locals.Count(local => local.PathRole == role), locals.Where(local => local.PathRole == role).Select(local => local.ElementId).Distinct().Count());
             }));
         }
@@ -1381,7 +1446,8 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            foreach (LocalResistanceCalculationInfo local in rows)
+            var affectedRows = ExpandMatchingLocalResistanceRows(rows).ToList();
+            foreach (LocalResistanceCalculationInfo local in affectedRows)
             {
                 local.ManualZeta = null;
                 local.EffectiveZeta = local.OriginalEffectiveZeta;
@@ -1392,7 +1458,7 @@ namespace VentCalc.UI.ViewModels
             }
 
             RecalculateWithManualZeta();
-            StatusText = $"Очищены несохранённые ручные ζ для выбранных строк: {rows.Count}.";
+            StatusText = $"Очищены несохранённые ручные ζ для выбранных применений: {affectedRows.Count}.";
             LogAction(StatusText);
         }
 
@@ -1418,14 +1484,60 @@ namespace VentCalc.UI.ViewModels
 
         private void SaveProjectZetaCatalog()
         {
+            IReadOnlyList<ProjectZetaCatalogRow> invalidRows = ProjectZetaCatalogRows.Where(row => !string.IsNullOrWhiteSpace(row.ValidationMessage)).ToList();
+            if (invalidRows.Count > 0)
+            {
+                StatusText = $"Каталог ζ проекта содержит некорректные значения: {invalidRows.Count}.";
+                return;
+            }
+
             writeZetaToRevitComments?.Invoke(this, Array.Empty<LocalResistanceCalculationInfo>(), ZetaOverrideRequestMode.SaveProjectCatalog);
             StatusText = "Ожидание Revit: сохранение каталога ζ проекта.";
+        }
+
+        private void ResetSelectedCatalogRoleToAuto()
+        {
+            if (SelectedProjectZetaCatalogRow == null)
+            {
+                StatusText = "Выберите роль каталога ζ проекта.";
+                return;
+            }
+
+            SelectedProjectZetaCatalogRow.ProjectZetaText = string.Empty;
+            SaveProjectZetaCatalog();
+        }
+
+        private void ResetWholeCatalogToAuto()
+        {
+            foreach (ProjectZetaCatalogRow row in ProjectZetaCatalogRows)
+            {
+                row.ProjectZetaText = string.Empty;
+            }
+
+            SaveProjectZetaCatalog();
         }
 
         public void SetSelectedLocalResistanceRows(IEnumerable<LocalResistanceCalculationInfo> rows)
         {
             Replace(SelectedLocalResistanceRows, rows);
             CommandManager.InvalidateRequerySuggested();
+        }
+
+        private IEnumerable<LocalResistanceCalculationInfo> ExpandMatchingLocalResistanceRows(IEnumerable<LocalResistanceCalculationInfo> sourceRows)
+        {
+            if (AerodynamicSummary == null)
+            {
+                return sourceRows;
+            }
+
+            var keys = sourceRows
+                .Select(row => row.PathDependent ? row.OverrideKey : row.ElementId.ToString(CultureInfo.InvariantCulture))
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .ToHashSet(StringComparer.Ordinal);
+
+            return AerodynamicSummary.Paths
+                .SelectMany(path => path.LocalResistances)
+                .Where(row => keys.Contains(row.PathDependent ? row.OverrideKey : row.ElementId.ToString(CultureInfo.InvariantCulture)));
         }
 
         private IReadOnlyList<LocalResistanceCalculationInfo> GetChangedLocalResistanceRows()
@@ -1594,6 +1706,14 @@ namespace VentCalc.UI.ViewModels
         SaveProjectCatalog
     }
 
+    public enum ZetaVerificationMode
+    {
+        WriteExpectedZeta,
+        RemoveZetaToken,
+        RemoveDataStorageOverride,
+        ClearProjectCatalogValue
+    }
+
     public enum VentCalcLoadRequestMode
     {
         SelectedElement,
@@ -1725,12 +1845,16 @@ namespace VentCalc.UI.ViewModels
     public sealed class ProjectZetaCatalogRow : NotifyObject
     {
         private double? projectZeta;
+        private string projectZetaText = string.Empty;
+        private bool isDirty;
+        private string validationMessage = string.Empty;
 
         public ProjectZetaCatalogRow(string pathRole, double autoZeta, double? projectZeta, int applicationCount, int systemCount)
         {
             PathRole = pathRole;
             AutoZeta = autoZeta;
             this.projectZeta = projectZeta;
+            projectZetaText = projectZeta.HasValue ? projectZeta.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
             ApplicationCount = applicationCount;
             SystemCount = systemCount;
         }
@@ -1746,27 +1870,67 @@ namespace VentCalc.UI.ViewModels
             {
                 if (SetProperty(ref projectZeta, value))
                 {
+                    projectZetaText = value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+                    IsDirty = true;
                     OnPropertyChanged(nameof(ProjectZetaText));
                     OnPropertyChanged(nameof(EffectiveProjectZeta));
                     OnPropertyChanged(nameof(Status));
+                    CommandManager.InvalidateRequerySuggested();
                 }
             }
         }
 
         public string ProjectZetaText
         {
-            get => ProjectZeta.HasValue ? ProjectZeta.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+            get => projectZetaText;
             set
             {
-                if (string.IsNullOrWhiteSpace(value))
+                string normalized = value ?? string.Empty;
+                if (!SetProperty(ref projectZetaText, normalized))
                 {
-                    ProjectZeta = null;
                     return;
                 }
 
-                if (double.TryParse(value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) && parsed >= 0)
+                IsDirty = true;
+                CommandManager.InvalidateRequerySuggested();
+                if (string.IsNullOrWhiteSpace(normalized))
                 {
-                    ProjectZeta = parsed;
+                    projectZeta = null;
+                    ValidationMessage = string.Empty;
+                    OnPropertyChanged(nameof(ProjectZeta));
+                    OnPropertyChanged(nameof(EffectiveProjectZeta));
+                    OnPropertyChanged(nameof(Status));
+                    return;
+                }
+
+                if (!double.TryParse(normalized.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) || parsed < 0)
+                {
+                    ValidationMessage = "Некорректное значение ζ";
+                    return;
+                }
+
+                projectZeta = parsed;
+                ValidationMessage = string.Empty;
+                OnPropertyChanged(nameof(ProjectZeta));
+                OnPropertyChanged(nameof(EffectiveProjectZeta));
+                OnPropertyChanged(nameof(Status));
+            }
+        }
+
+        public bool IsDirty
+        {
+            get => isDirty;
+            set => SetProperty(ref isDirty, value);
+        }
+
+        public string ValidationMessage
+        {
+            get => validationMessage;
+            set
+            {
+                if (SetProperty(ref validationMessage, value))
+                {
+                    OnPropertyChanged(nameof(Status));
                 }
             }
         }
@@ -1777,7 +1941,9 @@ namespace VentCalc.UI.ViewModels
 
         public int SystemCount { get; }
 
-        public string Status => ProjectZeta.HasValue ? "Каталог проекта" : "Auto";
+        public string Status => string.IsNullOrWhiteSpace(ValidationMessage)
+            ? ProjectZeta.HasValue ? "Каталог проекта" : "Auto"
+            : ValidationMessage;
     }
 
     public sealed class ZetaWriteActionInfo
@@ -1793,6 +1959,8 @@ namespace VentCalc.UI.ViewModels
         public bool ParameterIsReadOnly { get; set; }
         public string StorageType { get; set; } = string.Empty;
         public string OverrideStorageType { get; set; } = string.Empty;
+        public ZetaVerificationMode VerificationMode { get; set; } = ZetaVerificationMode.WriteExpectedZeta;
+        public bool ZetaTokenExistsAfterCommit { get; set; }
         public string OverrideKey { get; set; } = string.Empty;
         public bool PathDependent { get; set; }
         public bool WriteSucceeded { get; set; }

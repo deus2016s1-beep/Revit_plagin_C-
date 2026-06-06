@@ -110,16 +110,17 @@ namespace VentCalc.Revit.Services
             DataStorage storage = FindStorage(document, schema) ?? DataStorage.Create(document);
             storage.Name = CatalogStorageName;
 
-            var merged = ReadProjectCatalog(document)
-                .Where(existing => !catalogItems.Any(item => string.Equals(item.PathRole, existing.PathRole, StringComparison.Ordinal)))
-                .Concat(catalogItems.Where(item => item.ProjectZeta.HasValue))
+            var saved = catalogItems
+                .Where(item => item.ProjectZeta.HasValue)
+                .GroupBy(item => item.PathRole, StringComparer.Ordinal)
+                .Select(group => group.First())
                 .OrderBy(item => item.PathRole, StringComparer.Ordinal)
                 .ToList();
 
             var entity = new Entity(schema);
-            entity.Set(schema.GetField(CatalogFieldName), SerializeCatalog(merged));
+            entity.Set(schema.GetField(CatalogFieldName), SerializeCatalog(saved));
             storage.SetEntity(entity);
-            return merged;
+            return saved;
         }
 
         public static void ClearProjectCatalog(Document document)
