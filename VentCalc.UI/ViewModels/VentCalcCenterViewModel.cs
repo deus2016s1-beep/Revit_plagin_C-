@@ -880,6 +880,7 @@ namespace VentCalc.UI.ViewModels
         {
             selectedPathDuct = null;
             selectedPathLocalResistance = null;
+            UnsubscribeLocalResistanceRows();
             SelectedLocalResistanceRows.Clear();
             selectedPathSection = null;
             OnPropertyChanged(nameof(SelectedPathDuct));
@@ -889,11 +890,7 @@ namespace VentCalc.UI.ViewModels
             Replace(SelectedPathDucts, SelectedPath?.Calculation?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>());
             Replace(SelectedPathSections, SelectedPath?.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>());
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
-            foreach (LocalResistanceCalculationInfo local in SelectedPathLocalResistances)
-            {
-                local.PropertyChanged -= LocalResistance_PropertyChanged;
-                local.PropertyChanged += LocalResistance_PropertyChanged;
-            }
+            SubscribeLocalResistanceRows();
 
             UpdatePathsThroughCurrentElement();
             OnPropertyChanged(nameof(SelectedPathChain));
@@ -901,6 +898,52 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+        }
+
+        private void SubscribeLocalResistanceRows()
+        {
+            foreach (LocalResistanceCalculationInfo local in SelectedPathLocalResistances)
+            {
+                local.PropertyChanged -= LocalResistance_PropertyChanged;
+                local.PropertyChanged += LocalResistance_PropertyChanged;
+            }
+        }
+
+        private void UnsubscribeLocalResistanceRows()
+        {
+            foreach (LocalResistanceCalculationInfo local in SelectedPathLocalResistances)
+            {
+                local.PropertyChanged -= LocalResistance_PropertyChanged;
+            }
+        }
+
+        private void LocalResistance_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (sender is not LocalResistanceCalculationInfo local)
+            {
+                return;
+            }
+
+            if (e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZeta)
+                || e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZetaText)
+                || e.PropertyName == nameof(LocalResistanceCalculationInfo.EffectiveZeta)
+                || e.PropertyName == nameof(LocalResistanceCalculationInfo.ZetaSource)
+                || e.PropertyName == nameof(LocalResistanceCalculationInfo.LocalPressureLossPa)
+                || e.PropertyName == nameof(LocalResistanceCalculationInfo.ValidationMessage))
+            {
+                OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
+                OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
+                OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+
+                if (e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZeta)
+                    || e.PropertyName == nameof(LocalResistanceCalculationInfo.ManualZetaText))
+                {
+                    string zetaText = local.ManualZeta.HasValue
+                        ? local.ManualZeta.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                        : local.ManualZetaText;
+                    LogAction($"ManualZeta изменён: ElementId {local.ElementId}, ζ={zetaText}");
+                }
+            }
         }
 
         private long? CurrentSelectedElementId
