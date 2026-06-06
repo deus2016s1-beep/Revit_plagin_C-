@@ -141,9 +141,10 @@ namespace VentCalc.Revit.ExternalEvents
                 VerifyCommittedComments(uiDocument.Document, actions);
                 VerifyStoredOverrides(uiDocument.Document, actions);
 
-                if (actions.Any(action => action.WriteSucceeded) && viewModel.LastLoadedElementId.HasValue)
+                long? lastLoadedElementId = viewModel.LastLoadedElementId;
+                if (actions.Any(action => action.WriteSucceeded) && lastLoadedElementId.HasValue)
                 {
-                    VentCalcCenterData data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings(), new ElementId(viewModel.LastLoadedElementId.Value));
+                    VentCalcCenterData data = dataLoader.Load(uiDocument, viewModel.Settings.ToAerodynamicSettings(), new ElementId(lastLoadedElementId.GetValueOrDefault()));
                     InvokeOnUiThread(viewModel, () => viewModel.CompleteLoad(data));
                 }
 
@@ -188,7 +189,7 @@ namespace VentCalc.Revit.ExternalEvents
         {
             if (row.ManualZeta.HasValue)
             {
-                zeta = row.ManualZeta.Value;
+                zeta = row.ManualZeta.GetValueOrDefault();
             }
             else if (row.EffectiveZeta > 0)
             {
@@ -332,7 +333,7 @@ namespace VentCalc.Revit.ExternalEvents
             const string pattern = @"(?:ζ|zeta|z)\s*=\s*(?<value>[-+]?\d+(?:[\.,]\d+)?)";
             foreach (Match match in Regex.Matches(comment ?? string.Empty, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
             {
-                string? value = match.Groups["value"].Value;
+                string value = match.Groups["value"].Value;
                 if (double.TryParse(value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double actualZeta)
                     && Math.Abs(actualZeta - expectedZeta) <= 0.0001)
                 {

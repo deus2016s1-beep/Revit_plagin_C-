@@ -948,7 +948,7 @@ namespace VentCalc.UI.ViewModels
                     && local.ManualZeta.HasValue
                     && string.IsNullOrWhiteSpace(local.ValidationMessage))
                 {
-                    string zetaText = local.ManualZeta.Value.ToString("0.###", CultureInfo.InvariantCulture);
+                    string zetaText = local.ManualZeta.GetValueOrDefault().ToString("0.###", CultureInfo.InvariantCulture);
                     RecalculateWithManualZeta();
                     LogAction($"ManualZeta изменён: ElementId {local.ElementId}, ζ={zetaText}. Расчёт обновлён автоматически.");
                 }
@@ -1267,8 +1267,9 @@ namespace VentCalc.UI.ViewModels
                 {
                     if (local.ManualZeta.HasValue)
                     {
-                        local.EffectiveZeta = local.ManualZeta.Value;
-                        local.Zeta = local.ManualZeta.Value;
+                        double manualZeta = local.ManualZeta.GetValueOrDefault();
+                        local.EffectiveZeta = manualZeta;
+                        local.Zeta = manualZeta;
                         local.Source = "Вручную";
                         local.ZetaSource = "Вручную";
                     }
@@ -1373,10 +1374,10 @@ namespace VentCalc.UI.ViewModels
         {
             return AerodynamicSummary?.Paths
                 .SelectMany(path => path.LocalResistances)
-                .Where(local => local.ManualZeta.HasValue && Math.Abs(local.ManualZeta.Value - local.OriginalEffectiveZeta) > 0.0001)
+                .Where(local => local.ManualZeta.HasValue && Math.Abs(local.ManualZeta.GetValueOrDefault() - local.OriginalEffectiveZeta) > 0.0001)
                 .GroupBy(local => local.PathDependent ? local.OverrideKey : local.ElementId.ToString(CultureInfo.InvariantCulture), StringComparer.Ordinal)
                 .Select(group => group.First())
-                .ToList() ?? Array.Empty<LocalResistanceCalculationInfo>();
+                .ToList() ?? new List<LocalResistanceCalculationInfo>();
         }
 
         private IReadOnlyList<LocalResistanceCalculationInfo> GetSelectedLocalResistanceRows()
