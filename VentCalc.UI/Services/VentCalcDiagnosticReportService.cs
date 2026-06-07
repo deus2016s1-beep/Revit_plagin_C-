@@ -99,6 +99,15 @@ namespace VentCalc.UI.Services
                 builder.AppendLine($"WARNING: {warning}");
             }
             builder.AppendLine();
+            builder.AppendLine("ПОДСВЕТКА");
+            builder.AppendLine($"Режим: {viewModel.HighlightState.ActiveMode}");
+            builder.AppendLine($"Вид: {viewModel.HighlightState.ActiveViewId}");
+            builder.AppendLine($"Запрошено: {viewModel.HighlightState.RequestedElementCount}");
+            builder.AppendLine($"Подсвечено: {viewModel.HighlightState.HighlightedElementCount}");
+            builder.AppendLine($"Пропущено: {viewModel.HighlightState.SkippedElementCount}");
+            builder.AppendLine($"Ошибок: {viewModel.HighlightState.FailedElementCount}");
+            builder.AppendLine($"Восстановлено: {viewModel.HighlightState.RestoredElementCount}");
+            builder.AppendLine();
             builder.AppendLine("1. Общая информация");
             builder.AppendLine($"Дата/время: {createdAt:yyyy-MM-dd HH:mm:ss}");
             builder.AppendLine("Версия VentCalc: 2.0");
@@ -391,7 +400,35 @@ namespace VentCalc.UI.Services
                     pressureReservePercent = viewModel.Settings.PressureReservePercent,
                     minVelocityMs = viewModel.Settings.MinVelocityMs,
                     maxVelocityMs = viewModel.Settings.MaxVelocityMs,
-                    criticalVelocityMs = viewModel.Settings.CriticalVelocityMs
+                    criticalVelocityMs = viewModel.Settings.CriticalVelocityMs,
+                    lowVelocityColorHex = viewModel.Settings.LowVelocityColorHex,
+                    normalVelocityColorHex = viewModel.Settings.NormalVelocityColorHex,
+                    highVelocityColorHex = viewModel.Settings.HighVelocityColorHex,
+                    criticalVelocityColorHex = viewModel.Settings.CriticalVelocityColorHex,
+                    selectedPathColorHex = viewModel.Settings.SelectedPathColorHex,
+                    criticalPathColorHex = viewModel.Settings.CriticalPathColorHex,
+                    issueColorHex = viewModel.Settings.IssueColorHex
+                },
+                highlighting = new
+                {
+                    activeMode = viewModel.HighlightState.ActiveMode.ToString(),
+                    activeViewId = viewModel.HighlightState.ActiveViewId,
+                    requestedElementCount = viewModel.HighlightState.RequestedElementCount,
+                    highlightedElementCount = viewModel.HighlightState.HighlightedElementCount,
+                    skippedElementCount = viewModel.HighlightState.SkippedElementCount,
+                    failedElementCount = viewModel.HighlightState.FailedElementCount,
+                    restoredElementCount = viewModel.HighlightState.RestoredElementCount,
+                    snapshotCount = viewModel.HighlightState.SnapshotCount,
+                    velocityGroups = new
+                    {
+                        belowMin = viewModel.HighlightState.VelocityGroups.BelowMin,
+                        normal = viewModel.HighlightState.VelocityGroups.Normal,
+                        aboveMax = viewModel.HighlightState.VelocityGroups.AboveMax,
+                        critical = viewModel.HighlightState.VelocityGroups.Critical,
+                        notCalculated = viewModel.HighlightState.VelocityGroups.NotCalculated
+                    },
+                    issueElementCount = viewModel.HighlightState.IssueElementCount,
+                    errors = viewModel.HighlightState.Errors
                 },
                 uiState = new
                 {
@@ -614,6 +651,7 @@ namespace VentCalc.UI.Services
             if (viewModel.CriticalPath == null) errors.Add("Критическая трасса не найдена.");
             if (calculationHasNaN) errors.Add("В расчёте есть NaN.");
             if (calculationHasInfinity) errors.Add("В расчёте есть Infinity.");
+            if (viewModel.HighlightState.FailedElementCount > 0) errors.Add($"Ошибок подсветки: {viewModel.HighlightState.FailedElementCount}.");
 
             string status = errors.Count > 0 ? "Failed" : warnings.Count > 0 ? "Warning" : "Passed";
             return new SelfCheckInfo
@@ -634,6 +672,10 @@ namespace VentCalc.UI.Services
                 CalculationHasNaN = calculationHasNaN,
                 CalculationHasInfinity = calculationHasInfinity,
                 CriticalPressureLossPa = viewModel.CriticalPath?.TotalPressureLossPa ?? 0,
+                HighlightApplySucceeded = viewModel.HighlightState.HighlightApplySucceeded,
+                HighlightClearSucceeded = viewModel.HighlightState.HighlightClearSucceeded,
+                OriginalOverridesRestored = viewModel.HighlightState.OriginalOverridesRestored,
+                HighlightFailedElementCount = viewModel.HighlightState.FailedElementCount,
                 Warnings = warnings,
                 Errors = errors
             };
@@ -957,6 +999,10 @@ namespace VentCalc.UI.Services
             public bool CalculationHasNaN { get; set; }
             public bool CalculationHasInfinity { get; set; }
             public double CriticalPressureLossPa { get; set; }
+            public bool HighlightApplySucceeded { get; set; } = true;
+            public bool HighlightClearSucceeded { get; set; } = true;
+            public bool OriginalOverridesRestored { get; set; } = true;
+            public int HighlightFailedElementCount { get; set; }
             public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
             public IReadOnlyList<string> Errors { get; set; } = Array.Empty<string>();
         }

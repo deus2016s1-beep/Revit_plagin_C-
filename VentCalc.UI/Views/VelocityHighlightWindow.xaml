@@ -2,75 +2,108 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:converters="clr-namespace:VentCalc.UI.Converters"
-        Title="VentCalc — Скорости"
-        Width="560"
-        Height="520"
+        Title="VentCalc — Скорости и подсветка"
+        Width="620"
+        Height="680"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <converters:ColorHexToBrushConverter x:Key="ColorHexToBrushConverter" />
     </Window.Resources>
     <DockPanel Margin="16">
-        <TextBlock DockPanel.Dock="Top" Text="Заготовка подсветки скоростей" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
-        <TextBlock DockPanel.Dock="Bottom" Text="Финальная подсветка через OverrideGraphicSettings будет добавлена отдельным этапом." TextWrapping="Wrap" Foreground="#FF555555" Margin="0,12,0,0" />
-        <StackPanel>
-            <Grid Margin="0,0,0,12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="220" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="Минимальная скорость, м/с" Margin="0,4" />
-                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="Максимальная скорость, м/с" Margin="0,4" />
-                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Критическая скорость, м/с" Margin="0,4" />
-                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
-            </Grid>
-
-            <GroupBox Header="Цвета будущей подсветки" Padding="8">
-                <Grid>
+        <TextBlock DockPanel.Dock="Top" Text="Подсветка результатов VentCalc" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+        <TextBlock DockPanel.Dock="Bottom" Text="Цвета сохраняются в %APPDATA%\VentCalc\settings.json. Подсветка применяется только к текущему документу и активному виду Revit." TextWrapping="Wrap" Foreground="#FF555555" Margin="0,12,0,0" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="210" />
-                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="230" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Ниже минимальной" Margin="0,6" />
-                    <Border Grid.Row="0" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.LowVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
-                    <Button Grid.Row="0" Grid.Column="2" Content="Выбрать цвет" Command="{Binding PickLowVelocityColorCommand}" Margin="4" />
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Норма min-max" Margin="0,6" />
-                    <Border Grid.Row="1" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.NormalVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
-                    <Button Grid.Row="1" Grid.Column="2" Content="Выбрать цвет" Command="{Binding PickNormalVelocityColorCommand}" Margin="4" />
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Выше максимальной" Margin="0,6" />
-                    <Border Grid.Row="2" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.HighVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
-                    <Button Grid.Row="2" Grid.Column="2" Content="Выбрать цвет" Command="{Binding PickHighVelocityColorCommand}" Margin="4" />
-
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Выше критической" Margin="0,6" />
-                    <Border Grid.Row="3" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.CriticalVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
-                    <Button Grid.Row="3" Grid.Column="2" Content="Выбрать цвет" Command="{Binding PickCriticalVelocityColorCommand}" Margin="4" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Минимальная скорость, м/с" Margin="0,4" />
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Максимальная скорость, м/с" Margin="0,4" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Критическая скорость, м/с" Margin="0,4" />
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" Margin="4" />
                 </Grid>
-            </GroupBox>
 
-            <WrapPanel Margin="0,14,0,0">
-                <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" Padding="10,6" Margin="0,0,8,0" />
-                <Button Content="Сбросить по умолчанию" Command="{Binding ResetSettingsCommand}" Padding="10,6" Margin="0,0,8,0" />
-                <Button Content="Применить подсветку" IsEnabled="False" ToolTip="Будет добавлено отдельным этапом" Padding="10,6" Margin="0,0,8,0" />
-                <Button Content="Очистить подсветку" IsEnabled="False" ToolTip="Будет добавлено отдельным этапом" Padding="10,6" />
-            </WrapPanel>
-            <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
-        </StackPanel>
+                <GroupBox Header="Цвета" Padding="8" Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="240" />
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Скорость ниже минимума" Margin="0,6" />
+                        <Border Grid.Row="0" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.LowVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
+                        <Button Grid.Row="0" Grid.Column="2" Content="Выбрать" Command="{Binding PickLowVelocityColorCommand}" Margin="4" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Нормальная скорость" Margin="0,6" />
+                        <Border Grid.Row="1" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.NormalVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
+                        <Button Grid.Row="1" Grid.Column="2" Content="Выбрать" Command="{Binding PickNormalVelocityColorCommand}" Margin="4" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Скорость выше максимума" Margin="0,6" />
+                        <Border Grid.Row="2" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.HighVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
+                        <Button Grid.Row="2" Grid.Column="2" Content="Выбрать" Command="{Binding PickHighVelocityColorCommand}" Margin="4" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Критическая скорость" Margin="0,6" />
+                        <Border Grid.Row="3" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.CriticalVelocityColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
+                        <Button Grid.Row="3" Grid.Column="2" Content="Выбрать" Command="{Binding PickCriticalVelocityColorCommand}" Margin="4" />
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Выбранная трасса" Margin="0,6" />
+                        <Border Grid.Row="4" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.SelectedPathColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
+                        <Button Grid.Row="4" Grid.Column="2" Content="Выбрать" Command="{Binding PickSelectedPathColorCommand}" Margin="4" />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Критическая трасса" Margin="0,6" />
+                        <Border Grid.Row="5" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.CriticalPathColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
+                        <Button Grid.Row="5" Grid.Column="2" Content="Выбрать" Command="{Binding PickCriticalPathColorCommand}" Margin="4" />
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Ошибки" Margin="0,6" />
+                        <Border Grid.Row="6" Grid.Column="1" Width="52" Height="22" BorderBrush="#FF777777" BorderThickness="1" Background="{Binding Settings.IssueColorHex, Converter={StaticResource ColorHexToBrushConverter}}" Margin="4" />
+                        <Button Grid.Row="6" Grid.Column="2" Content="Выбрать" Command="{Binding PickIssueColorCommand}" Margin="4" />
+                    </Grid>
+                </GroupBox>
+
+                <GroupBox Header="Легенда скоростей" Padding="8" Margin="0,0,0,10">
+                    <UniformGrid Columns="2">
+                        <TextBlock Text="Ниже минимальной" />
+                        <TextBlock Text="{Binding VelocityBelowMinCount}" FontWeight="Bold" />
+                        <TextBlock Text="Нормальная" />
+                        <TextBlock Text="{Binding VelocityNormalCount}" FontWeight="Bold" />
+                        <TextBlock Text="Выше максимальной" />
+                        <TextBlock Text="{Binding VelocityAboveMaxCount}" FontWeight="Bold" />
+                        <TextBlock Text="Критическая" />
+                        <TextBlock Text="{Binding VelocityCriticalCount}" FontWeight="Bold" />
+                        <TextBlock Text="Без расчёта" />
+                        <TextBlock Text="{Binding VelocityNotCalculatedCount}" FontWeight="Bold" />
+                    </UniformGrid>
+                </GroupBox>
+
+                <TextBlock Text="{Binding HighlightStatusText}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <WrapPanel>
+                    <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" Padding="10,6" Margin="0,0,8,0" />
+                    <Button Content="Вернуть стандартные цвета" Command="{Binding ResetHighlightColorsCommand}" Padding="10,6" Margin="0,0,8,0" />
+                    <Button Content="Применить" Command="{Binding ApplyVelocityHighlightCommand}" Padding="10,6" Margin="0,0,8,0" />
+                    <Button Content="Очистить" Command="{Binding ClearHighlightCommand}" Padding="10,6" />
+                </WrapPanel>
+                <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
+            </StackPanel>
+        </ScrollViewer>
     </DockPanel>
 </Window>

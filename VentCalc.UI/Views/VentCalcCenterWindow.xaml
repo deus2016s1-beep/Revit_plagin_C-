@@ -105,7 +105,11 @@
 
             <TabItem Header="Проверки">
                 <DockPanel Margin="6">
-                    <Button DockPanel.Dock="Bottom" Content="Показать выбранный элемент в Revit" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                        <Button Content="Подсветить ошибки" Command="{Binding HighlightIssuesCommand}" />
+                        <Button Content="Очистить подсветку" Command="{Binding ClearHighlightCommand}" />
+                        <Button Content="Показать выбранный элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
+                    </WrapPanel>
                     <DataGrid ItemsSource="{Binding Issues}" SelectedItem="{Binding SelectedIssue, Mode=TwoWay}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="90" />
@@ -171,6 +175,9 @@
                     </GroupBox>
                     <StackPanel DockPanel.Dock="Bottom">
                         <WrapPanel>
+                            <Button Content="Подсветить выбранную" Command="{Binding HighlightSelectedPathCommand}" />
+                            <Button Content="Подсветить критическую" Command="{Binding HighlightCriticalPathCommand}" />
+                            <Button Content="Очистить подсветку" Command="{Binding ClearHighlightCommand}" />
                             <Button Content="Выбрать трассу в Revit" Command="{Binding SelectSelectedPathInRevitCommand}" />
                             <Button Content="Выбрать критическую трассу в Revit" Command="{Binding SelectCriticalPathInRevitCommand}" />
                         </WrapPanel>
@@ -196,6 +203,13 @@
 
             <TabItem Header="Расчёт">
                 <DockPanel Margin="6">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <WrapPanel Margin="0,0,0,6">
+                            <Button Content="Подсветить скорости" Command="{Binding ApplyVelocityHighlightCommand}" />
+                            <Button Content="Очистить подсветку" Command="{Binding ClearHighlightCommand}" />
+                            <TextBlock Text="{Binding HighlightStatusText}" Margin="12,6,0,0" Foreground="#FF555555" />
+                        </WrapPanel>
+                    </StackPanel>
                     <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
                         <UniformGrid Columns="4">
                             <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>

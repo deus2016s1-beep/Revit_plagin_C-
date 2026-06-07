@@ -20,6 +20,7 @@ namespace VentCalc.UI.ViewModels
         private readonly Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem;
         private readonly Action<IEnumerable<long>>? selectElementsInRevit;
         private readonly Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>, ZetaOverrideRequestMode>? writeZetaToRevitComments;
+        private readonly Action<VentCalcCenterViewModel, HighlightRequest>? requestHighlight;
         private readonly Action<string>? showMessage;
         private readonly Action<Exception>? reportException;
         private readonly VentCalcSettingsService settingsService;
@@ -55,13 +56,15 @@ namespace VentCalc.UI.ViewModels
             Action<VentCalcCenterViewModel, IReadOnlyList<LocalResistanceCalculationInfo>, ZetaOverrideRequestMode>? writeZetaToRevitComments,
             Action<string>? showMessage,
             VentCalcSettingsService settingsService,
-            Action<Exception>? reportException = null)
+            Action<Exception>? reportException = null,
+            Action<VentCalcCenterViewModel, HighlightRequest>? requestHighlight = null)
         {
             this.requestLoadSelectedSystem = requestLoadSelectedSystem;
             this.selectElementsInRevit = selectElementsInRevit;
             this.writeZetaToRevitComments = writeZetaToRevitComments;
             this.showMessage = showMessage;
             this.reportException = reportException;
+            this.requestHighlight = requestHighlight;
             this.settingsService = settingsService;
             Settings = settingsService.Load();
             LogAction("VentCalc Center открыт; настройки загружены.");
@@ -88,12 +91,20 @@ namespace VentCalc.UI.ViewModels
             SelectLoadedPathThroughElementInRevitCommand = new RelayCommand(_ => SelectLoadedPathThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
             SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
             ResetSettingsCommand = new RelayCommand(_ => ResetSettings());
-            ApplyVelocityHighlightCommand = new RelayCommand(_ => ShowStub("Подсветка скоростей будет добавлена на следующем этапе."));
-            ResetVelocityHighlightCommand = new RelayCommand(_ => ShowStub("Сброс подсветки скоростей будет подключён к Revit OverrideGraphicSettings на следующем этапе."));
+            ApplyVelocityHighlightCommand = new RelayCommand(_ => ApplyVelocityHighlight(), _ => AerodynamicSummary != null);
+            ResetVelocityHighlightCommand = new RelayCommand(_ => ClearHighlight());
             PickLowVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.LowVelocityColorHex, value => Settings.LowVelocityColorHex = value));
             PickNormalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.NormalVelocityColorHex, value => Settings.NormalVelocityColorHex = value));
             PickHighVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.HighVelocityColorHex, value => Settings.HighVelocityColorHex = value));
             PickCriticalVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.CriticalVelocityColorHex, value => Settings.CriticalVelocityColorHex = value));
+            PickSelectedPathColorCommand = new RelayCommand(_ => PickColor(Settings.SelectedPathColorHex, value => Settings.SelectedPathColorHex = value));
+            PickCriticalPathColorCommand = new RelayCommand(_ => PickColor(Settings.CriticalPathColorHex, value => Settings.CriticalPathColorHex = value));
+            PickIssueColorCommand = new RelayCommand(_ => PickColor(Settings.IssueColorHex, value => Settings.IssueColorHex = value));
+            ResetHighlightColorsCommand = new RelayCommand(_ => ResetHighlightColors());
+            HighlightSelectedPathCommand = new RelayCommand(_ => HighlightSelectedPath(), _ => SelectedPath != null);
+            HighlightCriticalPathCommand = new RelayCommand(_ => HighlightCriticalPath(), _ => CriticalPath != null);
+            HighlightIssuesCommand = new RelayCommand(_ => HighlightIssues(), _ => GetIssueElementIds().Count > 0);
+            ClearHighlightCommand = new RelayCommand(_ => ClearHighlight());
             GenerateVerificationReportCommand = new RelayCommand(_ => GenerateVerificationReport(), _ => NetworkInfo != null || !string.IsNullOrWhiteSpace(ReportText));
             SaveZetaOverridesCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
             ResetSelectedZetaCommand = new RelayCommand(_ => ClearSelectedManualZeta(), _ => GetSelectedLocalResistanceRows().Count > 0);
@@ -178,6 +189,22 @@ namespace VentCalc.UI.ViewModels
         public ObservableCollection<ZetaRecalculationActionInfo> ZetaRecalculationActions { get; } = new ObservableCollection<ZetaRecalculationActionInfo>();
 
         public ObservableCollection<VentIssueInfo> Issues { get; } = new ObservableCollection<VentIssueInfo>();
+
+        public HighlightStateInfo HighlightState { get; } = new HighlightStateInfo();
+
+        public int VelocityBelowMinCount => HighlightState.VelocityGroups.BelowMin;
+
+        public int VelocityNormalCount => HighlightState.VelocityGroups.Normal;
+
+        public int VelocityAboveMaxCount => HighlightState.VelocityGroups.AboveMax;
+
+        public int VelocityCriticalCount => HighlightState.VelocityGroups.Critical;
+
+        public int VelocityNotCalculatedCount => HighlightState.VelocityGroups.NotCalculated;
+
+        public string HighlightStatusText => HighlightState.ActiveMode == HighlightMode.None
+            ? "Подсветка не активна."
+            : $"Активна подсветка {HighlightState.ActiveMode}: элементов {HighlightState.HighlightedElementCount}.";
 
         public ObservableCollection<string> StartCandidateDetails { get; } = new ObservableCollection<string>();
 
@@ -498,6 +525,22 @@ namespace VentCalc.UI.ViewModels
         public ICommand PickHighVelocityColorCommand { get; }
 
         public ICommand PickCriticalVelocityColorCommand { get; }
+
+        public ICommand PickSelectedPathColorCommand { get; }
+
+        public ICommand PickCriticalPathColorCommand { get; }
+
+        public ICommand PickIssueColorCommand { get; }
+
+        public ICommand ResetHighlightColorsCommand { get; }
+
+        public ICommand HighlightSelectedPathCommand { get; }
+
+        public ICommand HighlightCriticalPathCommand { get; }
+
+        public ICommand HighlightIssuesCommand { get; }
+
+        public ICommand ClearHighlightCommand { get; }
 
         public ICommand GenerateVerificationReportCommand { get; }
 
@@ -1360,7 +1403,8 @@ namespace VentCalc.UI.ViewModels
                 if (dialog.ShowDialog() == Forms.DialogResult.OK)
                 {
                     setColor($"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}");
-                    StatusText = "Цвет выбран. Нажмите 'Сохранить', чтобы записать настройки.";
+                    settingsService.Save(Settings);
+                    StatusText = "Цвет подсветки сохранён.";
                 }
             }
             catch (Exception exception)
@@ -1379,6 +1423,330 @@ namespace VentCalc.UI.ViewModels
             {
                 return Drawing.Color.White;
             }
+        }
+
+        public void ApplyHighlightResult(HighlightResult result)
+        {
+            HighlightState.ActiveMode = result.ActiveMode;
+            HighlightState.ActiveViewId = result.ActiveViewId;
+            HighlightState.RequestedElementCount = result.RequestedElementCount;
+            HighlightState.HighlightedElementCount = result.HighlightedElementCount;
+            HighlightState.SkippedElementCount = result.SkippedElementCount;
+            HighlightState.FailedElementCount = result.FailedElementCount;
+            HighlightState.RestoredElementCount = result.RestoredElementCount;
+            HighlightState.SnapshotCount = result.SnapshotCount;
+            HighlightState.HighlightApplySucceeded = result.ActiveMode == HighlightMode.None || result.ApplySucceeded;
+            HighlightState.HighlightClearSucceeded = result.ClearSucceeded;
+            HighlightState.OriginalOverridesRestored = result.OriginalOverridesRestored;
+            HighlightState.Errors = result.Errors.ToList();
+            NotifyHighlightStateChanged();
+
+            string message = string.IsNullOrWhiteSpace(result.Message)
+                ? result.ActiveMode == HighlightMode.None
+                    ? $"Подсветка VentCalc очищена: элементов {result.RestoredElementCount}."
+                    : $"Подсветка VentCalc применена: элементов {result.HighlightedElementCount}."
+                : result.Message;
+            StatusText = result.FailedElementCount == 0
+                ? message
+                : $"{message} Ошибок: {result.FailedElementCount}.";
+            LogAction(StatusText);
+        }
+
+        private void HighlightSelectedPath()
+        {
+            if (SelectedPath == null)
+            {
+                StatusText = "Выберите трассу.";
+                return;
+            }
+
+            List<long> ids = ParseElementIds(SelectedPath.ElementIds).ToList();
+            if (ids.Count == 0)
+            {
+                StatusText = "В выбранной трассе нет элементов для подсветки.";
+                return;
+            }
+
+            RequestHighlight(new HighlightRequest
+            {
+                Action = HighlightAction.Apply,
+                Mode = HighlightMode.SelectedPath,
+                SelectElements = true,
+                ShowElements = true,
+                StatusMessage = $"Подсвечена трасса №{SelectedPath.PathIndex}: элементов {ids.Count}.",
+                Groups = new List<HighlightElementGroup>
+                {
+                    new HighlightElementGroup
+                    {
+                        Name = "Выбранная трасса",
+                        ColorHex = Settings.SelectedPathColorHex,
+                        LineWeight = 8,
+                        Transparency = 25,
+                        ElementIds = ids
+                    }
+                }
+            });
+        }
+
+        private void HighlightCriticalPath()
+        {
+            if (CriticalPath == null)
+            {
+                StatusText = "Критическая трасса пока не определена.";
+                return;
+            }
+
+            List<long> ids = CriticalPath.ElementIds.Distinct().ToList();
+            if (ids.Count == 0)
+            {
+                StatusText = "В критической трассе нет элементов для подсветки.";
+                return;
+            }
+
+            string startEnd = $"старт {CriticalPath.StartElementId}, конец {CriticalPath.EndElementId}";
+            RequestHighlight(new HighlightRequest
+            {
+                Action = HighlightAction.Apply,
+                Mode = HighlightMode.CriticalPath,
+                SelectElements = true,
+                ShowElements = true,
+                StatusMessage = $"Подсвечена критическая трасса №{CriticalPath.PathIndex}: элементов {ids.Count}, потери {CriticalPath.TotalPressureLossPa:0.###} Па, {startEnd}.",
+                Groups = new List<HighlightElementGroup>
+                {
+                    new HighlightElementGroup
+                    {
+                        Name = "Критическая трасса",
+                        ColorHex = Settings.CriticalPathColorHex,
+                        LineWeight = 9,
+                        Transparency = 20,
+                        ElementIds = ids
+                    }
+                }
+            });
+        }
+
+        private void ApplyVelocityHighlight()
+        {
+            if (AerodynamicSummary == null)
+            {
+                StatusText = "Сначала загрузите систему.";
+                return;
+            }
+
+            Dictionary<long, DuctCalculationInfo> ducts = AerodynamicSummary.Paths
+                .SelectMany(path => path.Ducts)
+                .Where(duct => duct.ElementId > 0)
+                .GroupBy(duct => duct.ElementId)
+                .ToDictionary(group => group.Key, group => group.OrderByDescending(duct => duct.VelocityMs).First());
+
+            var belowMin = new List<long>();
+            var normal = new List<long>();
+            var aboveMax = new List<long>();
+            var critical = new List<long>();
+            int notCalculated = 0;
+            foreach (DuctCalculationInfo duct in ducts.Values)
+            {
+                if (duct.FlowM3h <= 0 || duct.AreaM2 <= 0 || duct.VelocityMs <= 0 || double.IsNaN(duct.VelocityMs) || double.IsInfinity(duct.VelocityMs))
+                {
+                    notCalculated++;
+                    continue;
+                }
+
+                if (duct.VelocityMs < Settings.MinVelocityMs)
+                {
+                    belowMin.Add(duct.ElementId);
+                }
+                else if (duct.VelocityMs <= Settings.MaxVelocityMs)
+                {
+                    normal.Add(duct.ElementId);
+                }
+                else if (duct.VelocityMs < Settings.CriticalVelocityMs)
+                {
+                    aboveMax.Add(duct.ElementId);
+                }
+                else
+                {
+                    critical.Add(duct.ElementId);
+                }
+            }
+
+            HighlightState.VelocityGroups.BelowMin = belowMin.Count;
+            HighlightState.VelocityGroups.Normal = normal.Count;
+            HighlightState.VelocityGroups.AboveMax = aboveMax.Count;
+            HighlightState.VelocityGroups.Critical = critical.Count;
+            HighlightState.VelocityGroups.NotCalculated = notCalculated;
+            NotifyHighlightStateChanged();
+
+            var groups = new List<HighlightElementGroup>
+            {
+                CreateHighlightGroup($"Ниже {Settings.MinVelocityMs:0.###} м/с", Settings.LowVelocityColorHex, belowMin, 6, 35),
+                CreateHighlightGroup($"От {Settings.MinVelocityMs:0.###} до {Settings.MaxVelocityMs:0.###} м/с", Settings.NormalVelocityColorHex, normal, 5, 45),
+                CreateHighlightGroup($"Выше {Settings.MaxVelocityMs:0.###} м/с", Settings.HighVelocityColorHex, aboveMax, 7, 30),
+                CreateHighlightGroup($"От {Settings.CriticalVelocityMs:0.###} м/с", Settings.CriticalVelocityColorHex, critical, 9, 15)
+            };
+
+            RequestHighlight(new HighlightRequest
+            {
+                Action = HighlightAction.Apply,
+                Mode = HighlightMode.Velocity,
+                SelectElements = false,
+                ShowElements = false,
+                StatusMessage = $"Подсветка скоростей применена: воздуховодов {belowMin.Count + normal.Count + aboveMax.Count + critical.Count}; без расчёта {notCalculated}.",
+                Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
+            });
+        }
+
+        private void HighlightIssues()
+        {
+            List<long> ids = GetIssueElementIds();
+            if (ids.Count == 0)
+            {
+                StatusText = "Нет проблемных элементов для подсветки.";
+                return;
+            }
+
+            HighlightState.IssueElementCount = ids.Count;
+            NotifyHighlightStateChanged();
+            RequestHighlight(new HighlightRequest
+            {
+                Action = HighlightAction.Apply,
+                Mode = HighlightMode.Issues,
+                SelectElements = true,
+                ShowElements = true,
+                StatusMessage = $"Подсвечено проблемных элементов: {ids.Count}.",
+                Groups = new List<HighlightElementGroup>
+                {
+                    new HighlightElementGroup
+                    {
+                        Name = "Проблемы",
+                        ColorHex = Settings.IssueColorHex,
+                        LineWeight = 9,
+                        Transparency = 10,
+                        ElementIds = ids
+                    }
+                }
+            });
+        }
+
+        private void ClearHighlight()
+        {
+            RequestHighlight(new HighlightRequest
+            {
+                Action = HighlightAction.Clear,
+                Mode = HighlightMode.None,
+                SelectElements = true,
+                ShowElements = false,
+                StatusMessage = "Подсветка VentCalc очищена."
+            });
+        }
+
+        private void ResetHighlightColors()
+        {
+            Settings.LowVelocityColorHex = "#2196F3";
+            Settings.NormalVelocityColorHex = "#4CAF50";
+            Settings.HighVelocityColorHex = "#FF9800";
+            Settings.CriticalVelocityColorHex = "#F44336";
+            Settings.SelectedPathColorHex = "#00BCD4";
+            Settings.CriticalPathColorHex = "#E91E63";
+            Settings.IssueColorHex = "#D50000";
+            settingsService.Save(Settings);
+            StatusText = "Стандартные цвета подсветки восстановлены.";
+        }
+
+        private void RequestHighlight(HighlightRequest request)
+        {
+            if (request.Action == HighlightAction.Apply && request.RequestedElementCount == 0)
+            {
+                StatusText = "Нет элементов для подсветки.";
+                return;
+            }
+
+            if (requestHighlight == null)
+            {
+                StatusText = "Подсветка доступна из окна VentCalc Center, открытого из Revit.";
+                showMessage?.Invoke(StatusText);
+                return;
+            }
+
+            StatusText = request.Action == HighlightAction.Clear
+                ? "Ожидание Revit: очистка подсветки."
+                : "Ожидание Revit: применение подсветки.";
+            requestHighlight(this, request);
+        }
+
+        private static HighlightElementGroup CreateHighlightGroup(string name, string colorHex, IEnumerable<long> elementIds, int lineWeight, int transparency)
+        {
+            return new HighlightElementGroup
+            {
+                Name = name,
+                ColorHex = colorHex,
+                LineWeight = lineWeight,
+                Transparency = transparency,
+                ElementIds = elementIds.Distinct().ToList()
+            };
+        }
+
+        private List<long> GetIssueElementIds()
+        {
+            var ids = new HashSet<long>();
+            foreach (VentIssueInfo issue in Issues)
+            {
+                if (TryParseElementId(issue.ElementId, out long issueElementId))
+                {
+                    ids.Add(issueElementId);
+                }
+            }
+
+            if (AerodynamicSummary != null)
+            {
+                foreach (DuctCalculationInfo duct in AerodynamicSummary.Paths.SelectMany(path => path.Ducts))
+                {
+                    if (duct.ElementId <= 0)
+                    {
+                        continue;
+                    }
+
+                    bool invalidVelocity = duct.FlowM3h <= 0 || duct.AreaM2 <= 0 || duct.VelocityMs <= 0 || double.IsNaN(duct.VelocityMs) || double.IsInfinity(duct.VelocityMs);
+                    if (invalidVelocity || duct.VelocityMs >= Settings.CriticalVelocityMs)
+                    {
+                        ids.Add(duct.ElementId);
+                    }
+                }
+
+                foreach (LocalResistanceCalculationInfo local in AerodynamicSummary.Paths.SelectMany(path => path.LocalResistances))
+                {
+                    bool unknown = string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase) || local.PathRole.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase);
+                    bool missingZeta = string.Equals(local.ZetaSource, "Не определено", StringComparison.OrdinalIgnoreCase) || (local.EffectiveZeta <= 0 && local.AutoZeta <= 0 && !local.ManualZeta.HasValue);
+                    if ((unknown || missingZeta) && local.ElementId > 0)
+                    {
+                        ids.Add(local.ElementId);
+                    }
+                }
+            }
+
+            return ids.OrderBy(id => id).ToList();
+        }
+
+        private static IEnumerable<long> ParseElementIds(IEnumerable<string> elementIds)
+        {
+            foreach (string value in elementIds)
+            {
+                if (TryParseElementId(value, out long elementId))
+                {
+                    yield return elementId;
+                }
+            }
+        }
+
+        private void NotifyHighlightStateChanged()
+        {
+            OnPropertyChanged(nameof(HighlightState));
+            OnPropertyChanged(nameof(VelocityBelowMinCount));
+            OnPropertyChanged(nameof(VelocityNormalCount));
+            OnPropertyChanged(nameof(VelocityAboveMaxCount));
+            OnPropertyChanged(nameof(VelocityCriticalCount));
+            OnPropertyChanged(nameof(VelocityNotCalculatedCount));
+            OnPropertyChanged(nameof(HighlightStatusText));
         }
 
         private void AcceptRecommendedZeta()
@@ -2097,6 +2465,9 @@ namespace VentCalc.UI.ViewModels
         private string normalVelocityColorHex = "#4CAF50";
         private string highVelocityColorHex = "#FF9800";
         private string criticalVelocityColorHex = "#F44336";
+        private string selectedPathColorHex = "#00BCD4";
+        private string criticalPathColorHex = "#E91E63";
+        private string issueColorHex = "#D50000";
 
         public double AirDensityKgM3
         {
@@ -2193,6 +2564,24 @@ namespace VentCalc.UI.ViewModels
         {
             get => criticalVelocityColorHex;
             set => SetProperty(ref criticalVelocityColorHex, NormalizeColorHex(value, "#F44336"));
+        }
+
+        public string SelectedPathColorHex
+        {
+            get => selectedPathColorHex;
+            set => SetProperty(ref selectedPathColorHex, NormalizeColorHex(value, "#00BCD4"));
+        }
+
+        public string CriticalPathColorHex
+        {
+            get => criticalPathColorHex;
+            set => SetProperty(ref criticalPathColorHex, NormalizeColorHex(value, "#E91E63"));
+        }
+
+        public string IssueColorHex
+        {
+            get => issueColorHex;
+            set => SetProperty(ref issueColorHex, NormalizeColorHex(value, "#D50000"));
         }
 
         public static VentCalcSettings CreateDefault()

@@ -54,8 +54,14 @@ namespace VentCalc.Revit.Commands
                 var writeZetaHandler = new WriteZetaCommentsExternalEventHandler(loader, launchLogPath, () => ActivateWindow(activeWindow));
                 ExternalEvent writeZetaExternalEvent = ExternalEvent.Create(writeZetaHandler);
                 writeZetaHandler.Initialize(writeZetaExternalEvent);
+                VentCalcCenterViewModel? viewModel = null;
+                var highlightHandler = new ApplyHighlightExternalEventHandler(
+                    launchLogPath,
+                    result => activeWindow?.Dispatcher.BeginInvoke(new Action(() => viewModel?.ApplyHighlightResult(result))));
+                ExternalEvent highlightExternalEvent = ExternalEvent.Create(highlightHandler);
+                highlightHandler.Initialize(highlightExternalEvent);
 
-                var viewModel = new VentCalcCenterViewModel(
+                viewModel = new VentCalcCenterViewModel(
                     (vm, mode) => loadHandler.Request(
                         vm,
                         mode == VentCalcLoadRequestMode.LastLoadedElement
@@ -67,7 +73,8 @@ namespace VentCalc.Revit.Commands
                     (vm, rows, mode) => writeZetaHandler.Request(vm, rows, mode),
                     text => TaskDialog.Show("VentCalc", text),
                     settingsService,
-                    exception => ErrorReporter.Report(uiApplication, "Ошибка ViewModel VentCalc Center", exception, launchLogPath));
+                    exception => ErrorReporter.Report(uiApplication, "Ошибка ViewModel VentCalc Center", exception, launchLogPath),
+                    (vm, request) => highlightHandler.Request(request));
                 ErrorReporter.WriteTrace(launchLogPath, "ViewModel created");
 
                 var window = new VentCalcCenterWindow(viewModel);
@@ -83,6 +90,7 @@ namespace VentCalc.Revit.Commands
                     loadExternalEvent.Dispose();
                     selectExternalEvent.Dispose();
                     writeZetaExternalEvent.Dispose();
+                    highlightExternalEvent.Dispose();
                     ErrorReporter.WriteTrace(launchLogPath, "VentCalc Center window closed");
                 };
                 activeWindow = window;
@@ -100,6 +108,23 @@ namespace VentCalc.Revit.Commands
                 message = exception.Message;
                 return Result.Failed;
             }
+        }
+
+        public static void ApplyHighlightResultToActiveWindow(HighlightResult result)
+        {
+            VentCalcCenterWindow? window = activeWindow;
+            if (window == null)
+            {
+                return;
+            }
+
+            window.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (window.DataContext is VentCalcCenterViewModel viewModel)
+                {
+                    viewModel.ApplyHighlightResult(result);
+                }
+            }));
         }
 
         private static void AssignRevitOwner(Window window, UIApplication uiApplication)
