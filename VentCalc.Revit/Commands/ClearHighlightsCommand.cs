@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -21,6 +20,7 @@ namespace VentCalc.Revit.Commands
             }
 
             var errors = new List<string>();
+            int selectionCountBefore = uiDocument.Selection.GetElementIds().Count;
             int restored;
             using (var transaction = new Transaction(uiDocument.Document, "VentCalc: очистить подсветку"))
             {
@@ -29,7 +29,7 @@ namespace VentCalc.Revit.Commands
                 transaction.Commit();
             }
 
-            uiDocument.Selection.SetElementIds(Array.Empty<ElementId>());
+            int selectionCountAfter = uiDocument.Selection.GetElementIds().Count;
             string details = errors.Count == 0
                 ? $"Подсветка VentCalc очищена: элементов {restored}."
                 : $"Подсветка VentCalc очищена: элементов {restored}; ошибок {errors.Count}.";
@@ -40,6 +40,9 @@ namespace VentCalc.Revit.Commands
                 RestoredElementCount = restored,
                 FailedElementCount = errors.Count,
                 SnapshotCount = HighlightStateStore.SnapshotCount,
+                SelectionElementCountBefore = selectionCountBefore,
+                SelectionElementCountAfter = selectionCountAfter,
+                SelectionChangedByVentCalc = false,
                 Message = details,
                 Errors = errors
             });

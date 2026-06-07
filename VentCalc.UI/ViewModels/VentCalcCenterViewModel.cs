@@ -1435,6 +1435,10 @@ namespace VentCalc.UI.ViewModels
             HighlightState.FailedElementCount = result.FailedElementCount;
             HighlightState.RestoredElementCount = result.RestoredElementCount;
             HighlightState.SnapshotCount = result.SnapshotCount;
+            HighlightState.SelectionChangedByVentCalc = result.SelectionChangedByVentCalc;
+            HighlightState.SelectionElementCountBefore = result.SelectionElementCountBefore;
+            HighlightState.SelectionElementCountAfter = result.SelectionElementCountAfter;
+            HighlightState.ShowElementsUsed = result.ShowElementsUsed;
             HighlightState.HighlightApplySucceeded = result.ActiveMode == HighlightMode.None || result.ApplySucceeded;
             HighlightState.HighlightClearSucceeded = result.ClearSucceeded;
             HighlightState.OriginalOverridesRestored = result.OriginalOverridesRestored;
@@ -1471,7 +1475,7 @@ namespace VentCalc.UI.ViewModels
             {
                 Action = HighlightAction.Apply,
                 Mode = HighlightMode.SelectedPath,
-                SelectElements = true,
+                SelectElements = false,
                 ShowElements = true,
                 StatusMessage = $"Подсвечена трасса №{SelectedPath.PathIndex}: элементов {ids.Count}.",
                 Groups = new List<HighlightElementGroup>
@@ -1508,7 +1512,7 @@ namespace VentCalc.UI.ViewModels
             {
                 Action = HighlightAction.Apply,
                 Mode = HighlightMode.CriticalPath,
-                SelectElements = true,
+                SelectElements = false,
                 ShowElements = true,
                 StatusMessage = $"Подсвечена критическая трасса №{CriticalPath.PathIndex}: элементов {ids.Count}, потери {CriticalPath.TotalPressureLossPa:0.###} Па, {startEnd}.",
                 Groups = new List<HighlightElementGroup>
@@ -1611,7 +1615,7 @@ namespace VentCalc.UI.ViewModels
             {
                 Action = HighlightAction.Apply,
                 Mode = HighlightMode.Issues,
-                SelectElements = true,
+                SelectElements = false,
                 ShowElements = true,
                 StatusMessage = $"Подсвечено проблемных элементов: {ids.Count}.",
                 Groups = new List<HighlightElementGroup>
@@ -1634,7 +1638,7 @@ namespace VentCalc.UI.ViewModels
             {
                 Action = HighlightAction.Clear,
                 Mode = HighlightMode.None,
-                SelectElements = true,
+                SelectElements = false,
                 ShowElements = false,
                 StatusMessage = "Подсветка VentCalc очищена."
             });

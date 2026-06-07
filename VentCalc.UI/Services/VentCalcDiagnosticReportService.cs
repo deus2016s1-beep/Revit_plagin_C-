@@ -419,6 +419,10 @@ namespace VentCalc.UI.Services
                     failedElementCount = viewModel.HighlightState.FailedElementCount,
                     restoredElementCount = viewModel.HighlightState.RestoredElementCount,
                     snapshotCount = viewModel.HighlightState.SnapshotCount,
+                    selectionChangedByVentCalc = viewModel.HighlightState.SelectionChangedByVentCalc,
+                    selectionElementCountBefore = viewModel.HighlightState.SelectionElementCountBefore,
+                    selectionElementCountAfter = viewModel.HighlightState.SelectionElementCountAfter,
+                    showElementsUsed = viewModel.HighlightState.ShowElementsUsed,
                     velocityGroups = new
                     {
                         belowMin = viewModel.HighlightState.VelocityGroups.BelowMin,

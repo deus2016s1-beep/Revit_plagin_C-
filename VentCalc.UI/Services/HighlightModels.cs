@@ -67,6 +67,14 @@ namespace VentCalc.UI.Services
 
         public int SnapshotCount { get; set; }
 
+        public bool SelectionChangedByVentCalc { get; set; }
+
+        public int SelectionElementCountBefore { get; set; }
+
+        public int SelectionElementCountAfter { get; set; }
+
+        public bool ShowElementsUsed { get; set; }
+
         public string Message { get; set; } = string.Empty;
 
         public List<string> Errors { get; set; } = new List<string>();
@@ -108,6 +116,14 @@ namespace VentCalc.UI.Services
         public int RestoredElementCount { get; set; }
 
         public int SnapshotCount { get; set; }
+
+        public bool SelectionChangedByVentCalc { get; set; }
+
+        public int SelectionElementCountBefore { get; set; }
+
+        public int SelectionElementCountAfter { get; set; }
+
+        public bool ShowElementsUsed { get; set; }
 
         public HighlightVelocityGroupsInfo VelocityGroups { get; set; } = new HighlightVelocityGroupsInfo();
 

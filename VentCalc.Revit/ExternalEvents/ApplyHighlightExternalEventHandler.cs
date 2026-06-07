@@ -72,11 +72,14 @@ namespace VentCalc.Revit.ExternalEvents
         {
             Document document = uiDocument.Document;
             View view = uiDocument.ActiveView;
+            int selectionCountBefore = uiDocument.Selection.GetElementIds().Count;
             var result = new HighlightResult
             {
                 ActiveMode = request.Mode,
                 ActiveViewId = view.Id.Value,
                 RequestedElementCount = request.RequestedElementCount,
+                SelectionElementCountBefore = selectionCountBefore,
+                SelectionElementCountAfter = selectionCountBefore,
                 Message = request.StatusMessage
             };
 
@@ -120,16 +123,13 @@ namespace VentCalc.Revit.ExternalEvents
             }
 
             result.SnapshotCount = HighlightStateStore.SnapshotCount;
-            if (request.SelectElements)
-            {
-                uiDocument.Selection.SetElementIds(highlightedIds.Distinct().ToList());
-            }
-
             if (request.ShowElements && highlightedIds.Count > 0)
             {
                 uiDocument.ShowElements(highlightedIds.Distinct().ToList());
+                result.ShowElementsUsed = true;
             }
 
+            result.SelectionElementCountAfter = uiDocument.Selection.GetElementIds().Count;
             return result;
         }
 
@@ -138,11 +138,14 @@ namespace VentCalc.Revit.ExternalEvents
             Document document = uiDocument.Document;
             View view = uiDocument.ActiveView;
             int snapshotCountBeforeClear = HighlightStateStore.GetSnapshotsForDocument(document).Count;
+            int selectionCountBefore = uiDocument.Selection.GetElementIds().Count;
             var result = new HighlightResult
             {
                 ActiveMode = HighlightMode.None,
                 ActiveViewId = view.Id.Value,
                 RequestedElementCount = snapshotCountBeforeClear,
+                SelectionElementCountBefore = selectionCountBefore,
+                SelectionElementCountAfter = selectionCountBefore,
                 Message = request.StatusMessage
             };
 
@@ -153,11 +156,7 @@ namespace VentCalc.Revit.ExternalEvents
                 transaction.Commit();
             }
 
-            if (request.SelectElements)
-            {
-                uiDocument.Selection.SetElementIds(Array.Empty<ElementId>());
-            }
-
+            result.SelectionElementCountAfter = uiDocument.Selection.GetElementIds().Count;
             result.FailedElementCount = result.Errors.Count;
             result.SnapshotCount = HighlightStateStore.SnapshotCount;
             return result;
