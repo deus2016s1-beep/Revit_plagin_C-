@@ -282,6 +282,11 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"  fallbackUsed: {selection.FallbackUsed}");
             builder.AppendLine($"  terminalElementStartCount: {selection.TerminalElementStartCount}");
             builder.AppendLine($"  connectorLevelStartCount: {selection.ConnectorLevelStartCount}");
+            builder.AppendLine($"  detailedConnectorStartCount: {selection.DetailedConnectorStartCount}");
+            builder.AppendLine($"  fallbackConnectorStartCount: {selection.FallbackConnectorStartCount}");
+            builder.AppendLine($"  duplicateConnectorStartsRemoved: {selection.DuplicateConnectorStartsRemoved}");
+            builder.AppendLine($"  finalConnectorLevelStartCount: {selection.ConnectorLevelStartCount}");
+            builder.AppendLine($"  duplicatePathsRemoved: {selection.DuplicatePathsRemoved}");
             builder.AppendLine($"  pathsBuiltCount: {selection.PathsBuiltCount}");
             builder.AppendLine($"  connectorStartsWithoutPathCount: {selection.ConnectorStartsWithoutPathCount}");
             AppendEndpointCandidates(builder, "  startCandidates", selection.StartCandidates);
@@ -366,6 +371,11 @@ namespace VentCalc.UI.Services
                     fallbackUsed = viewModel.PathSummary.EndpointSelection.FallbackUsed,
                     terminalElementStartCount = viewModel.PathSummary.EndpointSelection.TerminalElementStartCount,
                     connectorLevelStartCount = viewModel.PathSummary.EndpointSelection.ConnectorLevelStartCount,
+                    detailedConnectorStartCount = viewModel.PathSummary.EndpointSelection.DetailedConnectorStartCount,
+                    fallbackConnectorStartCount = viewModel.PathSummary.EndpointSelection.FallbackConnectorStartCount,
+                    duplicateConnectorStartsRemoved = viewModel.PathSummary.EndpointSelection.DuplicateConnectorStartsRemoved,
+                    finalConnectorLevelStartCount = viewModel.PathSummary.EndpointSelection.ConnectorLevelStartCount,
+                    duplicatePathsRemoved = viewModel.PathSummary.EndpointSelection.DuplicatePathsRemoved,
                     pathsBuiltCount = viewModel.PathSummary.EndpointSelection.PathsBuiltCount,
                     connectorStartsWithoutPathCount = viewModel.PathSummary.EndpointSelection.ConnectorStartsWithoutPathCount,
                     connectorStarts = viewModel.PathSummary.EndpointSelection.ConnectorStarts,
@@ -635,6 +645,17 @@ namespace VentCalc.UI.Services
             if (selection == null)
             {
                 return;
+            }
+
+            int connectedStartSideConnectorCount = selection.StartCandidates.Sum(candidate => candidate.ConnectedHvacConnectorCount);
+            if (selection.ConnectorLevelStartCount > connectedStartSideConnectorCount && connectedStartSideConnectorCount > 0)
+            {
+                errors.Add($"connectorLevelStartCount={selection.ConnectorLevelStartCount} больше суммы connectedHvacConnectorCount стартовых элементов={connectedStartSideConnectorCount}.");
+            }
+
+            if (selection.DuplicatePathsRemoved > 0)
+            {
+                warnings.Add($"Удалено дублей трасс: {selection.DuplicatePathsRemoved}.");
             }
 
             if (selection.ConnectorStartsWithoutPathCount > 0)

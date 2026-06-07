@@ -28,10 +28,12 @@ namespace VentCalc.Core.Services
 
             selection.IgnoredCapElementIds = ToIds(caps);
             Dictionary<long, VentNetworkNode> nodesById = BuildNodeMap(network.Elements);
-            List<VentConnectorEndpointStartInfo> connectorStarts = BuildConnectorStarts(terminalSide, network.Connections, nodesById);
+            List<VentConnectorEndpointStartInfo> connectorStarts = selection.SystemDirection == "Exhaust"
+                ? BuildConnectorStarts(terminalSide, network.Connections, nodesById, selection)
+                : new List<VentConnectorEndpointStartInfo>();
             selection.ConnectorStarts = connectorStarts;
             selection.ConnectorLevelStartCount = connectorStarts.Count;
-            selection.TerminalElementStartCount = terminalSide.Count;
+            selection.TerminalElementStartCount = selection.SystemDirection == "Exhaust" ? terminalSide.Count : 0;
             selection.OpenEndCandidates = ToCandidateInfos(openEnds, connectorStarts);
             selection.HoodCandidates = ToCandidateInfos(hoods, connectorStarts);
             selection.FanCandidates = ToCandidateInfos(fanCandidates, connectorStarts);
@@ -215,7 +217,8 @@ namespace VentCalc.Core.Services
         private static List<VentConnectorEndpointStartInfo> BuildConnectorStarts(
             IReadOnlyList<VentNetworkNode> terminalSide,
             IReadOnlyList<VentNetworkConnection> connections,
-            IReadOnlyDictionary<long, VentNetworkNode> nodesById)
+            IReadOnlyDictionary<long, VentNetworkNode> nodesById,
+            VentPathEndpointSelection selection)
         {
             var terminalIds = new HashSet<long>(terminalSide.Select(node => ParseElementId(node.ElementId) ?? 0).Where(id => id != 0));
             var starts = new List<VentConnectorEndpointStartInfo>();
@@ -232,9 +235,34 @@ namespace VentCalc.Core.Services
                 AddConnectorStartIfTerminal(starts, terminalIds, nodesById, toId.Value, connection.ToConnectorIndex, fromId.Value);
             }
 
+            selection.DetailedConnectorStartCount = starts.Count(start => !start.IsFallback);
+            selection.FallbackConnectorStartCount = starts.Count(start => start.IsFallback);
+            List<VentConnectorEndpointStartInfo> deduplicated = DeduplicateConnectorStarts(starts);
+            selection.DuplicateConnectorStartsRemoved = Math.Max(0, starts.Count - deduplicated.Count);
+            return deduplicated;
+        }
+
+        private static List<VentConnectorEndpointStartInfo> DeduplicateConnectorStarts(IReadOnlyList<VentConnectorEndpointStartInfo> starts)
+        {
             return starts
-                .GroupBy(start => start.LogicalKey)
-                .Select(group => group.First())
+                .GroupBy(start => new { start.ElementId, start.ConnectedElementId })
+                .SelectMany(group =>
+                {
+                    List<VentConnectorEndpointStartInfo> realStarts = group
+                        .Where(start => !start.IsFallback && !string.Equals(start.ConnectorKey, "C0", StringComparison.OrdinalIgnoreCase))
+                        .GroupBy(start => start.LogicalKey)
+                        .Select(item => item.First())
+                        .ToList();
+                    if (realStarts.Count > 0)
+                    {
+                        return realStarts;
+                    }
+
+                    return group
+                        .GroupBy(start => start.LogicalKey)
+                        .Select(item => item.First())
+                        .Take(1);
+                })
                 .OrderBy(start => start.ElementId)
                 .ThenBy(start => start.ConnectorKey, StringComparer.Ordinal)
                 .ThenBy(start => start.ConnectedElementId)
@@ -259,14 +287,15 @@ namespace VentCalc.Core.Services
             starts.Add(new VentConnectorEndpointStartInfo
             {
                 ElementId = terminalId,
-                ConnectorKey = $"C{connectorIndex}",
+                ConnectorKey = $"C{Math.Max(0, connectorIndex)}",
                 ConnectorOrigin = "—",
                 ConnectorDirection = "—",
                 ConnectedElementId = connectedElementId,
                 ConnectedElementCategory = connectedNode.CategoryName,
                 SystemName = terminalNode.SystemName,
                 EndpointRole = terminalNode.Role.ToString(),
-                FlowM3h = ParseFlow(connectedNode.FlowM3h)
+                FlowM3h = ParseFlow(connectedNode.FlowM3h),
+                IsFallback = connectorIndex <= 0
             });
         }
 

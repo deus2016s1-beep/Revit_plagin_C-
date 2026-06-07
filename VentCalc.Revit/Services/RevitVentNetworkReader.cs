@@ -30,7 +30,7 @@ namespace VentCalc.Revit.Services
             var queuedElementIds = new HashSet<long>();
             var queue = new Queue<ElementId>();
             var connections = new List<VentNetworkConnection>();
-            var connectionKeys = new HashSet<string>();
+            var connectionScores = new Dictionary<string, int>();
 
             queue.Enqueue(selectedElementId);
             queuedElementIds.Add(selectedElementId.Value);
@@ -57,7 +57,7 @@ namespace VentCalc.Revit.Services
                         continue;
                     }
 
-                    AddConnectionIfMissing(connections, connectionKeys, connectorLink);
+                    AddConnectionIfMissing(connections, connectionScores, connectorLink);
 
                     if (!visitedElementIds.Contains(neighborElement.Id.Value) && queuedElementIds.Add(neighborElement.Id.Value))
                     {
@@ -244,12 +244,14 @@ namespace VentCalc.Revit.Services
         }
 
         private static void AddConnectionIfMissing(
-            ICollection<VentNetworkConnection> connections,
-            ISet<string> connectionKeys,
+            IList<VentNetworkConnection> connections,
+            IDictionary<string, int> connectionScores,
             ConnectorLink connectorLink)
         {
-            long fromId = connectorLink.OwnerElement.Id.Value;
-            long toId = connectorLink.NeighborElement.Id.Value;
+            Element fromElement = connectorLink.OwnerElement;
+            Element toElement = connectorLink.NeighborElement;
+            long fromId = fromElement.Id.Value;
+            long toId = toElement.Id.Value;
             int fromConnectorIndex = connectorLink.OwnerConnectorIndex;
             int toConnectorIndex = connectorLink.NeighborConnectorIndex;
 
@@ -257,20 +259,82 @@ namespace VentCalc.Revit.Services
             {
                 (fromId, toId) = (toId, fromId);
                 (fromConnectorIndex, toConnectorIndex) = (toConnectorIndex, fromConnectorIndex);
+                (fromElement, toElement) = (toElement, fromElement);
             }
 
-            string connectionKey = $"{fromId}:{fromConnectorIndex}->{toId}:{toConnectorIndex}";
-            if (!connectionKeys.Add(connectionKey))
-            {
-                return;
-            }
-
-            connections.Add(new VentNetworkConnection(
+            string connectionKey = $"{fromId}->{toId}";
+            var candidate = new VentNetworkConnection(
                 fromId.ToString(),
                 toId.ToString(),
                 fromConnectorIndex,
                 toConnectorIndex,
-                connectorLink.ConnectionKind));
+                connectorLink.ConnectionKind);
+            int candidateScore = ConnectorDetailScore(candidate, fromElement, toElement);
+
+            if (connectionScores.TryGetValue(connectionKey, out int existingScore))
+            {
+                if (candidateScore > existingScore && ReplaceConnectionIfMoreDetailed(connections, candidate))
+                {
+                    connectionScores[connectionKey] = candidateScore;
+                }
+
+                return;
+            }
+
+            connectionScores.Add(connectionKey, candidateScore);
+            connections.Add(candidate);
+        }
+
+        private static bool ReplaceConnectionIfMoreDetailed(IList<VentNetworkConnection> connections, VentNetworkConnection candidate)
+        {
+            for (int index = 0; index < connections.Count; index++)
+            {
+                VentNetworkConnection existing = connections[index];
+                if (existing.FromElementId != candidate.FromElementId || existing.ToElementId != candidate.ToElementId)
+                {
+                    continue;
+                }
+
+                connections[index] = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static int ConnectorDetailScore(VentNetworkConnection connection, Element fromElement, Element toElement)
+        {
+            int score = 0;
+            if (connection.FromConnectorIndex > 0) score++;
+            if (connection.ToConnectorIndex > 0) score++;
+            if (IsTerminalEndpointElement(fromElement) && connection.FromConnectorIndex > 0) score += 10;
+            if (IsTerminalEndpointElement(toElement) && connection.ToConnectorIndex > 0) score += 10;
+            return score;
+        }
+
+        private static bool IsTerminalEndpointElement(Element element)
+        {
+            if (element.Category == null)
+            {
+                return false;
+            }
+
+            var category = (BuiltInCategory)element.Category.Id.Value;
+            if (category == BuiltInCategory.OST_DuctTerminal)
+            {
+                return true;
+            }
+
+            if (category != BuiltInCategory.OST_MechanicalEquipment)
+            {
+                return false;
+            }
+
+            string text = string.Join(" ", SafeRead(() => element.Name, string.Empty), SafeRead(() => element.Document.GetElement(element.GetTypeId())?.Name ?? string.Empty, string.Empty));
+            return text.IndexOf("зонт", StringComparison.OrdinalIgnoreCase) >= 0
+                || text.IndexOf("hood", StringComparison.OrdinalIgnoreCase) >= 0
+                || text.IndexOf("canopy", StringComparison.OrdinalIgnoreCase) >= 0
+                || text.IndexOf("местный отсос", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static int FindConnectorIndex(Element ownerElement, Connector targetConnector)

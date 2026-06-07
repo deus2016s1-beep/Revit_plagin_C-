@@ -20,6 +20,8 @@ namespace VentCalc.Core.Models
 
         public double FlowM3h { get; set; }
 
+        public bool IsFallback { get; set; }
+
         public bool PathFound { get; set; }
 
         public int? PathIndex { get; set; }

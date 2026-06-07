@@ -34,6 +34,14 @@ namespace VentCalc.Core.Models
 
         public int ConnectorLevelStartCount { get; set; }
 
+        public int DetailedConnectorStartCount { get; set; }
+
+        public int FallbackConnectorStartCount { get; set; }
+
+        public int DuplicateConnectorStartsRemoved { get; set; }
+
+        public int DuplicatePathsRemoved { get; set; }
+
         public int PathsBuiltCount { get; set; }
 
         public int ConnectorStartsWithoutPathCount { get; set; }

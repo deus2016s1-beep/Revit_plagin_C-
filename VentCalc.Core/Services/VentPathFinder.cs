@@ -43,6 +43,8 @@ namespace VentCalc.Core.Services
                 }
             }
 
+            paths = DeduplicateConnectorPaths(paths, endpointSelection);
+
             paths = paths
                 .OrderByDescending(path => path.TotalDuctLengthMm)
                 .ThenByDescending(path => path.TotalElementCount)
@@ -186,6 +188,31 @@ namespace VentCalc.Core.Services
                 start.ConnectorKey,
                 start.ConnectedElementId.ToString(CultureInfo.InvariantCulture),
                 FormatFlow(start.FlowM3h)));
+        }
+
+        private static List<VentPathInfo> DeduplicateConnectorPaths(IReadOnlyList<VentPathInfo> paths, VentPathEndpointSelection endpointSelection)
+        {
+            var result = new List<VentPathInfo>();
+            foreach (IGrouping<string, VentPathInfo> group in paths.GroupBy(BuildDuplicatePathKey))
+            {
+                VentPathInfo selected = group
+                    .OrderBy(path => string.Equals(path.StartConnectorKey, "C0", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+                    .ThenBy(path => path.StartConnectorKey, StringComparer.Ordinal)
+                    .First();
+                result.Add(selected);
+            }
+
+            endpointSelection.DuplicatePathsRemoved = Math.Max(0, paths.Count - result.Count);
+            return result;
+        }
+
+        private static string BuildDuplicatePathKey(VentPathInfo path)
+        {
+            return string.Join("|",
+                path.StartElementId,
+                path.ConnectedStartElementId,
+                path.EndElementId,
+                string.Join(">", path.ElementIds));
         }
 
         private static void UpdateConnectorStartResults(VentPathEndpointSelection endpointSelection, IReadOnlyList<VentPathInfo> paths)
