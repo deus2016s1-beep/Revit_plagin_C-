@@ -274,6 +274,49 @@ namespace VentCalc.Core.Models
             OnPropertyChanged(nameof(StatusText));
         }
 
+
+        private static string LocalizeRole(string? role, string? fallback)
+        {
+            return role switch
+            {
+                "Elbow15" => "Отвод 15°",
+                "Elbow30" => "Отвод 30°",
+                "Elbow45" => "Отвод 45°",
+                "Elbow60" => "Отвод 60°",
+                "Elbow90" => "Отвод 90°",
+                "TeePass" => "Тройник — проход",
+                "TeeBranch" => "Тройник — ответвление",
+                "CrossPass" => "Крестовина — проход",
+                "CrossBranch" => "Крестовина — ответвление",
+                "TransitionNarrowing" => "Переход — сужение",
+                "TransitionExpansion" => "Переход — расширение",
+                "TapBranch" => "Врезка",
+                "Grille" => "Решётка",
+                "Hood" => "Зонт",
+                "Damper" => "Клапан",
+                "FireDamper" => "Противопожарный клапан",
+                "BackdraftDamper" => "Обратный клапан",
+                "Cap" => "Заглушка",
+                null or "" => string.IsNullOrWhiteSpace(fallback) ? "Не определено" : fallback,
+                _ => role
+            };
+        }
+
+        private static string LocalizeSource(string? source)
+        {
+            return source switch
+            {
+                "Автоматически" or "Auto" or "Recommended" or "Рекомендовано" => "Авто",
+                "Каталог проекта" or "ProjectCatalog" => "Каталог",
+                "Вручную" or "Manual" => "Ручное",
+                "Комментарии" or "Комментарии элемента" or "Comment" => "Элемент",
+                "Переопределение VentCalc" or "Переопределение трассы" or "PathOverride" => "Трасса",
+                "Не определено" or "Не найдено" => "Требуется значение",
+                null or "" => "Авто",
+                _ => source
+            };
+        }
+
         private bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
         {
             if (EqualityComparer<T>.Default.Equals(storage, value))

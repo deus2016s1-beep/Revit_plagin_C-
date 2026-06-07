@@ -523,7 +523,7 @@ namespace VentCalc.UI.Services
             bool calculationHasNaN = HasInvalidNumber(viewModel, double.IsNaN);
             bool calculationHasInfinity = HasInvalidNumber(viewModel, double.IsInfinity);
             int unknownCount = diagnostics.LocalApplications.Count(item => IsUnknownLocalResistanceRole(item.Local));
-            int missingZetaCount = diagnostics.LocalApplications.Count(item => item.Local.ZetaSource == "Не определено" || item.Local.EffectiveZeta == 0 && item.Local.AutoZeta == 0 && !item.Local.PathRole.Equals("Cap", StringComparison.OrdinalIgnoreCase));
+            int missingZetaCount = diagnostics.LocalApplications.Count(item => item.Local.ZetaSource == "Не определено" || (item.Local.EffectiveZeta == 0 && item.Local.AutoZeta == 0 && !string.Equals(item.Local.PathRole, "Cap", StringComparison.OrdinalIgnoreCase)));
             bool resetVerified = viewModel.ZetaWriteActions
                 .Where(action => action.OverrideStorageType.Contains("Reset", StringComparison.OrdinalIgnoreCase))
                 .All(action => action.VerifiedAfterCommit || action.WriteSucceeded);
