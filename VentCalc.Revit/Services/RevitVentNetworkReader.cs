@@ -259,7 +259,7 @@ namespace VentCalc.Revit.Services
                 (fromConnectorIndex, toConnectorIndex) = (toConnectorIndex, fromConnectorIndex);
             }
 
-            string connectionKey = $"{fromId}->{toId}";
+            string connectionKey = $"{fromId}:{fromConnectorIndex}->{toId}:{toConnectorIndex}";
             if (!connectionKeys.Add(connectionKey))
             {
                 return;

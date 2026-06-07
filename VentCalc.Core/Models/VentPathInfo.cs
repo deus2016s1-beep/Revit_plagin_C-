@@ -20,7 +20,11 @@ namespace VentCalc.Core.Models
             int totalElementCount,
             double totalDuctLengthMm,
             string maxFlowM3h,
-            string pathKind)
+            string pathKind,
+            string startConnectorKey = "",
+            string connectedStartElementId = "",
+            string startFlowM3h = "",
+            string endFlowM3h = "")
         {
             PathIndex = pathIndex;
             StartElementId = startElementId;
@@ -36,6 +40,10 @@ namespace VentCalc.Core.Models
             TotalDuctLengthMm = totalDuctLengthMm;
             MaxFlowM3h = maxFlowM3h;
             PathKind = pathKind;
+            StartConnectorKey = startConnectorKey;
+            ConnectedStartElementId = connectedStartElementId;
+            StartFlowM3h = string.IsNullOrWhiteSpace(startFlowM3h) ? maxFlowM3h : startFlowM3h;
+            EndFlowM3h = string.IsNullOrWhiteSpace(endFlowM3h) ? maxFlowM3h : endFlowM3h;
         }
 
         public int PathIndex { get; }
@@ -65,6 +73,16 @@ namespace VentCalc.Core.Models
         public double TotalDuctLengthM => TotalDuctLengthMm / 1000.0;
 
         public string MaxFlowM3h { get; }
+
+        public string StartConnectorKey { get; }
+
+        public string ConnectedStartElementId { get; }
+
+        public string StartFlowM3h { get; }
+
+        public string EndFlowM3h { get; }
+
+        public string FlowRangeM3h => StartFlowM3h == EndFlowM3h ? MaxFlowM3h : $"{StartFlowM3h} → {EndFlowM3h}";
 
         public string PathKind { get; }
     }

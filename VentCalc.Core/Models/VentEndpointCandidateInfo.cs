@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace VentCalc.Core.Models
 {
     public sealed class VentEndpointCandidateInfo
@@ -19,5 +21,9 @@ namespace VentCalc.Core.Models
         public int GraphDegree { get; set; }
 
         public string Reason { get; set; } = string.Empty;
+
+        public int ConnectorStartCount => ConnectorStarts.Count;
+
+        public List<VentConnectorEndpointStartInfo> ConnectorStarts { get; set; } = new List<VentConnectorEndpointStartInfo>();
     }
 }

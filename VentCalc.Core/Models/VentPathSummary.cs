@@ -122,7 +122,7 @@ namespace VentCalc.Core.Models
 
         private static string FormatCandidate(VentEndpointCandidateInfo candidate)
         {
-            return $"{candidate.ElementId} | Role={candidate.Role} | Category={candidate.Category} | Family={candidate.FamilyName} | Type={candidate.TypeName} | Connectors={candidate.ConnectorCount} | Connected={candidate.ConnectedHvacConnectorCount} | Degree={candidate.GraphDegree} | {candidate.Reason}";
+            return $"{candidate.ElementId} | Role={candidate.Role} | Category={candidate.Category} | Family={candidate.FamilyName} | Type={candidate.TypeName} | Connectors={candidate.ConnectorCount} | Connected={candidate.ConnectedHvacConnectorCount} | Degree={candidate.GraphDegree} | ConnectorStarts={candidate.ConnectorStartCount} | {candidate.Reason}";
         }
 
         private static void AppendList(StringBuilder builder, string title, IReadOnlyList<string> values)

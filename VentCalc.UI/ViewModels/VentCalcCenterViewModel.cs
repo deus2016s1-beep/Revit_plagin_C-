@@ -1897,7 +1897,7 @@ namespace VentCalc.UI.ViewModels
 
         public double TotalDuctLengthM => Path.TotalDuctLengthM;
 
-        public string FlowM3h => Path.MaxFlowM3h;
+        public string FlowM3h => Path.FlowRangeM3h;
 
         public double FlowM3hNumeric => TryParseFlow(Path.MaxFlowM3h);
 

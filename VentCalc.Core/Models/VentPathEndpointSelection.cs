@@ -28,6 +28,16 @@ namespace VentCalc.Core.Models
 
         public List<VentEndpointCandidateInfo> FanCandidates { get; set; } = new List<VentEndpointCandidateInfo>();
 
+        public List<VentConnectorEndpointStartInfo> ConnectorStarts { get; set; } = new List<VentConnectorEndpointStartInfo>();
+
+        public int TerminalElementStartCount { get; set; }
+
+        public int ConnectorLevelStartCount { get; set; }
+
+        public int PathsBuiltCount { get; set; }
+
+        public int ConnectorStartsWithoutPathCount { get; set; }
+
         public List<string> Warnings { get; set; } = new List<string>();
     }
 }

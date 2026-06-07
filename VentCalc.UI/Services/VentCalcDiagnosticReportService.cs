@@ -87,6 +87,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"Трасс: {viewModel.PathCount}");
             builder.AppendLine($"Неопределённых МС: {selfCheck.UnknownFittingCount}");
             builder.AppendLine($"МС без ζ: {selfCheck.MissingZetaCount}");
+            builder.AppendLine($"Зонтов без ζ: {selfCheck.HoodsWithoutZetaCount}");
             builder.AppendLine($"Ошибок согласованности: {selfCheck.StateConsistencyErrorCount}");
             builder.AppendLine($"Итог критической трассы: {selfCheck.CriticalPressureLossPa:0.###} Па");
             foreach (string error in selfCheck.Errors)
@@ -279,6 +280,10 @@ namespace VentCalc.UI.Services
             builder.AppendLine($"  detectedDirection: {pathSummary.Direction}");
             builder.AppendLine($"  directionReason: {pathSummary.DirectionReason}");
             builder.AppendLine($"  fallbackUsed: {selection.FallbackUsed}");
+            builder.AppendLine($"  terminalElementStartCount: {selection.TerminalElementStartCount}");
+            builder.AppendLine($"  connectorLevelStartCount: {selection.ConnectorLevelStartCount}");
+            builder.AppendLine($"  pathsBuiltCount: {selection.PathsBuiltCount}");
+            builder.AppendLine($"  connectorStartsWithoutPathCount: {selection.ConnectorStartsWithoutPathCount}");
             AppendEndpointCandidates(builder, "  startCandidates", selection.StartCandidates);
             AppendEndpointCandidates(builder, "  endCandidates", selection.EndCandidates);
             AppendEndpointCandidates(builder, "  hoodCandidates", selection.HoodCandidates);
@@ -359,6 +364,11 @@ namespace VentCalc.UI.Services
                     hoodCandidates = viewModel.PathSummary.EndpointSelection.HoodCandidates,
                     fanCandidates = viewModel.PathSummary.EndpointSelection.FanCandidates,
                     fallbackUsed = viewModel.PathSummary.EndpointSelection.FallbackUsed,
+                    terminalElementStartCount = viewModel.PathSummary.EndpointSelection.TerminalElementStartCount,
+                    connectorLevelStartCount = viewModel.PathSummary.EndpointSelection.ConnectorLevelStartCount,
+                    pathsBuiltCount = viewModel.PathSummary.EndpointSelection.PathsBuiltCount,
+                    connectorStartsWithoutPathCount = viewModel.PathSummary.EndpointSelection.ConnectorStartsWithoutPathCount,
+                    connectorStarts = viewModel.PathSummary.EndpointSelection.ConnectorStarts,
                     noPathReason = viewModel.PathSummary.NoPathReason,
                     warnings = viewModel.PathSummary.Warnings
                 },
@@ -499,6 +509,12 @@ namespace VentCalc.UI.Services
                     totalDuctLengthM = path.TotalDuctLengthM,
                     flowM3h = ParseFlowM3h(path.FlowM3h),
                     flowText = path.FlowM3h,
+                    startConnectorKey = path.Path.StartConnectorKey,
+                    connectedStartElementId = ToLongOrNull(path.Path.ConnectedStartElementId),
+                    startFlowM3h = ParseFlowM3h(path.Path.StartFlowM3h),
+                    endFlowM3h = ParseFlowM3h(path.Path.EndFlowM3h),
+                    maxFlowM3h = ParseFlowM3h(path.Path.MaxFlowM3h),
+                    flowRangeText = path.Path.FlowRangeM3h,
                     frictionPressureLossPa = path.Calculation?.TotalFrictionPressureLossPa ?? 0,
                     localPressureLossPa = path.Calculation?.TotalLocalPressureLossPa ?? 0,
                     totalPressureLossPa = path.TotalPressureLossPa,
@@ -545,12 +561,13 @@ namespace VentCalc.UI.Services
                 localResistanceApplicationsCount = diagnostics.LocalApplications.Count,
                 recommendedZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Рекомендовано"),
                 commentZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Комментарии"),
-                missingZetaApplicationsCount = diagnostics.LocalApplications.Count(item => item.Local.Source == "Не найдено" || item.Local.Source == "Не определено"),
+                missingZetaApplicationsCount = diagnostics.LocalApplications.Count(item => HasMissingZeta(item.Local)),
                 teePassCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TeePass"),
                 teeBranchCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TeeBranch"),
                 transitionNarrowingCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TransitionNarrowing"),
                 transitionExpansionCount = diagnostics.LocalApplications.Count(item => item.Local.PathRole == "TransitionExpansion"),
-                unknownFittingCount = diagnostics.LocalApplications.Count(item => string.Equals(item.Local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase) || item.Local.PathRole.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase)),
+                unknownFittingCount = diagnostics.LocalApplications.Where(item => IsUnknownLocalResistanceRole(item.Local)).Select(item => item.Local.ElementId).Distinct().Count(),
+                hoodsWithoutZetaCount = diagnostics.LocalApplications.Where(item => string.Equals(item.Local.PathRole, "Hood", StringComparison.OrdinalIgnoreCase) && HasMissingZeta(item.Local)).Select(item => item.Local.ElementId).Distinct().Count(),
                 shortDuctsAttachedCount = GetAllSections(viewModel).Count(section => section.ContainsShortDucts),
                 shortDuctsStandaloneCount = GetAllSections(viewModel).Count(section => section.ContainsShortDucts && section.ElementIds.Count == 1),
                 topLocalResistanceContribution = ToJsonTopLocal(diagnostics.TopLocalResistanceContribution),
@@ -567,8 +584,9 @@ namespace VentCalc.UI.Services
             IReadOnlyList<string> consistencyErrors = GetStateConsistencyErrors(allLocals);
             bool calculationHasNaN = HasInvalidNumber(viewModel, double.IsNaN);
             bool calculationHasInfinity = HasInvalidNumber(viewModel, double.IsInfinity);
-            int unknownCount = diagnostics.LocalApplications.Count(item => IsUnknownLocalResistanceRole(item.Local));
-            int missingZetaCount = diagnostics.LocalApplications.Count(item => item.Local.ZetaSource == "Не определено" || (item.Local.EffectiveZeta == 0 && item.Local.AutoZeta == 0 && !string.Equals(item.Local.PathRole, "Cap", StringComparison.OrdinalIgnoreCase)));
+            int unknownCount = diagnostics.LocalApplications.Where(item => IsUnknownLocalResistanceRole(item.Local)).Select(item => item.Local.ElementId).Distinct().Count();
+            int missingZetaCount = diagnostics.LocalApplications.Where(item => HasMissingZeta(item.Local)).Select(item => item.Local.ElementId).Distinct().Count();
+            int hoodsWithoutZetaCount = diagnostics.LocalApplications.Where(item => string.Equals(item.Local.PathRole, "Hood", StringComparison.OrdinalIgnoreCase) && HasMissingZeta(item.Local)).Select(item => item.Local.ElementId).Distinct().Count();
             bool resetVerified = viewModel.ZetaWriteActions
                 .Where(action => action.OverrideStorageType.Contains("Reset", StringComparison.OrdinalIgnoreCase))
                 .All(action => action.VerifiedAfterCommit || action.WriteSucceeded);
@@ -580,6 +598,7 @@ namespace VentCalc.UI.Services
             var errors = new List<string>();
             if (unknownCount > 0) warnings.Add($"Неопределённых фитингов: {unknownCount}.");
             if (missingZetaCount > 0) warnings.Add($"МС без ζ: {missingZetaCount}.");
+            AddEndpointTopologyMessages(viewModel, warnings, errors);
             if (consistencyErrors.Count > 0) errors.AddRange(consistencyErrors);
             if (!viewModel.Paths.Any()) errors.Add(string.IsNullOrWhiteSpace(viewModel.PathSummary?.NoPathReason) ? "Трассы не построены." : viewModel.PathSummary.NoPathReason);
             if (viewModel.CriticalPath == null) errors.Add("Критическая трасса не найдена.");
@@ -595,6 +614,7 @@ namespace VentCalc.UI.Services
                 CriticalPathFound = viewModel.CriticalPath != null,
                 UnknownFittingCount = unknownCount,
                 MissingZetaCount = missingZetaCount,
+                HoodsWithoutZetaCount = hoodsWithoutZetaCount,
                 StateConsistencyErrorCount = consistencyErrors.Count,
                 ResetToAutoVerified = resetVerified,
                 ProjectCatalogReadSucceeded = viewModel.ProjectZetaCatalogRows.Count > 0,
@@ -607,6 +627,39 @@ namespace VentCalc.UI.Services
                 Warnings = warnings,
                 Errors = errors
             };
+        }
+
+        private static void AddEndpointTopologyMessages(VentCalcCenterViewModel viewModel, ICollection<string> warnings, ICollection<string> errors)
+        {
+            VentPathEndpointSelection? selection = viewModel.PathSummary?.EndpointSelection;
+            if (selection == null)
+            {
+                return;
+            }
+
+            if (selection.ConnectorStartsWithoutPathCount > 0)
+            {
+                warnings.Add($"Connector-level стартов без трассы: {selection.ConnectorStartsWithoutPathCount}.");
+            }
+
+            if (selection.ConnectorStarts.Count > 0 && selection.PathsBuiltCount == 0)
+            {
+                errors.Add("Connector-level старты найдены, но трассы от них не построены.");
+            }
+
+            foreach (VentConnectorEndpointStartInfo start in selection.ConnectorStarts.Where(start => !start.PathFound && string.IsNullOrWhiteSpace(start.RejectionReason)))
+            {
+                warnings.Add($"Connector-level старт {start.LogicalKey} не имеет трассы и причины отклонения.");
+            }
+
+            foreach (PathRow path in viewModel.Paths)
+            {
+                string? first = path.ElementIds.FirstOrDefault();
+                if (first != null && path.ElementIds.Skip(1).Any(id => id == first))
+                {
+                    errors.Add($"Трасса {path.PathIndex} повторно посещает стартовое терминальное оборудование {first}.");
+                }
+            }
         }
 
         private static bool HasInvalidNumber(VentCalcCenterViewModel viewModel, Func<double, bool> predicate)
@@ -668,7 +721,7 @@ namespace VentCalc.UI.Services
 
         private static IReadOnlyList<UniqueLocalResistanceElement> BuildMissingLocalElements(IEnumerable<LocalResistanceApplication> applications)
         {
-            return BuildUniqueLocalElements(applications.Where(item => item.Local.Source == "Не найдено" || item.Local.Source == "Не определено"), null);
+            return BuildUniqueLocalElements(applications.Where(item => HasMissingZeta(item.Local)), null);
         }
 
         private static IReadOnlyList<UniqueLocalResistanceElement> BuildUniqueLocalElements(IEnumerable<LocalResistanceApplication> applications, string? source)
@@ -722,10 +775,18 @@ namespace VentCalc.UI.Services
 
         private static bool IsUnknownLocalResistanceRole(LocalResistanceCalculationInfo local)
         {
-            return local.Source == "Не найдено"
-                || local.Source == "Не определено"
-                || string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase)
+            return string.Equals(local.PathRole, "Unknown", StringComparison.OrdinalIgnoreCase)
                 || local.PathRole?.EndsWith("Unknown", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        private static bool HasMissingZeta(LocalResistanceCalculationInfo local)
+        {
+            return !IsUnknownLocalResistanceRole(local)
+                && !string.Equals(local.PathRole, "Cap", StringComparison.OrdinalIgnoreCase)
+                && (local.ZetaSource == "Не определено"
+                    || local.Source == "Не найдено"
+                    || local.Source == "Не определено"
+                    || (local.EffectiveZeta == 0 && local.AutoZeta == 0));
         }
 
         private static void AppendUniqueLocalGroup(StringBuilder builder, string title, IReadOnlyList<UniqueLocalResistanceElement> elements)
@@ -865,6 +926,7 @@ namespace VentCalc.UI.Services
             public bool CriticalPathFound { get; set; }
             public int UnknownFittingCount { get; set; }
             public int MissingZetaCount { get; set; }
+            public int HoodsWithoutZetaCount { get; set; }
             public int StateConsistencyErrorCount { get; set; }
             public bool ResetToAutoVerified { get; set; }
             public bool ProjectCatalogReadSucceeded { get; set; }

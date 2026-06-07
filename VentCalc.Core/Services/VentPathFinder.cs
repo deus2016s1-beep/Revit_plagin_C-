@@ -19,19 +19,26 @@ namespace VentCalc.Core.Services
             int maxPathDepth = networkInfo.Elements.Count + 5;
 
             var paths = new List<VentPathInfo>();
-            foreach (long startElementId in endpointSelection.StartElementIds)
+            if (endpointSelection.SystemDirection == "Exhaust" && endpointSelection.ConnectorStarts.Count > 0)
             {
-                foreach (long endElementId in endpointSelection.EndElementIds)
+                BuildConnectorLevelPaths(endpointSelection, nodesById, adjacency, maxPathDepth, paths);
+            }
+            else
+            {
+                foreach (long startElementId in endpointSelection.StartElementIds)
                 {
-                    if (startElementId == endElementId)
+                    foreach (long endElementId in endpointSelection.EndElementIds)
                     {
-                        continue;
-                    }
+                        if (startElementId == endElementId)
+                        {
+                            continue;
+                        }
 
-                    List<long>? shortestPath = FindShortestPath(adjacency, startElementId, endElementId, maxPathDepth);
-                    if (shortestPath != null)
-                    {
-                        paths.Add(CreatePath(shortestPath, nodesById, endpointSelection.SystemDirection));
+                        List<long>? shortestPath = FindShortestPath(adjacency, startElementId, endElementId, maxPathDepth, new HashSet<long>());
+                        if (shortestPath != null)
+                        {
+                            paths.Add(CreatePath(shortestPath, nodesById, endpointSelection.SystemDirection));
+                        }
                     }
                 }
             }
@@ -43,6 +50,8 @@ namespace VentCalc.Core.Services
                 .ThenBy(path => path.EndElementId)
                 .Select((path, index) => ReindexPath(path, index + 1))
                 .ToList();
+
+            UpdateConnectorStartResults(endpointSelection, paths);
 
             return new VentPathSummary(
                 DetectSystemType(networkInfo),
@@ -104,11 +113,106 @@ namespace VentCalc.Core.Services
             return adjacency;
         }
 
+        private static void BuildConnectorLevelPaths(
+            VentPathEndpointSelection endpointSelection,
+            IReadOnlyDictionary<long, VentNetworkNode> nodesById,
+            IReadOnlyDictionary<long, HashSet<long>> adjacency,
+            int maxPathDepth,
+            ICollection<VentPathInfo> paths)
+        {
+            HashSet<long> terminalBoundaryIds = nodesById
+                .Where(item => item.Value.Role == VentNodeRole.HoodCandidate || item.Value.Role == VentNodeRole.TerminalCandidate)
+                .Select(item => item.Key)
+                .ToHashSet();
+            var pathKeys = new HashSet<string>();
+
+            foreach (VentConnectorEndpointStartInfo start in endpointSelection.ConnectorStarts)
+            {
+                if (!nodesById.ContainsKey(start.ElementId) || !nodesById.ContainsKey(start.ConnectedElementId))
+                {
+                    start.RejectionReason = "Стартовый элемент или соседний элемент коннектора отсутствует в графе сети.";
+                    continue;
+                }
+
+                bool foundPathForStart = false;
+                foreach (long endElementId in endpointSelection.EndElementIds)
+                {
+                    if (start.ConnectedElementId == endElementId)
+                    {
+                        var directPath = new List<long> { start.ElementId, endElementId };
+                        AddConnectorPath(paths, pathKeys, directPath, nodesById, endpointSelection.SystemDirection, start);
+                        foundPathForStart = true;
+                        continue;
+                    }
+
+                    HashSet<long> forbiddenTransit = terminalBoundaryIds.Where(id => id != endElementId).ToHashSet();
+                    List<long>? shortestPath = FindShortestPath(adjacency, start.ConnectedElementId, endElementId, maxPathDepth, forbiddenTransit);
+                    if (shortestPath == null)
+                    {
+                        continue;
+                    }
+
+                    var fullPath = new List<long> { start.ElementId };
+                    fullPath.AddRange(shortestPath);
+                    AddConnectorPath(paths, pathKeys, fullPath, nodesById, endpointSelection.SystemDirection, start);
+                    foundPathForStart = true;
+                }
+
+                if (!foundPathForStart && string.IsNullOrWhiteSpace(start.RejectionReason))
+                {
+                    start.RejectionReason = "Для connector-level старта не найден путь до конечной стороны.";
+                }
+            }
+        }
+
+        private static void AddConnectorPath(
+            ICollection<VentPathInfo> paths,
+            ISet<string> pathKeys,
+            IReadOnlyList<long> elementIds,
+            IReadOnlyDictionary<long, VentNetworkNode> nodesById,
+            string systemDirection,
+            VentConnectorEndpointStartInfo start)
+        {
+            string key = $"{start.LogicalKey}|{string.Join(">", elementIds)}";
+            if (!pathKeys.Add(key))
+            {
+                return;
+            }
+
+            paths.Add(CreatePath(
+                elementIds,
+                nodesById,
+                systemDirection,
+                start.ConnectorKey,
+                start.ConnectedElementId.ToString(CultureInfo.InvariantCulture),
+                FormatFlow(start.FlowM3h)));
+        }
+
+        private static void UpdateConnectorStartResults(VentPathEndpointSelection endpointSelection, IReadOnlyList<VentPathInfo> paths)
+        {
+            foreach (VentConnectorEndpointStartInfo start in endpointSelection.ConnectorStarts)
+            {
+                VentPathInfo? path = paths.FirstOrDefault(item => item.StartElementId == start.ElementId.ToString(CultureInfo.InvariantCulture)
+                    && item.StartConnectorKey == start.ConnectorKey
+                    && item.ConnectedStartElementId == start.ConnectedElementId.ToString(CultureInfo.InvariantCulture));
+                start.PathFound = path != null;
+                start.PathIndex = path?.PathIndex;
+                if (path != null)
+                {
+                    start.RejectionReason = string.Empty;
+                }
+            }
+
+            endpointSelection.PathsBuiltCount = paths.Count;
+            endpointSelection.ConnectorStartsWithoutPathCount = endpointSelection.ConnectorStarts.Count(start => !start.PathFound);
+        }
+
         private static List<long>? FindShortestPath(
             IReadOnlyDictionary<long, HashSet<long>> adjacency,
             long startId,
             long endId,
-            int maxPathDepth)
+            int maxPathDepth,
+            ISet<long> forbiddenTransitElementIds)
         {
             var queue = new Queue<List<long>>();
             var visitedBestDepth = new Dictionary<long, int>();
@@ -133,7 +237,7 @@ namespace VentCalc.Core.Services
 
                 foreach (long next in neighbors.OrderBy(id => id))
                 {
-                    if (path.Contains(next))
+                    if (path.Contains(next) || (next != endId && forbiddenTransitElementIds.Contains(next)))
                     {
                         continue;
                     }
@@ -156,7 +260,10 @@ namespace VentCalc.Core.Services
         private static VentPathInfo CreatePath(
             IReadOnlyList<long> elementIds,
             IReadOnlyDictionary<long, VentNetworkNode> nodesById,
-            string pathKind)
+            string pathKind,
+            string startConnectorKey = "",
+            string connectedStartElementId = "",
+            string startFlowM3h = "")
         {
             var nodes = elementIds.Select(elementId => nodesById[elementId]).ToList();
             var pathNodes = nodes
@@ -185,7 +292,11 @@ namespace VentCalc.Core.Services
                 elementIds.Count,
                 nodes.Where(node => IsCategory(node, "OST_DuctCurves")).Sum(node => node.DuctLengthMm),
                 FormatFlow(nodes.Max(node => ParseNumber(node.FlowM3h))),
-                pathKind);
+                pathKind,
+                startConnectorKey,
+                connectedStartElementId,
+                string.IsNullOrWhiteSpace(startFlowM3h) || startFlowM3h == "—" ? FormatStartFlow(nodes) : startFlowM3h,
+                FormatEndFlow(nodes));
         }
 
         private static VentPathInfo ReindexPath(VentPathInfo path, int pathIndex)
@@ -204,7 +315,11 @@ namespace VentCalc.Core.Services
                 path.TotalElementCount,
                 path.TotalDuctLengthMm,
                 path.MaxFlowM3h,
-                path.PathKind);
+                path.PathKind,
+                path.StartConnectorKey,
+                path.ConnectedStartElementId,
+                path.StartFlowM3h,
+                path.EndFlowM3h);
         }
 
         private static IEnumerable<string> BuildCandidateDetails(
@@ -227,6 +342,18 @@ namespace VentCalc.Core.Services
             return string.Equals(node.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static string FormatStartFlow(IReadOnlyList<VentNetworkNode> nodes)
+        {
+            VentNetworkNode? firstDuct = nodes.FirstOrDefault(node => IsCategory(node, "OST_DuctCurves"));
+            return firstDuct == null ? "—" : FormatFlow(ParseNumber(firstDuct.FlowM3h));
+        }
+
+        private static string FormatEndFlow(IReadOnlyList<VentNetworkNode> nodes)
+        {
+            VentNetworkNode? lastDuct = nodes.LastOrDefault(node => IsCategory(node, "OST_DuctCurves"));
+            return lastDuct == null ? "—" : FormatFlow(ParseNumber(lastDuct.FlowM3h));
+        }
+
         private static string DetectSystemType(VentNetworkInfo networkInfo)
         {
             return networkInfo.Elements
@@ -247,6 +374,11 @@ namespace VentCalc.Core.Services
 
         private static string BuildNoPathReason(VentPathEndpointSelection selection)
         {
+            if (selection.ConnectorStarts.Count > 0 && selection.ConnectorStartsWithoutPathCount == selection.ConnectorStarts.Count)
+            {
+                return $"Найдено {selection.ConnectorStarts.Count} connector-level стартов, но ни один не имеет пути до конечной стороны.";
+            }
+
             if (selection.StartElementIds.Count == 0 && selection.EndElementIds.Count == 0)
             {
                 return "Стартовые и конечные точки не найдены. Проверьте тип системы, терминалы, оборудование и открытые коннекторы.";
