@@ -16,44 +16,50 @@ namespace VentCalc.Core.Services
             ClearEndpointFlags(network.Elements);
 
             var selection = new VentPathEndpointSelection();
-            string systemText = DetectSystemText(network);
-            ApplyDirection(selection, systemText);
+            ApplyDirection(selection, network);
 
-            List<VentNetworkNode> equipment = NodesByRole(network, VentNodeRole.EquipmentCandidate);
             List<VentNetworkNode> openEnds = NodesByRole(network, VentNodeRole.OpenEndCandidate);
+            List<VentNetworkNode> hoods = NodesByRole(network, VentNodeRole.HoodCandidate);
             List<VentNetworkNode> terminals = NodesByRole(network, VentNodeRole.TerminalCandidate);
+            List<VentNetworkNode> fanCandidates = NodesByRole(network, VentNodeRole.FanCandidate);
+            List<VentNetworkNode> equipment = NodesByRole(network, VentNodeRole.EquipmentCandidate);
             List<VentNetworkNode> caps = NodesByRole(network, VentNodeRole.Cap);
+            List<VentNetworkNode> terminalSide = terminals.Concat(hoods).OrderBy(node => node.ElementId).ToList();
 
             selection.IgnoredCapElementIds = ToIds(caps);
+            selection.OpenEndCandidates = ToCandidateInfos(openEnds);
+            selection.HoodCandidates = ToCandidateInfos(hoods);
+            selection.FanCandidates = ToCandidateInfos(fanCandidates);
 
             if (selection.SystemDirection == "Supply")
             {
-                List<VentNetworkNode> starts = equipment.Count > 0 ? equipment : openEnds;
-                List<VentNetworkNode> ends = terminals;
-                if (equipment.Count == 0 && openEnds.Count > 0)
+                List<VentNetworkNode> starts = fanCandidates.Count > 0 ? fanCandidates : equipment.Count > 0 ? equipment : openEnds;
+                List<VentNetworkNode> ends = terminalSide;
+                if (fanCandidates.Count == 0 && equipment.Count == 0 && openEnds.Count > 0)
                 {
                     selection.Warnings.Add("Оборудование не найдено; используется открытый магистральный конец.");
                 }
 
-                ApplyCandidates(selection, starts, ends);
+                ApplyCandidates(selection, starts, ends, network.Elements);
             }
             else if (selection.SystemDirection == "Exhaust")
             {
-                List<VentNetworkNode> starts = terminals;
-                List<VentNetworkNode> ends = equipment.Count > 0 ? equipment : openEnds;
-                if (equipment.Count == 0 && openEnds.Count > 0)
+                List<VentNetworkNode> starts = terminalSide;
+                List<VentNetworkNode> ends = fanCandidates.Count > 0 ? fanCandidates : ChooseMainOpenEnds(openEnds);
+                if (fanCandidates.Count == 0 && openEnds.Count > 0)
                 {
-                    selection.Warnings.Add("Оборудование не найдено; используется открытый магистральный конец.");
+                    selection.Warnings.Add("Вентилятор/вытяжная установка не найдены; используется один открытый магистральный конец.");
                 }
 
-                ApplyCandidates(selection, starts, ends);
+                ApplyCandidates(selection, starts, ends, network.Elements);
             }
             else
             {
-                selection.Warnings.Add("Направление системы определено приблизительно.");
-                List<VentNetworkNode> starts = terminals;
-                List<VentNetworkNode> ends = equipment.Count > 0 ? equipment : openEnds;
-                ApplyCandidates(selection, starts, ends);
+                selection.FallbackUsed = true;
+                selection.Warnings.Add("Направление системы определено приблизительно по топологии сети.");
+                List<VentNetworkNode> starts = terminalSide;
+                List<VentNetworkNode> ends = fanCandidates.Count > 0 ? fanCandidates : ChooseMainOpenEnds(openEnds);
+                ApplyCandidates(selection, starts, ends, network.Elements);
             }
 
             if (selection.StartElementIds.Count == 0)
@@ -81,35 +87,71 @@ namespace VentCalc.Core.Services
         private static void ApplyCandidates(
             VentPathEndpointSelection selection,
             IReadOnlyList<VentNetworkNode> startNodes,
-            IReadOnlyList<VentNetworkNode> endNodes)
+            IReadOnlyList<VentNetworkNode> endNodes,
+            IReadOnlyList<VentNetworkNode> allNodes)
         {
-            foreach (VentNetworkNode node in startNodes.Where(node => node.Role != VentNodeRole.Cap))
+            List<VentNetworkNode> starts = startNodes.Where(node => node.Role != VentNodeRole.Cap).ToList();
+            List<VentNetworkNode> ends = endNodes.Where(node => node.Role != VentNodeRole.Cap).ToList();
+            var selectedIds = new HashSet<string>(starts.Concat(ends).Select(node => node.ElementId));
+
+            foreach (VentNetworkNode node in starts)
             {
                 node.IsStartCandidate = true;
             }
 
-            foreach (VentNetworkNode node in endNodes.Where(node => node.Role != VentNodeRole.Cap))
+            foreach (VentNetworkNode node in ends)
             {
                 node.IsEndCandidate = true;
             }
 
-            selection.StartElementIds = ToIds(startNodes.Where(node => node.Role != VentNodeRole.Cap));
-            selection.EndElementIds = ToIds(endNodes.Where(node => node.Role != VentNodeRole.Cap));
+            selection.StartElementIds = ToIds(starts);
+            selection.EndElementIds = ToIds(ends);
+            selection.StartCandidates = ToCandidateInfos(starts);
+            selection.EndCandidates = ToCandidateInfos(ends);
+            selection.RejectedCandidates = ToCandidateInfos(allNodes
+                .Where(node => IsEndpointRelevantRole(node.Role) && node.Role != VentNodeRole.Cap && !selectedIds.Contains(node.ElementId))
+                .OrderBy(node => node.ElementId));
         }
 
-        private static void ApplyDirection(VentPathEndpointSelection selection, string systemText)
+        private static bool IsEndpointRelevantRole(VentNodeRole role)
         {
-            if (ContainsAny(systemText, "Приточный", "Приток", "Supply"))
+            return role == VentNodeRole.TerminalCandidate
+                || role == VentNodeRole.HoodCandidate
+                || role == VentNodeRole.FanCandidate
+                || role == VentNodeRole.EquipmentCandidate
+                || role == VentNodeRole.OpenEndCandidate
+                || role == VentNodeRole.InlineEquipment;
+        }
+
+        private static void ApplyDirection(VentPathEndpointSelection selection, VentNetworkInfo network)
+        {
+            string systemTypeText = string.Join(" ", network.Elements.Select(node => node.SystemType));
+            if (ContainsSupply(systemTypeText))
             {
                 selection.SystemDirection = "Supply";
-                selection.DirectionReason = "SystemType/SystemName содержит признак приточной системы.";
+                selection.DirectionReason = "SystemType соответствует SupplyAir/Приточный воздух.";
                 return;
             }
 
-            if (ContainsAny(systemText, "Вытяжной", "Вытяжка", "Exhaust"))
+            if (ContainsExhaust(systemTypeText))
             {
                 selection.SystemDirection = "Exhaust";
-                selection.DirectionReason = "SystemType/SystemName содержит признак вытяжной системы.";
+                selection.DirectionReason = "SystemType соответствует ReturnAir/Отработанный воздух.";
+                return;
+            }
+
+            string systemNameText = string.Join(" ", network.Elements.Select(node => node.SystemName));
+            if (ContainsSupply(systemNameText) || HasSupplyNameFallback(systemNameText))
+            {
+                selection.SystemDirection = "Supply";
+                selection.DirectionReason = "SystemName содержит признак приточной системы; fallback по имени использован после SystemType.";
+                return;
+            }
+
+            if (ContainsExhaust(systemNameText) || HasExhaustNameFallback(systemNameText))
+            {
+                selection.SystemDirection = "Exhaust";
+                selection.DirectionReason = "SystemName содержит признак вытяжной системы; fallback по имени использован после SystemType.";
                 return;
             }
 
@@ -117,32 +159,97 @@ namespace VentCalc.Core.Services
             selection.DirectionReason = "SystemType/SystemName не содержит явного признака приточной или вытяжной системы.";
         }
 
-        private static string DetectSystemText(VentNetworkInfo network)
+        private static bool ContainsSupply(string text)
         {
-            return string.Join(" ", network.Elements.Select(node => $"{node.SystemType} {node.SystemName}"));
+            return ContainsAny(text, "SupplyAir", "Supply Air", "Приточный воздух", "приточная", "приток", "supply");
+        }
+
+        private static bool ContainsExhaust(string text)
+        {
+            return ContainsAny(text,
+                "ExhaustAir",
+                "Exhaust Air",
+                "ReturnAir",
+                "Return Air",
+                "Отработанный воздух",
+                "Вытяжной воздух",
+                "вытяжная",
+                "вытяжка",
+                "exhaust",
+                "return");
+        }
+
+        private static bool HasSupplyNameFallback(string text)
+        {
+            return ContainsAny(text, "П1", "П 1", "П2", "П 2", "П3", "П 3");
+        }
+
+        private static bool HasExhaustNameFallback(string text)
+        {
+            return ContainsAny(text, "В1", "В 1", "В2", "В 2", "В3", "В 3");
+        }
+
+        private static List<VentNetworkNode> ChooseMainOpenEnds(IReadOnlyList<VentNetworkNode> openEnds)
+        {
+            VentNetworkNode? selected = openEnds
+                .OrderByDescending(node => node.ConnectedElementIds.Count)
+                .ThenBy(node => ParseElementId(node.ElementId) ?? long.MaxValue)
+                .FirstOrDefault();
+            return selected == null ? new List<VentNetworkNode>() : new List<VentNetworkNode> { selected };
         }
 
         private static List<VentNetworkNode> NodesByRole(VentNetworkInfo network, VentNodeRole role)
         {
             return network.Elements
                 .Where(node => node.Role == role)
-                .OrderBy(node => node.ElementId)
+                .OrderBy(node => ParseElementId(node.ElementId) ?? long.MaxValue)
                 .ToList();
         }
 
         private static List<long> ToIds(IEnumerable<VentNetworkNode> nodes)
         {
             return nodes
-                .Select(node => long.TryParse(node.ElementId, NumberStyles.Integer, CultureInfo.InvariantCulture, out long id) ? id : 0)
+                .Select(node => ParseElementId(node.ElementId) ?? 0)
                 .Where(id => id != 0)
                 .Distinct()
-                .OrderBy(id => id)
                 .ToList();
+        }
+
+        private static List<VentEndpointCandidateInfo> ToCandidateInfos(IEnumerable<VentNetworkNode> nodes)
+        {
+            return nodes
+                .OrderBy(node => ParseElementId(node.ElementId) ?? long.MaxValue)
+                .Select(node => new VentEndpointCandidateInfo
+                {
+                    ElementId = node.ElementId,
+                    Category = node.CategoryName,
+                    FamilyName = node.FamilyName,
+                    TypeName = node.TypeName,
+                    Role = node.Role.ToString(),
+                    ConnectorCount = node.ConnectorCount,
+                    ConnectedHvacConnectorCount = Math.Max(0, node.ConnectorCount - node.OpenConnectorCount),
+                    GraphDegree = node.ConnectedElementIds.Count,
+                    Reason = node.PathRoleReason
+                })
+                .ToList();
+        }
+
+        private static long? ParseElementId(string elementId)
+        {
+            return long.TryParse(elementId, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed) ? parsed : null;
         }
 
         private static bool ContainsAny(string text, params string[] patterns)
         {
-            return patterns.Any(pattern => text.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0);
+            foreach (string pattern in patterns)
+            {
+                if (text.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

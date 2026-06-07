@@ -83,22 +83,48 @@ namespace VentCalc.Revit.Services
 
         public static string DetermineDirection(string systemName, string systemType)
         {
-            string text = string.Join(" ", systemName, systemType);
-            if (text.IndexOf("прит", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.IndexOf("Supply", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.StartsWith("П", StringComparison.OrdinalIgnoreCase))
+            if (ContainsSupply(systemType))
             {
                 return "Supply";
             }
 
-            if (text.IndexOf("выт", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.IndexOf("Exhaust", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.StartsWith("В", StringComparison.OrdinalIgnoreCase))
+            if (ContainsExhaust(systemType))
+            {
+                return "Exhaust";
+            }
+
+            if (ContainsSupply(systemName) || StartsWithSystemPrefix(systemName, "П", "P"))
+            {
+                return "Supply";
+            }
+
+            if (ContainsExhaust(systemName) || StartsWithSystemPrefix(systemName, "В", "V"))
             {
                 return "Exhaust";
             }
 
             return "Unknown";
+        }
+
+        private static bool ContainsSupply(string text)
+        {
+            return ContainsAny(text, "SupplyAir", "Supply Air", "Приточный воздух", "приточная", "приток", "supply");
+        }
+
+        private static bool ContainsExhaust(string text)
+        {
+            return ContainsAny(text, "ExhaustAir", "Exhaust Air", "ReturnAir", "Return Air", "Отработанный воздух", "Вытяжной воздух", "вытяжная", "вытяжка", "exhaust", "return");
+        }
+
+        private static bool ContainsAny(string text, params string[] patterns)
+        {
+            return patterns.Any(pattern => (text ?? string.Empty).IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool StartsWithSystemPrefix(string systemName, params string[] prefixes)
+        {
+            string trimmed = (systemName ?? string.Empty).TrimStart();
+            return prefixes.Any(prefix => trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string ReadSystemName(RevitParameterReader parameterReader, Element element)

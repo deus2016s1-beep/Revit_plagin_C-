@@ -78,7 +78,8 @@ namespace VentCalc.Core.Services
             }
 
             if (ContainsAny(text, "Реш", "Grille", "Diffuser")) return Set(role, "Terminal", "Grille", "Решётка/диффузор по имени или категории.");
-            if (ContainsAny(text, "Зонт", "Hood")) return Set(role, "Terminal", "Hood", "Зонт по имени или семейству.");
+            if (ContainsAny(text, "Зонт", "Hood", "Canopy", "местный отсос")) return Set(role, "Terminal", "Hood", "Зонт по имени или семейству.");
+            if (IsTerminalLikeMechanicalEquipment(data, previous, next)) return Set(role, "Terminal", "Hood", "Листовое оборудование с одним соседним воздуховодом рассматривается как зонт/местный отсос.");
             if (ContainsAny(text, "Противопожар", "Fire")) return Set(role, "Damper", "FireDamper", "Противопожарный клапан.");
             if (ContainsAny(text, "Обрат", "Backdraft", "Check")) return Set(role, "Damper", "BackdraftDamper", "Обратный клапан.");
             if (ContainsAny(text, "Дроссель", "Damper")) return Set(role, "Damper", "Damper", "Клапан/дроссель.");
@@ -93,6 +94,25 @@ namespace VentCalc.Core.Services
             role.Reason = "Не удалось определить роль фитинга в трассе по данным элемента.";
             role.Warnings.Add("Местное сопротивление не рассчитано: роль фитинга в трассе не определена.");
             return role;
+        }
+
+        private static bool IsTerminalLikeMechanicalEquipment(LocalResistanceElementData data, DuctCalculationInfo? previous, DuctCalculationInfo? next)
+        {
+            bool isMechanicalEquipment = string.Equals(data.CategoryKey, "OST_MechanicalEquipment", StringComparison.OrdinalIgnoreCase)
+                || data.CategoryName.IndexOf("Оборуд", StringComparison.OrdinalIgnoreCase) >= 0
+                || data.CategoryName.IndexOf("Mechanical Equipment", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!isMechanicalEquipment)
+            {
+                return false;
+            }
+
+            string text = string.Join(" ", data.Name, data.TypeName, data.FamilyName, data.CategoryName);
+            if (ContainsAny(text, "вентилятор", "fan", "ahu", "вентустановка", "установка", "калорифер", "filter", "фильтр"))
+            {
+                return false;
+            }
+
+            return previous == null ^ next == null;
         }
 
         private static string ResolveTransitionRole(DuctCalculationInfo? previous, DuctCalculationInfo? next, FittingPathRoleInfo role)

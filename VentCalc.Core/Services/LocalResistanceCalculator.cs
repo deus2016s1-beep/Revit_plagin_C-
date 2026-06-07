@@ -277,7 +277,7 @@ namespace VentCalc.Core.Services
                 "CrossPass" => Recommended(0.50, "Крестовина проход"),
                 "CrossBranch" => Recommended(1.50, "Крестовина ответвление"),
                 "Grille" => Recommended(2.00, "Решетка"),
-                "Hood" => Recommended(1.30, "Зонт"),
+                "Hood" => new ZetaResult(0, "Не определено", "Зонт", new[] { "Для зонта не задан коэффициент ζ." }),
                 "Damper" => Recommended(0.40, "Дроссель-клапан"),
                 "FireDamper" => Recommended(0.50, "Противопожарный клапан"),
                 "BackdraftDamper" => Recommended(2.00, "Обратный клапан"),
@@ -321,7 +321,7 @@ namespace VentCalc.Core.Services
             if (ContainsAny(text, "Вход", "Inlet")) return Recommended(0.50, "Вход");
             if (ContainsAny(text, "Выход", "Outlet")) return Recommended(1.00, "Выход");
             if (ContainsAny(text, "Реш", "Grille", "Diffuser")) return Recommended(2.00, "Решетка");
-            if (ContainsAny(text, "Зонт", "Hood")) return Recommended(1.30, "Зонт");
+            if (ContainsAny(text, "Зонт", "Hood", "Canopy", "местный отсос")) return new ZetaResult(0, "Не определено", "Зонт", new[] { "Для зонта не задан коэффициент ζ." });
             if (ContainsAny(text, "Дефлектор", "Deflector")) return Recommended(1.00, "Дефлектор");
 
             return new ZetaResult(0, "Не найдено", "Не классифицировано", new[] { "ζ не найден в комментариях и не подобран по рекомендациям." });

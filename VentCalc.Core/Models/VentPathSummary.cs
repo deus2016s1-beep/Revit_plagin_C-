@@ -18,6 +18,7 @@ namespace VentCalc.Core.Models
             IEnumerable<string> warnings,
             IEnumerable<string> startElementIds,
             IEnumerable<string> endElementIds,
+            VentPathEndpointSelection endpointSelection,
             IEnumerable<VentPathInfo> paths,
             string noPathReason)
         {
@@ -31,6 +32,7 @@ namespace VentCalc.Core.Models
             Warnings = new ReadOnlyCollection<string>(warnings.ToList());
             StartElementIds = new ReadOnlyCollection<string>(startElementIds.ToList());
             EndElementIds = new ReadOnlyCollection<string>(endElementIds.ToList());
+            EndpointSelection = endpointSelection;
             Paths = new ReadOnlyCollection<VentPathInfo>(paths.ToList());
             NoPathReason = noPathReason;
         }
@@ -55,6 +57,8 @@ namespace VentCalc.Core.Models
 
         public IReadOnlyList<string> EndElementIds { get; }
 
+        public VentPathEndpointSelection EndpointSelection { get; }
+
         public IReadOnlyList<VentPathInfo> Paths { get; }
 
         public string NoPathReason { get; }
@@ -74,6 +78,10 @@ namespace VentCalc.Core.Models
 
             AppendList(builder, "Стартовые кандидаты", StartCandidateDetails);
             AppendList(builder, "Конечные кандидаты", EndCandidateDetails);
+            AppendList(builder, "Кандидаты-зонты", EndpointSelection.HoodCandidates.Select(candidate => FormatCandidate(candidate)).ToList());
+            AppendList(builder, "Открытые концы", EndpointSelection.OpenEndCandidates.Select(candidate => FormatCandidate(candidate)).ToList());
+            AppendList(builder, "Кандидаты-вентиляторы", EndpointSelection.FanCandidates.Select(candidate => FormatCandidate(candidate)).ToList());
+            AppendList(builder, "Отклонённые кандидаты", EndpointSelection.RejectedCandidates.Select(candidate => FormatCandidate(candidate)).ToList());
             AppendList(builder, "Игнорируемые заглушки", IgnoredCapDetails);
             AppendList(builder, "Предупреждения", Warnings);
 
@@ -110,6 +118,11 @@ namespace VentCalc.Core.Models
             }
 
             return builder.ToString();
+        }
+
+        private static string FormatCandidate(VentEndpointCandidateInfo candidate)
+        {
+            return $"{candidate.ElementId} | Role={candidate.Role} | Category={candidate.Category} | Family={candidate.FamilyName} | Type={candidate.TypeName} | Connectors={candidate.ConnectorCount} | Connected={candidate.ConnectedHvacConnectorCount} | Degree={candidate.GraphDegree} | {candidate.Reason}";
         }
 
         private static void AppendList(StringBuilder builder, string title, IReadOnlyList<string> values)

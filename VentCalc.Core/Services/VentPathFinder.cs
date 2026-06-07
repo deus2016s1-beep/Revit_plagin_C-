@@ -55,6 +55,7 @@ namespace VentCalc.Core.Services
                 endpointSelection.Warnings,
                 endpointSelection.StartElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)),
                 endpointSelection.EndElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)),
+                endpointSelection,
                 paths,
                 paths.Count == 0 ? BuildNoPathReason(endpointSelection) : string.Empty);
         }
@@ -253,12 +254,17 @@ namespace VentCalc.Core.Services
 
             if (selection.StartElementIds.Count == 0)
             {
+                if (selection.HoodCandidates.Count > 0 || selection.OpenEndCandidates.Count > 0)
+                {
+                    return $"Найдено {selection.HoodCandidates.Count} зонтов и {selection.OpenEndCandidates.Count} открытых концов, но не сформирована стартовая сторона трассировки.";
+                }
+
                 return "Стартовые точки не найдены. Заглушки не используются как старты; для притока нужен элемент оборудования или открытый магистральный конец.";
             }
 
             if (selection.EndElementIds.Count == 0)
             {
-                return "Конечные точки не найдены. Заглушки не используются как концы; для притока нужны терминалы/решётки.";
+                return "Конечные точки не найдены. Заглушки не используются как концы; для притока нужны терминалы/решётки, а для вытяжки — вентилятор или открытый магистральный конец.";
             }
 
             return "Между найденными стартовыми и конечными точками нет трасс по графу сети.";

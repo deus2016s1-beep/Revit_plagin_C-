@@ -130,6 +130,7 @@ namespace VentCalc.UI.Services
             builder.AppendLine(systemPairs.Count <= 1
                 ? $"Сеть содержит одну систему: {systemPairs.FirstOrDefault() ?? viewModel.SystemName}"
                 : "WARNING: В найденной сети обнаружены элементы разных систем: " + string.Join("; ", systemPairs));
+            AppendEndpointSelection(builder, viewModel.PathSummary);
             builder.AppendLine();
 
             builder.AppendLine("3. Настройки расчёта");
@@ -265,6 +266,36 @@ namespace VentCalc.UI.Services
             return builder.ToString();
         }
 
+        private static void AppendEndpointSelection(StringBuilder builder, VentPathSummary? pathSummary)
+        {
+            if (pathSummary == null)
+            {
+                builder.AppendLine("Endpoint selection: —");
+                return;
+            }
+
+            VentPathEndpointSelection selection = pathSummary.EndpointSelection;
+            builder.AppendLine("Endpoint selection:");
+            builder.AppendLine($"  detectedDirection: {pathSummary.Direction}");
+            builder.AppendLine($"  directionReason: {pathSummary.DirectionReason}");
+            builder.AppendLine($"  fallbackUsed: {selection.FallbackUsed}");
+            AppendEndpointCandidates(builder, "  startCandidates", selection.StartCandidates);
+            AppendEndpointCandidates(builder, "  endCandidates", selection.EndCandidates);
+            AppendEndpointCandidates(builder, "  hoodCandidates", selection.HoodCandidates);
+            AppendEndpointCandidates(builder, "  fanCandidates", selection.FanCandidates);
+            AppendEndpointCandidates(builder, "  openEndCandidates", selection.OpenEndCandidates);
+            AppendEndpointCandidates(builder, "  rejectedCandidates", selection.RejectedCandidates);
+        }
+
+        private static void AppendEndpointCandidates(StringBuilder builder, string title, IReadOnlyList<VentEndpointCandidateInfo> candidates)
+        {
+            builder.AppendLine($"{title}: {candidates.Count}");
+            foreach (VentEndpointCandidateInfo candidate in candidates)
+            {
+                builder.AppendLine($"    ElementId={candidate.ElementId}; category={candidate.Category}; family={candidate.FamilyName}; type={candidate.TypeName}; role={candidate.Role}; connectors={candidate.ConnectorCount}; connected={candidate.ConnectedHvacConnectorCount}; degree={candidate.GraphDegree}; reason={candidate.Reason}");
+            }
+        }
+
         private static string BuildJsonReport(VentCalcCenterViewModel viewModel, DateTime createdAt, ReportDiagnostics diagnostics)
         {
             PathCalculationInfo? criticalPath = viewModel.CriticalPath;
@@ -316,6 +347,20 @@ namespace VentCalc.UI.Services
                     selectedSystemType = viewModel.SelectedCatalogSystem?.SystemType ?? viewModel.SystemType,
                     componentCount = viewModel.SystemComponentCount,
                     systemPairs = GetSystemPairs(viewModel)
+                },
+                endpointSelection = viewModel.PathSummary == null ? null : new
+                {
+                    detectedDirection = viewModel.PathSummary.Direction,
+                    directionReason = viewModel.PathSummary.DirectionReason,
+                    startCandidates = viewModel.PathSummary.EndpointSelection.StartCandidates,
+                    endCandidates = viewModel.PathSummary.EndpointSelection.EndCandidates,
+                    rejectedCandidates = viewModel.PathSummary.EndpointSelection.RejectedCandidates,
+                    openEndCandidates = viewModel.PathSummary.EndpointSelection.OpenEndCandidates,
+                    hoodCandidates = viewModel.PathSummary.EndpointSelection.HoodCandidates,
+                    fanCandidates = viewModel.PathSummary.EndpointSelection.FanCandidates,
+                    fallbackUsed = viewModel.PathSummary.EndpointSelection.FallbackUsed,
+                    noPathReason = viewModel.PathSummary.NoPathReason,
+                    warnings = viewModel.PathSummary.Warnings
                 },
                 settings = new
                 {
@@ -536,7 +581,7 @@ namespace VentCalc.UI.Services
             if (unknownCount > 0) warnings.Add($"Неопределённых фитингов: {unknownCount}.");
             if (missingZetaCount > 0) warnings.Add($"МС без ζ: {missingZetaCount}.");
             if (consistencyErrors.Count > 0) errors.AddRange(consistencyErrors);
-            if (!viewModel.Paths.Any()) errors.Add("Трассы не построены.");
+            if (!viewModel.Paths.Any()) errors.Add(string.IsNullOrWhiteSpace(viewModel.PathSummary?.NoPathReason) ? "Трассы не построены." : viewModel.PathSummary.NoPathReason);
             if (viewModel.CriticalPath == null) errors.Add("Критическая трасса не найдена.");
             if (calculationHasNaN) errors.Add("В расчёте есть NaN.");
             if (calculationHasInfinity) errors.Add("В расчёте есть Infinity.");

@@ -9,6 +9,9 @@ namespace VentCalc.Core.Models
         TerminalCandidate = 4,
         EquipmentCandidate = 5,
         OpenEndCandidate = 6,
-        Cap = 7
+        Cap = 7,
+        HoodCandidate = 8,
+        FanCandidate = 9,
+        InlineEquipment = 10
     }
 }

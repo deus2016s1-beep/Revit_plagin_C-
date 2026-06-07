@@ -20,22 +20,28 @@ namespace VentCalc.Core.Services
             node.IsEndCandidate = false;
             node.IsIgnoredForPathSearch = false;
 
+            if (IsCapLike(node))
+            {
+                SetRole(node, VentNodeRole.Cap, "Элемент похож на заглушку по имени/типу/семейству.");
+                node.IsIgnoredForPathSearch = true;
+                return;
+            }
+
             if (IsCategory(node, "OST_DuctTerminal"))
             {
+                if (IsHoodLike(node))
+                {
+                    SetRole(node, VentNodeRole.HoodCandidate, "Терминал распознан как зонт/местный отсос по имени, типу или семейству.");
+                    return;
+                }
+
                 SetRole(node, VentNodeRole.TerminalCandidate, "Категория OST_DuctTerminal: терминал/решётка.");
                 return;
             }
 
             if (IsCategory(node, "OST_MechanicalEquipment"))
             {
-                SetRole(node, VentNodeRole.EquipmentCandidate, "Категория OST_MechanicalEquipment: оборудование.");
-                return;
-            }
-
-            if (IsCapLike(node))
-            {
-                SetRole(node, VentNodeRole.Cap, "Элемент похож на заглушку по имени/типу/семейству.");
-                node.IsIgnoredForPathSearch = true;
+                ClassifyMechanicalEquipment(node);
                 return;
             }
 
@@ -66,6 +72,74 @@ namespace VentCalc.Core.Services
             SetRole(node, VentNodeRole.Unknown, "Роль узла не определена.");
         }
 
+        private static void ClassifyMechanicalEquipment(VentNetworkNode node)
+        {
+            if (IsFanOrAhuLike(node))
+            {
+                SetRole(node, VentNodeRole.FanCandidate, "Оборудование распознано как вентилятор/вентустановка по имени, типу или семейству.");
+                return;
+            }
+
+            if (IsHoodLike(node))
+            {
+                SetRole(node, VentNodeRole.HoodCandidate, "Оборудование распознано как зонт/местный отсос по имени, типу или семейству.");
+                return;
+            }
+
+            if (IsTerminalLikeEquipment(node))
+            {
+                SetRole(node, VentNodeRole.HoodCandidate, "Листовое оборудование с одним HVAC-коннектором рассматривается как терминальное устройство вытяжки.");
+                return;
+            }
+
+            if (node.ConnectorCount >= 2 || node.ConnectedElementIds.Count >= 2)
+            {
+                SetRole(node, VentNodeRole.InlineEquipment, "Оборудование имеет два и более вентиляционных соединения и считается проходным.");
+                return;
+            }
+
+            SetRole(node, VentNodeRole.EquipmentCandidate, "Категория OST_MechanicalEquipment: оборудование без признаков терминала или проходного элемента.");
+        }
+
+        private static bool IsTerminalLikeEquipment(VentNetworkNode node)
+        {
+            return node.ConnectorCount == 1
+                && node.ConnectedElementIds.Count <= 1
+                && !IsFanOrAhuLike(node)
+                && !IsPassThroughEquipment(node);
+        }
+
+        private static bool IsHoodLike(VentNetworkNode node)
+        {
+            string text = BuildSearchText(node);
+            return ContainsAny(text,
+                "зонт",
+                "hood",
+                "вытяжной зонт",
+                "кухонный зонт",
+                "местный отсос",
+                "canopy");
+        }
+
+        private static bool IsFanOrAhuLike(VentNetworkNode node)
+        {
+            string text = BuildSearchText(node);
+            return ContainsAny(text,
+                "вентилятор",
+                "fan",
+                "ahu",
+                "air handling",
+                "вентустановка",
+                "установка",
+                "агрегат");
+        }
+
+        private static bool IsPassThroughEquipment(VentNetworkNode node)
+        {
+            string text = BuildSearchText(node);
+            return ContainsAny(text, "теплообмен", "калорифер", "heater", "cooler", "coil", "filter", "фильтр");
+        }
+
         private static void SetRole(VentNetworkNode node, VentNodeRole role, string reason)
         {
             node.Role = role;
@@ -79,14 +153,30 @@ namespace VentCalc.Core.Services
                 return false;
             }
 
-            string text = string.Join(" ",
+            string text = BuildSearchText(node);
+            return ContainsAny(text, "Заглушка", "Cap");
+        }
+
+        private static string BuildSearchText(VentNetworkNode node)
+        {
+            return string.Join(" ",
                 node.Name ?? string.Empty,
                 node.TypeName ?? string.Empty,
                 node.FamilyName ?? string.Empty,
                 node.CategoryName ?? string.Empty);
+        }
 
-            return text.IndexOf("Заглушка", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.IndexOf("Cap", StringComparison.OrdinalIgnoreCase) >= 0;
+        private static bool ContainsAny(string text, params string[] patterns)
+        {
+            foreach (string pattern in patterns)
+            {
+                if (text.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool IsCategory(VentNetworkNode node, string categoryKey)
