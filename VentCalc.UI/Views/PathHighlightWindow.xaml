@@ -1,0 +1,65 @@
+<Window x:Class="VentCalc.UI.Views.PathHighlightWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VentCalc — Подсветка трасс"
+        Width="720"
+        Height="560"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" Text="Подсветка трасс" FontSize="18" FontWeight="Bold" Margin="0,0,0,10" />
+        <TextBlock DockPanel.Dock="Bottom" Text="Цветовая подсветка не меняет текущее выделение Revit. Для приближения используется ShowElements." Foreground="#FF555555" TextWrapping="Wrap" Margin="0,10,0,0" />
+        <StackPanel>
+            <GroupBox Header="Загрузка" Padding="8" Margin="0,0,0,8">
+                <DockPanel>
+                    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <Button Content="Загрузить по выбранному элементу" Command="{Binding LoadSelectedSystemCommand}" />
+                        <Button Content="Трассы через выбранный элемент" Command="{Binding LoadPathsThroughSelectedElementCommand}" />
+                        <Button Content="Загрузить систему из списка" Command="{Binding LoadCatalogSystemCommand}" />
+                    </WrapPanel>
+                    <ComboBox ItemsSource="{Binding SystemCatalog}" SelectedItem="{Binding SelectedCatalogSystem, Mode=TwoWay}" DisplayMemberPath="DisplayName" MinWidth="280" />
+                </DockPanel>
+            </GroupBox>
+
+            <GroupBox Header="Отображение" Padding="8" Margin="0,0,0,8">
+                <WrapPanel>
+                    <TextBlock Text="Режим:" FontWeight="SemiBold" Margin="0,4,8,0" />
+                    <RadioButton Content="Обычная" IsChecked="{Binding IsNormalHighlightMode, Mode=TwoWay}" Margin="0,4,12,0" />
+                    <RadioButton Content="Фокус" IsChecked="{Binding IsFocusHighlightMode, Mode=TwoWay}" Margin="0,4,16,0" />
+                    <Button Content="Предыдущая" Command="{Binding PreviousPathCommand}" />
+                    <Button Content="Следующая" Command="{Binding NextPathCommand}" />
+                    <Button Content="Подсветить выбранную" Command="{Binding HighlightSelectedPathCommand}" />
+                    <Button Content="Подсветить критическую" Command="{Binding HighlightCriticalPathCommand}" />
+                    <Button Content="Очистить" Command="{Binding ClearHighlightCommand}" />
+                </WrapPanel>
+            </GroupBox>
+
+            <Border Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
+                <UniformGrid Columns="4">
+                    <StackPanel><TextBlock Text="Система" FontWeight="SemiBold" /><TextBlock Text="{Binding SystemName}" /></StackPanel>
+                    <StackPanel><TextBlock Text="Трасс" FontWeight="SemiBold" /><TextBlock Text="{Binding PathCount}" /></StackPanel>
+                    <StackPanel><TextBlock Text="Критическая" FontWeight="SemiBold" /><TextBlock Text="{Binding CriticalPathDisplay}" /></StackPanel>
+                    <StackPanel><TextBlock Text="Потери крит., Па" FontWeight="SemiBold" /><TextBlock Text="{Binding CriticalPathTotalPressureLossPa, StringFormat={}{0:0.###}}" /></StackPanel>
+                    <StackPanel><TextBlock Text="Выбранная трасса" FontWeight="SemiBold" /><TextBlock Text="{Binding SelectedPath.PathIndex}" /></StackPanel>
+                    <StackPanel><TextBlock Text="Старт" FontWeight="SemiBold" /><TextBlock Text="{Binding SelectedPath.StartElementId}" /></StackPanel>
+                    <StackPanel><TextBlock Text="Конец" FontWeight="SemiBold" /><TextBlock Text="{Binding SelectedPath.EndElementId}" /></StackPanel>
+                    <StackPanel><TextBlock Text="Элементов" FontWeight="SemiBold" /><TextBlock Text="{Binding SelectedPath.TotalElementCount}" /></StackPanel>
+                </UniformGrid>
+            </Border>
+
+            <DataGrid ItemsSource="{Binding Paths}" SelectedItem="{Binding SelectedPath, Mode=TwoWay}" CanUserAddRows="False" AutoGenerateColumns="False" Height="250">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="№" Binding="{Binding PathIndex}" Width="50" />
+                    <DataGridTextColumn Header="Статус" Binding="{Binding CriticalStatus}" Width="130" />
+                    <DataGridTextColumn Header="Старт" Binding="{Binding StartElementId}" Width="100" />
+                    <DataGridTextColumn Header="Конец" Binding="{Binding EndElementId}" Width="100" />
+                    <DataGridTextColumn Header="Элементов" Binding="{Binding TotalElementCount}" Width="80" />
+                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h}" Width="120" />
+                    <DataGridTextColumn Header="Потери, Па" Binding="{Binding TotalPressureLossPa, StringFormat={}{0:0.###}}" Width="100" />
+                    <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalDuctLengthM, StringFormat={}{0:0.###}}" Width="90" />
+                </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" Margin="0,8,0,0" />
+        </StackPanel>
+    </DockPanel>
+</Window>
