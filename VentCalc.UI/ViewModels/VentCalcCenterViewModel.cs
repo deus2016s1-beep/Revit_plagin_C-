@@ -49,6 +49,7 @@ namespace VentCalc.UI.ViewModels
         private string revitVersion = "—";
         private string revitFilePath = "—";
         private PathCalculationInfo? criticalPath;
+        private HighlightDisplayMode highlightDisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal;
 
         public VentCalcCenterViewModel(
             Action<VentCalcCenterViewModel, VentCalcLoadRequestMode> requestLoadSelectedSystem,
@@ -105,6 +106,9 @@ namespace VentCalc.UI.ViewModels
             HighlightCriticalPathCommand = new RelayCommand(_ => HighlightCriticalPath(), _ => CriticalPath != null);
             HighlightIssuesCommand = new RelayCommand(_ => HighlightIssues(), _ => GetIssueElementIds().Count > 0);
             ClearHighlightCommand = new RelayCommand(_ => ClearHighlight());
+            PreviousPathCommand = new RelayCommand(_ => SelectRelativePath(-1), _ => Paths.Count > 0);
+            NextPathCommand = new RelayCommand(_ => SelectRelativePath(1), _ => Paths.Count > 0);
+            LoadPathsThroughSelectedElementCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SelectedElement));
             GenerateVerificationReportCommand = new RelayCommand(_ => GenerateVerificationReport(), _ => NetworkInfo != null || !string.IsNullOrWhiteSpace(ReportText));
             SaveZetaOverridesCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
             ResetSelectedZetaCommand = new RelayCommand(_ => ClearSelectedManualZeta(), _ => GetSelectedLocalResistanceRows().Count > 0);
@@ -118,6 +122,11 @@ namespace VentCalc.UI.ViewModels
             WriteZetaToCommentsCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
             OpenReportsFolderCommand = new RelayCommand(_ => OpenReportsFolder());
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
+            if (VentCalcSessionState.CurrentData != null)
+            {
+                ApplyData(VentCalcSessionState.CurrentData);
+                RestoreHighlightState(VentCalcSessionState.LastHighlightState);
+            }
         }
 
         public VentElementInfo? SelectedElementInfo { get; private set; }
@@ -168,6 +177,43 @@ namespace VentCalc.UI.ViewModels
                 if (SetProperty(ref localResistanceScopeMode, string.IsNullOrWhiteSpace(value) ? "CurrentPath" : value))
                 {
                     RefreshDisplayedLocalResistances();
+                }
+            }
+        }
+
+        public HighlightDisplayMode HighlightDisplayMode
+        {
+            get => highlightDisplayMode;
+            set
+            {
+                if (SetProperty(ref highlightDisplayMode, value))
+                {
+                    OnPropertyChanged(nameof(IsNormalHighlightMode));
+                    OnPropertyChanged(nameof(IsFocusHighlightMode));
+                }
+            }
+        }
+
+        public bool IsNormalHighlightMode
+        {
+            get => HighlightDisplayMode == VentCalc.UI.Services.HighlightDisplayMode.Normal;
+            set
+            {
+                if (value)
+                {
+                    HighlightDisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal;
+                }
+            }
+        }
+
+        public bool IsFocusHighlightMode
+        {
+            get => HighlightDisplayMode == VentCalc.UI.Services.HighlightDisplayMode.Focus;
+            set
+            {
+                if (value)
+                {
+                    HighlightDisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Focus;
                 }
             }
         }
@@ -452,6 +498,7 @@ namespace VentCalc.UI.ViewModels
                 if (SetProperty(ref selectedPath, value))
                 {
                     UpdateSelectedPathDetails();
+                    OnPropertyChanged(nameof(SelectedPathChain));
                 }
             }
         }
@@ -541,6 +588,12 @@ namespace VentCalc.UI.ViewModels
         public ICommand HighlightIssuesCommand { get; }
 
         public ICommand ClearHighlightCommand { get; }
+
+        public ICommand PreviousPathCommand { get; }
+
+        public ICommand NextPathCommand { get; }
+
+        public ICommand LoadPathsThroughSelectedElementCommand { get; }
 
         public ICommand GenerateVerificationReportCommand { get; }
 
@@ -690,6 +743,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(TraceEndSummary));
             OnPropertyChanged(nameof(TraceCapsSummary));
             OnPropertyChanged(nameof(TraceWarningsSummary));
+            VentCalcSessionState.StoreData(data);
             CommandManager.InvalidateRequerySuggested();
         }
 
@@ -1439,10 +1493,22 @@ namespace VentCalc.UI.ViewModels
             HighlightState.SelectionElementCountBefore = result.SelectionElementCountBefore;
             HighlightState.SelectionElementCountAfter = result.SelectionElementCountAfter;
             HighlightState.ShowElementsUsed = result.ShowElementsUsed;
+            HighlightState.WindowSource = result.WindowSource;
+            HighlightState.ActiveDisplayMode = result.ActiveDisplayMode;
+            HighlightState.SystemNameAtApply = result.SystemNameAtApply;
+            HighlightState.PathIndexAtApply = result.PathIndexAtApply;
+            HighlightState.IsCriticalPath = result.IsCriticalPath;
+            HighlightState.HighlightedPathElementCount = result.HighlightedPathElementCount;
+            HighlightState.DimmedSystemElementCount = result.DimmedSystemElementCount;
+            HighlightState.StartElementId = result.StartElementId;
+            HighlightState.EndElementId = result.EndElementId;
+            HighlightState.LastApplySucceeded = result.LastApplySucceeded;
+            HighlightState.LastClearSucceeded = result.LastClearSucceeded;
             HighlightState.HighlightApplySucceeded = result.ActiveMode == HighlightMode.None || result.ApplySucceeded;
             HighlightState.HighlightClearSucceeded = result.ClearSucceeded;
             HighlightState.OriginalOverridesRestored = result.OriginalOverridesRestored;
             HighlightState.Errors = result.Errors.ToList();
+            VentCalcSessionState.StoreHighlight(HighlightState);
             NotifyHighlightStateChanged();
 
             string message = string.IsNullOrWhiteSpace(result.Message)
@@ -1471,25 +1537,7 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            RequestHighlight(new HighlightRequest
-            {
-                Action = HighlightAction.Apply,
-                Mode = HighlightMode.SelectedPath,
-                SelectElements = false,
-                ShowElements = true,
-                StatusMessage = $"Подсвечена трасса №{SelectedPath.PathIndex}: элементов {ids.Count}.",
-                Groups = new List<HighlightElementGroup>
-                {
-                    new HighlightElementGroup
-                    {
-                        Name = "Выбранная трасса",
-                        ColorHex = Settings.SelectedPathColorHex,
-                        LineWeight = 8,
-                        Transparency = 25,
-                        ElementIds = ids
-                    }
-                }
-            });
+            RequestHighlight(BuildPathHighlightRequest(SelectedPath, false, "PathHighlightWindow"));
         }
 
         private void HighlightCriticalPath()
@@ -1507,26 +1555,136 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            string startEnd = $"старт {CriticalPath.StartElementId}, конец {CriticalPath.EndElementId}";
-            RequestHighlight(new HighlightRequest
+            RequestHighlight(BuildPathHighlightRequest(CriticalPath, true, "PathHighlightWindow"));
+        }
+
+        private HighlightRequest BuildPathHighlightRequest(PathRow path, bool isCritical, string windowSource)
+        {
+            List<long> pathIds = ParseElementIds(path.ElementIds).Distinct().ToList();
+            long? startId = TryParseElementId(path.StartElementId, out long parsedStart) ? parsedStart : pathIds.FirstOrDefault();
+            long? endId = TryParseElementId(path.EndElementId, out long parsedEnd) ? parsedEnd : pathIds.LastOrDefault();
+            return BuildPathHighlightRequestCore(
+                path.PathIndex,
+                path.TotalPressureLossPa,
+                pathIds,
+                startId,
+                endId,
+                isCritical,
+                windowSource);
+        }
+
+        private HighlightRequest BuildPathHighlightRequest(PathCalculationInfo path, bool isCritical, string windowSource)
+        {
+            List<long> pathIds = path.ElementIds.Distinct().ToList();
+            return BuildPathHighlightRequestCore(
+                path.PathIndex,
+                path.TotalPressureLossPa,
+                pathIds,
+                path.StartElementId,
+                path.EndElementId,
+                isCritical,
+                windowSource);
+        }
+
+        private HighlightRequest BuildPathHighlightRequestCore(int pathIndex, double totalPressureLossPa, List<long> pathIds, long? startId, long? endId, bool isCritical, string windowSource)
+        {
+            var groups = new List<HighlightElementGroup>();
+            bool focus = HighlightDisplayMode == VentCalc.UI.Services.HighlightDisplayMode.Focus;
+            List<long> dimmedIds = focus ? GetLoadedSystemElementIds().Except(pathIds).ToList() : new List<long>();
+            if (focus)
+            {
+                groups.Add(CreateHighlightGroup("Система вне трассы", "#9E9E9E", dimmedIds, 1, 82));
+                groups.Add(CreateHighlightGroup(isCritical ? "Критическая трасса" : "Выбранная трасса", isCritical ? Settings.CriticalPathColorHex : Settings.SelectedPathColorHex, pathIds, 8, 10));
+                if (startId.HasValue && startId.Value > 0)
+                {
+                    groups.Add(CreateHighlightGroup("Начало трассы", "#00C853", new[] { startId.Value }, 9, 0));
+                }
+
+                if (endId.HasValue && endId.Value > 0)
+                {
+                    groups.Add(CreateHighlightGroup("Конец трассы", "#D50000", new[] { endId.Value }, 9, 0));
+                }
+            }
+            else
+            {
+                groups.Add(CreateHighlightGroup(isCritical ? "Критическая трасса" : "Выбранная трасса", isCritical ? Settings.CriticalPathColorHex : Settings.SelectedPathColorHex, pathIds, isCritical ? 9 : 8, isCritical ? 20 : 25));
+            }
+
+            string startEnd = $"старт {startId?.ToString(CultureInfo.InvariantCulture) ?? "—"}, конец {endId?.ToString(CultureInfo.InvariantCulture) ?? "—"}";
+            return new HighlightRequest
             {
                 Action = HighlightAction.Apply,
-                Mode = HighlightMode.CriticalPath,
+                Mode = isCritical ? HighlightMode.CriticalPath : HighlightMode.SelectedPath,
                 SelectElements = false,
                 ShowElements = true,
-                StatusMessage = $"Подсвечена критическая трасса №{CriticalPath.PathIndex}: элементов {ids.Count}, потери {CriticalPath.TotalPressureLossPa:0.###} Па, {startEnd}.",
-                Groups = new List<HighlightElementGroup>
-                {
-                    new HighlightElementGroup
-                    {
-                        Name = "Критическая трасса",
-                        ColorHex = Settings.CriticalPathColorHex,
-                        LineWeight = 9,
-                        Transparency = 20,
-                        ElementIds = ids
-                    }
-                }
-            });
+                WindowSource = windowSource,
+                DisplayMode = HighlightDisplayMode,
+                SystemName = SystemName,
+                PathIndex = pathIndex,
+                IsCriticalPath = isCritical,
+                HighlightedPathElementCount = pathIds.Count,
+                DimmedSystemElementCount = dimmedIds.Count,
+                StartElementId = startId,
+                EndElementId = endId,
+                StatusMessage = isCritical
+                    ? $"Подсвечена критическая трасса №{pathIndex}: элементов {pathIds.Count}, потери {totalPressureLossPa:0.###} Па, {startEnd}."
+                    : $"Подсвечена трасса №{pathIndex}: элементов {pathIds.Count}.",
+                Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
+            };
+        }
+
+        private IEnumerable<long> GetLoadedSystemElementIds()
+        {
+            return NetworkInfo?.Elements
+                .Select(node => TryParseElementId(node.ElementId, out long id) ? id : 0)
+                .Where(id => id > 0)
+                .Distinct()
+                ?? Enumerable.Empty<long>();
+        }
+
+        private void SelectRelativePath(int offset)
+        {
+            if (Paths.Count == 0)
+            {
+                StatusText = "Трассы ещё не загружены.";
+                return;
+            }
+
+            int currentIndex = SelectedPath == null ? 0 : Paths.IndexOf(SelectedPath);
+            int nextIndex = currentIndex < 0 ? 0 : (currentIndex + offset + Paths.Count) % Paths.Count;
+            SelectedPath = Paths[nextIndex];
+        }
+
+        private void RestoreHighlightState(HighlightStateInfo state)
+        {
+            HighlightState.ActiveMode = state.ActiveMode;
+            HighlightState.ActiveViewId = state.ActiveViewId;
+            HighlightState.RequestedElementCount = state.RequestedElementCount;
+            HighlightState.HighlightedElementCount = state.HighlightedElementCount;
+            HighlightState.SkippedElementCount = state.SkippedElementCount;
+            HighlightState.FailedElementCount = state.FailedElementCount;
+            HighlightState.RestoredElementCount = state.RestoredElementCount;
+            HighlightState.SnapshotCount = state.SnapshotCount;
+            HighlightState.SelectionChangedByVentCalc = state.SelectionChangedByVentCalc;
+            HighlightState.SelectionElementCountBefore = state.SelectionElementCountBefore;
+            HighlightState.SelectionElementCountAfter = state.SelectionElementCountAfter;
+            HighlightState.ShowElementsUsed = state.ShowElementsUsed;
+            HighlightState.WindowSource = state.WindowSource;
+            HighlightState.ActiveDisplayMode = state.ActiveDisplayMode;
+            HighlightState.SystemNameAtApply = state.SystemNameAtApply;
+            HighlightState.PathIndexAtApply = state.PathIndexAtApply;
+            HighlightState.IsCriticalPath = state.IsCriticalPath;
+            HighlightState.HighlightedPathElementCount = state.HighlightedPathElementCount;
+            HighlightState.DimmedSystemElementCount = state.DimmedSystemElementCount;
+            HighlightState.StartElementId = state.StartElementId;
+            HighlightState.EndElementId = state.EndElementId;
+            HighlightState.LastApplySucceeded = state.LastApplySucceeded;
+            HighlightState.LastClearSucceeded = state.LastClearSucceeded;
+            HighlightState.HighlightApplySucceeded = state.HighlightApplySucceeded;
+            HighlightState.HighlightClearSucceeded = state.HighlightClearSucceeded;
+            HighlightState.OriginalOverridesRestored = state.OriginalOverridesRestored;
+            HighlightState.Errors = state.Errors.ToList();
+            NotifyHighlightStateChanged();
         }
 
         private void ApplyVelocityHighlight()
@@ -1595,6 +1753,9 @@ namespace VentCalc.UI.ViewModels
                 Mode = HighlightMode.Velocity,
                 SelectElements = false,
                 ShowElements = false,
+                WindowSource = "VelocityHighlightWindow",
+                DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
+                SystemName = SystemName,
                 StatusMessage = $"Подсветка скоростей применена: воздуховодов {belowMin.Count + normal.Count + aboveMax.Count + critical.Count}; без расчёта {notCalculated}.",
                 Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
             });
@@ -1617,6 +1778,9 @@ namespace VentCalc.UI.ViewModels
                 Mode = HighlightMode.Issues,
                 SelectElements = false,
                 ShowElements = true,
+                WindowSource = "VentCalcCenter",
+                DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
+                SystemName = SystemName,
                 StatusMessage = $"Подсвечено проблемных элементов: {ids.Count}.",
                 Groups = new List<HighlightElementGroup>
                 {
@@ -1640,6 +1804,9 @@ namespace VentCalc.UI.ViewModels
                 Mode = HighlightMode.None,
                 SelectElements = false,
                 ShowElements = false,
+                WindowSource = "VentCalc",
+                DisplayMode = HighlightDisplayMode,
+                SystemName = SystemName,
                 StatusMessage = "Подсветка VentCalc очищена."
             });
         }

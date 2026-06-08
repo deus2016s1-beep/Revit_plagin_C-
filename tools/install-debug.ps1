@@ -52,11 +52,42 @@ if (-not (Test-Path $publishSource)) {
     throw "Build output folder was not found: $publishSource"
 }
 
+$requiredDlls = @(
+    "VentCalc.Revit.dll",
+    "VentCalc.UI.dll",
+    "VentCalc.Core.dll",
+    "VentCalc.Reports.dll"
+)
+foreach ($dll in $requiredDlls) {
+    $sourceDll = Join-Path $publishSource $dll
+    if (-not (Test-Path $sourceDll)) {
+        throw "Required build output was not found: $sourceDll"
+    }
+}
+
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 Write-Host "Cleaning $installDir..."
 Remove-Item -Path (Join-Path $installDir "*") -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "Copying add-in files to $installDir..."
 Copy-Item -Path (Join-Path $publishSource "*") -Destination $installDir -Recurse -Force
+
+Write-Host "Copied files:"
+Get-ChildItem -Path $installDir -File | Sort-Object Name | ForEach-Object {
+    Write-Host ("  {0}  {1:N0} bytes  {2:yyyy-MM-dd HH:mm:ss}" -f $_.Name, $_.Length, $_.LastWriteTime)
+}
+
+foreach ($dll in $requiredDlls) {
+    $installedDll = Join-Path $installDir $dll
+    if (-not (Test-Path $installedDll)) {
+        throw "Required DLL was not copied: $installedDll"
+    }
+}
+
+Write-Host "Key DLL timestamps:"
+foreach ($dll in @("VentCalc.Revit.dll", "VentCalc.UI.dll")) {
+    $installedDll = Get-Item (Join-Path $installDir $dll)
+    Write-Host ("  {0}: {1:N0} bytes, {2:yyyy-MM-dd HH:mm:ss}" -f $installedDll.Name, $installedDll.Length, $installedDll.LastWriteTime)
+}
 
 if (-not (Test-Path $assemblyPath)) {
     throw "VentCalc.Revit.dll was not copied to: $assemblyPath"

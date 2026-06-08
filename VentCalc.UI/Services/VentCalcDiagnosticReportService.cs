@@ -412,6 +412,18 @@ namespace VentCalc.UI.Services
                 highlighting = new
                 {
                     activeMode = viewModel.HighlightState.ActiveMode.ToString(),
+                    windowSource = viewModel.HighlightState.WindowSource,
+                    activeDisplayMode = viewModel.HighlightState.ActiveDisplayMode.ToString(),
+                    systemNameAtApply = viewModel.HighlightState.SystemNameAtApply,
+                    pathIndexAtApply = viewModel.HighlightState.PathIndexAtApply,
+                    isCriticalPath = viewModel.HighlightState.IsCriticalPath,
+                    highlightedPathElementCount = viewModel.HighlightState.HighlightedPathElementCount,
+                    dimmedSystemElementCount = viewModel.HighlightState.DimmedSystemElementCount,
+                    startElementId = viewModel.HighlightState.StartElementId,
+                    endElementId = viewModel.HighlightState.EndElementId,
+                    lastApplySucceeded = viewModel.HighlightState.LastApplySucceeded,
+                    lastClearSucceeded = viewModel.HighlightState.LastClearSucceeded,
+                    originalOverridesRestored = viewModel.HighlightState.OriginalOverridesRestored,
                     activeViewId = viewModel.HighlightState.ActiveViewId,
                     requestedElementCount = viewModel.HighlightState.RequestedElementCount,
                     highlightedElementCount = viewModel.HighlightState.HighlightedElementCount,

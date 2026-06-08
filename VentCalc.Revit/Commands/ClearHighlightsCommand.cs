@@ -43,6 +43,10 @@ namespace VentCalc.Revit.Commands
                 SelectionElementCountBefore = selectionCountBefore,
                 SelectionElementCountAfter = selectionCountAfter,
                 SelectionChangedByVentCalc = false,
+                WindowSource = "Ribbon",
+                ActiveDisplayMode = HighlightDisplayMode.Normal,
+                LastApplySucceeded = true,
+                LastClearSucceeded = errors.Count == 0,
                 Message = details,
                 Errors = errors
             });

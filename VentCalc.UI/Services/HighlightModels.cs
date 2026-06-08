@@ -19,6 +19,12 @@ namespace VentCalc.UI.Services
         Clear = 1
     }
 
+    public enum HighlightDisplayMode
+    {
+        Normal = 0,
+        Focus = 1
+    }
+
     public sealed class HighlightElementGroup
     {
         public string Name { get; set; } = string.Empty;
@@ -43,6 +49,24 @@ namespace VentCalc.UI.Services
         public bool SelectElements { get; set; }
 
         public bool ShowElements { get; set; }
+
+        public string WindowSource { get; set; } = string.Empty;
+
+        public HighlightDisplayMode DisplayMode { get; set; } = HighlightDisplayMode.Normal;
+
+        public string SystemName { get; set; } = string.Empty;
+
+        public int? PathIndex { get; set; }
+
+        public bool IsCriticalPath { get; set; }
+
+        public int HighlightedPathElementCount { get; set; }
+
+        public int DimmedSystemElementCount { get; set; }
+
+        public long? StartElementId { get; set; }
+
+        public long? EndElementId { get; set; }
 
         public List<HighlightElementGroup> Groups { get; set; } = new List<HighlightElementGroup>();
 
@@ -74,6 +98,28 @@ namespace VentCalc.UI.Services
         public int SelectionElementCountAfter { get; set; }
 
         public bool ShowElementsUsed { get; set; }
+
+        public string WindowSource { get; set; } = string.Empty;
+
+        public HighlightDisplayMode ActiveDisplayMode { get; set; } = HighlightDisplayMode.Normal;
+
+        public string SystemNameAtApply { get; set; } = string.Empty;
+
+        public int? PathIndexAtApply { get; set; }
+
+        public bool IsCriticalPath { get; set; }
+
+        public int HighlightedPathElementCount { get; set; }
+
+        public int DimmedSystemElementCount { get; set; }
+
+        public long? StartElementId { get; set; }
+
+        public long? EndElementId { get; set; }
+
+        public bool LastApplySucceeded { get; set; }
+
+        public bool LastClearSucceeded { get; set; }
 
         public string Message { get; set; } = string.Empty;
 
@@ -124,6 +170,28 @@ namespace VentCalc.UI.Services
         public int SelectionElementCountAfter { get; set; }
 
         public bool ShowElementsUsed { get; set; }
+
+        public string WindowSource { get; set; } = string.Empty;
+
+        public HighlightDisplayMode ActiveDisplayMode { get; set; } = HighlightDisplayMode.Normal;
+
+        public string SystemNameAtApply { get; set; } = string.Empty;
+
+        public int? PathIndexAtApply { get; set; }
+
+        public bool IsCriticalPath { get; set; }
+
+        public int HighlightedPathElementCount { get; set; }
+
+        public int DimmedSystemElementCount { get; set; }
+
+        public long? StartElementId { get; set; }
+
+        public long? EndElementId { get; set; }
+
+        public bool LastApplySucceeded { get; set; } = true;
+
+        public bool LastClearSucceeded { get; set; } = true;
 
         public HighlightVelocityGroupsInfo VelocityGroups { get; set; } = new HighlightVelocityGroupsInfo();
 

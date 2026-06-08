@@ -80,6 +80,15 @@ namespace VentCalc.Revit.ExternalEvents
                 RequestedElementCount = request.RequestedElementCount,
                 SelectionElementCountBefore = selectionCountBefore,
                 SelectionElementCountAfter = selectionCountBefore,
+                WindowSource = request.WindowSource,
+                ActiveDisplayMode = request.DisplayMode,
+                SystemNameAtApply = request.SystemName,
+                PathIndexAtApply = request.PathIndex,
+                IsCriticalPath = request.IsCriticalPath,
+                HighlightedPathElementCount = request.HighlightedPathElementCount,
+                DimmedSystemElementCount = request.DimmedSystemElementCount,
+                StartElementId = request.StartElementId,
+                EndElementId = request.EndElementId,
                 Message = request.StatusMessage
             };
 
@@ -123,6 +132,8 @@ namespace VentCalc.Revit.ExternalEvents
             }
 
             result.SnapshotCount = HighlightStateStore.SnapshotCount;
+            result.LastApplySucceeded = result.ApplySucceeded;
+            result.LastClearSucceeded = true;
             if (request.ShowElements && highlightedIds.Count > 0)
             {
                 uiDocument.ShowElements(highlightedIds.Distinct().ToList());
@@ -146,6 +157,15 @@ namespace VentCalc.Revit.ExternalEvents
                 RequestedElementCount = snapshotCountBeforeClear,
                 SelectionElementCountBefore = selectionCountBefore,
                 SelectionElementCountAfter = selectionCountBefore,
+                WindowSource = request.WindowSource,
+                ActiveDisplayMode = request.DisplayMode,
+                SystemNameAtApply = request.SystemName,
+                PathIndexAtApply = request.PathIndex,
+                IsCriticalPath = request.IsCriticalPath,
+                HighlightedPathElementCount = request.HighlightedPathElementCount,
+                DimmedSystemElementCount = request.DimmedSystemElementCount,
+                StartElementId = request.StartElementId,
+                EndElementId = request.EndElementId,
                 Message = request.StatusMessage
             };
 
@@ -159,6 +179,8 @@ namespace VentCalc.Revit.ExternalEvents
             result.SelectionElementCountAfter = uiDocument.Selection.GetElementIds().Count;
             result.FailedElementCount = result.Errors.Count;
             result.SnapshotCount = HighlightStateStore.SnapshotCount;
+            result.LastApplySucceeded = true;
+            result.LastClearSucceeded = result.ClearSucceeded;
             return result;
         }
 
