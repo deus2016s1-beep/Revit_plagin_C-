@@ -82,7 +82,7 @@ namespace VentCalc.UI.ViewModels
             }
 
             LoadSelectedSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SelectedElement));
-            LoadCatalogSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SystemCatalog), _ => SelectedCatalogSystem != null);
+            LoadCatalogSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SystemCatalog));
             RefreshCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.LastLoadedElement));
             SelectElementInRevitCommand = new RelayCommand(_ => SelectElementInRevit(), _ => CurrentSelectedElementId.HasValue);
             SelectStartElementInRevitCommand = new RelayCommand(_ => SelectStartElementInRevit(), _ => StartElementIds.Count > 0);
@@ -627,9 +627,11 @@ namespace VentCalc.UI.ViewModels
             {
                 StatusText = mode == VentCalcLoadRequestMode.LastLoadedElement && LastLoadedElementId.HasValue
                     ? "Обновление последней загруженной системы..."
-                    : mode == VentCalcLoadRequestMode.SystemCatalog
-                        ? "Ожидание Revit: загрузка системы из списка."
-                        : "Ожидание Revit: выберите один элемент воздуховодной системы в Revit.";
+                    : mode == VentCalcLoadRequestMode.SystemCatalog && SelectedCatalogSystem == null
+                        ? "Ожидание Revit: чтение списка систем."
+                        : mode == VentCalcLoadRequestMode.SystemCatalog
+                            ? "Ожидание Revit: загрузка системы из списка."
+                            : "Ожидание Revit: выберите один элемент воздуховодной системы в Revit.";
                 requestLoadSelectedSystem(this, mode);
             }
             catch (Exception exception)
