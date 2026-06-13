@@ -41,9 +41,9 @@
         <Border DockPanel.Dock="Top" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8" Background="#FFF8F8F8">
             <DockPanel>
                 <WrapPanel DockPanel.Dock="Top">
-                    <Button Content="Загрузить по выбранному элементу" Command="{Binding LoadSelectedSystemCommand}" />
-                    <Button Content="Загрузить выбранную систему из списка" Command="{Binding LoadCatalogSystemCommand}" />
-                    <Button Content="Обновить" Command="{Binding RefreshCommand}" />
+                    <Button Content="Рассчитать выбранную систему" Command="{Binding LoadSelectedSystemCommand}" />
+                    <Button Content="Рассчитать систему из списка" Command="{Binding LoadCatalogSystemCommand}" />
+                    <Button Content="Пересчитать" Command="{Binding RefreshCommand}" />
                     <Button Content="Выбрать стартовый элемент в Revit" Command="{Binding SelectStartElementInRevitCommand}" />
                     <Button Content="Выбрать критическую трассу в Revit" Command="{Binding SelectCriticalPathInRevitCommand}" />
                     <TextBlock Text="Система:" FontWeight="Bold" />
@@ -66,8 +66,8 @@
             </DockPanel>
         </Border>
 
-        <TabControl>
-            <TabItem Header="Система">
+        <TabControl x:Name="MainTabs">
+            <TabItem Header="Система" Visibility="Collapsed">
                 <DockPanel Margin="6">
                     <UniformGrid DockPanel.Dock="Top" Columns="6" Margin="0,0,0,8">
                         <TextBlock Text="Загруженная система" FontWeight="Bold" /><TextBlock Text="{Binding LoadedSystemDisplay}" />
@@ -122,7 +122,7 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="Трассы">
+            <TabItem Header="Трассы" Visibility="Collapsed">
                 <DockPanel Margin="6">
                     <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
                         <StackPanel>
@@ -297,8 +297,8 @@
                                     <WrapPanel>
                                         <Button Content="Сохранить изменения" Command="{Binding SaveZetaOverridesCommand}" />
                                         <Button Content="Вернуть к Auto" Command="{Binding ResetToAutoCommand}" />
-                                        <Button Content="Показать в Revit" Command="{Binding SelectElementInRevitCommand}" />
-                                        <Button Content="Каталог ζ" Click="OpenProjectZetaCatalog_Click" />
+                                        <Button Content="Показать в модели" Command="{Binding SelectElementInRevitCommand}" />
+                                        <Button Content="Каталог коэффициентов ζ" Click="OpenProjectZetaCatalog_Click" />
                                         <TextBlock Text="Показать:" FontWeight="Bold" />
                                         <ComboBox SelectedValue="{Binding LocalResistanceScopeMode, Mode=TwoWay}" SelectedValuePath="Tag" Width="150" Margin="4">
                                             <ComboBoxItem Content="Текущая трасса" Tag="CurrentPath" IsSelected="True" />
