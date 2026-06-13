@@ -255,6 +255,12 @@ namespace VentCalc.UI.ViewModels
 
         public int VelocityNotCalculatedCount => HighlightState.VelocityGroups.NotCalculated;
 
+        public int VelocityColoredDuctCount => HighlightState.VelocityGroups.ColoredDuctCount;
+
+        public int VelocityColoredFittingCount => HighlightState.VelocityGroups.ColoredFittingCount;
+
+        public int VelocityNotCalculatedFittingCount => HighlightState.VelocityGroups.NotCalculatedFittingCount;
+
         public string SelectedSettingsSection
         {
             get => selectedSettingsSection;
@@ -1672,6 +1678,14 @@ namespace VentCalc.UI.ViewModels
             HighlightState.HighlightApplySucceeded = result.ActiveMode == HighlightMode.None || result.ApplySucceeded;
             HighlightState.HighlightClearSucceeded = result.ClearSucceeded;
             HighlightState.OriginalOverridesRestored = result.OriginalOverridesRestored;
+            HighlightState.VelocityGroups.BelowMin = result.VelocityGroups.BelowMin;
+            HighlightState.VelocityGroups.Normal = result.VelocityGroups.Normal;
+            HighlightState.VelocityGroups.AboveMax = result.VelocityGroups.AboveMax;
+            HighlightState.VelocityGroups.Critical = result.VelocityGroups.Critical;
+            HighlightState.VelocityGroups.NotCalculated = result.VelocityGroups.NotCalculated;
+            HighlightState.VelocityGroups.ColoredDuctCount = result.VelocityGroups.ColoredDuctCount;
+            HighlightState.VelocityGroups.ColoredFittingCount = result.VelocityGroups.ColoredFittingCount;
+            HighlightState.VelocityGroups.NotCalculatedFittingCount = result.VelocityGroups.NotCalculatedFittingCount;
             HighlightState.PressureLossGroups.Low = result.PressureLossGroups.Low;
             HighlightState.PressureLossGroups.Medium = result.PressureLossGroups.Medium;
             HighlightState.PressureLossGroups.High = result.PressureLossGroups.High;
@@ -1854,6 +1868,14 @@ namespace VentCalc.UI.ViewModels
             HighlightState.HighlightApplySucceeded = state.HighlightApplySucceeded;
             HighlightState.HighlightClearSucceeded = state.HighlightClearSucceeded;
             HighlightState.OriginalOverridesRestored = state.OriginalOverridesRestored;
+            HighlightState.VelocityGroups.BelowMin = state.VelocityGroups.BelowMin;
+            HighlightState.VelocityGroups.Normal = state.VelocityGroups.Normal;
+            HighlightState.VelocityGroups.AboveMax = state.VelocityGroups.AboveMax;
+            HighlightState.VelocityGroups.Critical = state.VelocityGroups.Critical;
+            HighlightState.VelocityGroups.NotCalculated = state.VelocityGroups.NotCalculated;
+            HighlightState.VelocityGroups.ColoredDuctCount = state.VelocityGroups.ColoredDuctCount;
+            HighlightState.VelocityGroups.ColoredFittingCount = state.VelocityGroups.ColoredFittingCount;
+            HighlightState.VelocityGroups.NotCalculatedFittingCount = state.VelocityGroups.NotCalculatedFittingCount;
             HighlightState.PressureLossGroups.Low = state.PressureLossGroups.Low;
             HighlightState.PressureLossGroups.Medium = state.PressureLossGroups.Medium;
             HighlightState.PressureLossGroups.High = state.PressureLossGroups.High;
@@ -1878,11 +1900,14 @@ namespace VentCalc.UI.ViewModels
                 .GroupBy(duct => duct.ElementId)
                 .ToDictionary(group => group.Key, group => group.OrderByDescending(duct => duct.VelocityMs).First());
 
+            Dictionary<long, double> fittingVelocities = BuildFittingVelocityMap(ducts);
+
             var belowMin = new List<long>();
             var normal = new List<long>();
             var aboveMax = new List<long>();
             var critical = new List<long>();
             int notCalculated = 0;
+            int notCalculatedFittings = 0;
             foreach (DuctCalculationInfo duct in ducts.Values)
             {
                 if (duct.FlowM3h <= 0 || duct.AreaM2 <= 0 || duct.VelocityMs <= 0 || double.IsNaN(duct.VelocityMs) || double.IsInfinity(duct.VelocityMs))
@@ -1909,11 +1934,60 @@ namespace VentCalc.UI.ViewModels
                 }
             }
 
+            foreach (KeyValuePair<long, double> fitting in fittingVelocities)
+            {
+                if (!IsValidVelocity(fitting.Value))
+                {
+                    notCalculated++;
+                    notCalculatedFittings++;
+                    continue;
+                }
+
+                if (fitting.Value < Settings.MinVelocityMs)
+                {
+                    belowMin.Add(fitting.Key);
+                }
+                else if (fitting.Value <= Settings.MaxVelocityMs)
+                {
+                    normal.Add(fitting.Key);
+                }
+                else if (fitting.Value < Settings.CriticalVelocityMs)
+                {
+                    aboveMax.Add(fitting.Key);
+                }
+                else
+                {
+                    critical.Add(fitting.Key);
+                }
+            }
+
+            foreach (long fittingId in GetLoadedDuctFittingElementIds().Where(id => !fittingVelocities.ContainsKey(id)))
+            {
+                notCalculated++;
+                notCalculatedFittings++;
+            }
+
+            int coloredDuctCount = belowMin.Concat(normal).Concat(aboveMax).Concat(critical).Count(id => ducts.ContainsKey(id));
+            int coloredFittingCount = belowMin.Concat(normal).Concat(aboveMax).Concat(critical).Count(id => fittingVelocities.ContainsKey(id));
+            var velocityGroups = new HighlightVelocityGroupsInfo
+            {
+                BelowMin = belowMin.Count,
+                Normal = normal.Count,
+                AboveMax = aboveMax.Count,
+                Critical = critical.Count,
+                NotCalculated = notCalculated,
+                ColoredDuctCount = coloredDuctCount,
+                ColoredFittingCount = coloredFittingCount,
+                NotCalculatedFittingCount = notCalculatedFittings
+            };
             HighlightState.VelocityGroups.BelowMin = belowMin.Count;
             HighlightState.VelocityGroups.Normal = normal.Count;
             HighlightState.VelocityGroups.AboveMax = aboveMax.Count;
             HighlightState.VelocityGroups.Critical = critical.Count;
             HighlightState.VelocityGroups.NotCalculated = notCalculated;
+            HighlightState.VelocityGroups.ColoredDuctCount = coloredDuctCount;
+            HighlightState.VelocityGroups.ColoredFittingCount = coloredFittingCount;
+            HighlightState.VelocityGroups.NotCalculatedFittingCount = notCalculatedFittings;
             NotifyHighlightStateChanged();
 
             var groups = new List<HighlightElementGroup>
@@ -1933,9 +2007,104 @@ namespace VentCalc.UI.ViewModels
                 WindowSource = windowSource,
                 DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
                 SystemName = SystemName,
-                StatusMessage = $"Карта скоростей применена: воздуховодов {belowMin.Count + normal.Count + aboveMax.Count + critical.Count}.",
+                VelocityGroups = velocityGroups,
+                StatusMessage = $"Карта скоростей применена: воздуховодов {coloredDuctCount}, фитингов {coloredFittingCount}.",
                 Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
             });
+        }
+
+        private Dictionary<long, double> BuildFittingVelocityMap(Dictionary<long, DuctCalculationInfo> ducts)
+        {
+            var fittingVelocities = new Dictionary<long, double>();
+            if (AerodynamicSummary == null)
+            {
+                return fittingVelocities;
+            }
+
+            var fittingNodeIds = new HashSet<long>();
+            foreach (VentNetworkNode node in NetworkInfo?.Elements ?? Enumerable.Empty<VentNetworkNode>())
+            {
+                if (IsDuctFittingNode(node) && !node.IsIgnoredForPathSearch && TryParseElementId(node.ElementId, out long fittingId))
+                {
+                    fittingNodeIds.Add(fittingId);
+                }
+            }
+
+            foreach (LocalResistanceCalculationInfo local in AerodynamicSummary.Paths.SelectMany(path => path.LocalResistances).Where(local => local.ElementId > 0))
+            {
+                if (fittingNodeIds.Contains(local.ElementId) || IsDuctFittingCategory(local.CategoryName))
+                {
+                    AddMaxVelocity(fittingVelocities, local.ElementId, local.VelocityMs);
+                }
+            }
+
+            foreach (VentNetworkNode node in NetworkInfo?.Elements ?? Enumerable.Empty<VentNetworkNode>())
+            {
+                if (!IsDuctFittingNode(node) || node.IsIgnoredForPathSearch || !TryParseElementId(node.ElementId, out long fittingId))
+                {
+                    continue;
+                }
+
+                if (fittingVelocities.ContainsKey(fittingId))
+                {
+                    continue;
+                }
+
+                foreach (string connectedIdText in node.ConnectedElementIds)
+                {
+                    if (TryParseElementId(connectedIdText, out long connectedId) && ducts.TryGetValue(connectedId, out DuctCalculationInfo? duct))
+                    {
+                        AddMaxVelocity(fittingVelocities, fittingId, duct.VelocityMs);
+                    }
+                }
+            }
+
+            return fittingVelocities;
+        }
+
+        private IEnumerable<long> GetLoadedDuctFittingElementIds()
+        {
+            foreach (VentNetworkNode node in NetworkInfo?.Elements ?? Enumerable.Empty<VentNetworkNode>())
+            {
+                if (IsDuctFittingNode(node) && !node.IsIgnoredForPathSearch && TryParseElementId(node.ElementId, out long fittingId))
+                {
+                    yield return fittingId;
+                }
+            }
+        }
+
+        private static bool IsDuctFittingNode(VentNetworkNode node)
+        {
+            return string.Equals(node.CategoryKey, "OST_DuctFitting", StringComparison.OrdinalIgnoreCase)
+                || IsDuctFittingCategory(node.CategoryName);
+        }
+
+        private static bool IsDuctFittingCategory(string categoryName)
+        {
+            return categoryName.IndexOf("Fitting", StringComparison.OrdinalIgnoreCase) >= 0
+                || categoryName.IndexOf("Фитинг", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void AddMaxVelocity(Dictionary<long, double> target, long elementId, double velocityMs)
+        {
+            if (!IsValidVelocity(velocityMs))
+            {
+                if (!target.ContainsKey(elementId))
+                {
+                    target[elementId] = 0;
+                }
+
+                return;
+            }
+
+            target[elementId] = target.TryGetValue(elementId, out double current) && current > velocityMs
+                ? current
+                : velocityMs;
+        }
+
+        private static bool IsValidVelocity(double velocityMs)
+        {
+            return velocityMs > 0 && !double.IsNaN(velocityMs) && !double.IsInfinity(velocityMs);
         }
 
 
@@ -2079,7 +2248,7 @@ namespace VentCalc.UI.ViewModels
             });
         }
 
-        private void ClearHighlight()
+        private void ClearHighlight(string windowSource = "VentCalc")
         {
             RequestHighlight(new HighlightRequest
             {
@@ -2087,7 +2256,7 @@ namespace VentCalc.UI.ViewModels
                 Mode = HighlightMode.None,
                 SelectElements = false,
                 ShowElements = false,
-                WindowSource = "VentCalc",
+                WindowSource = windowSource,
                 DisplayMode = HighlightDisplayMode,
                 SystemName = SystemName,
                 StatusMessage = "Подсветка VentCalc очищена."
@@ -2200,6 +2369,9 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(VelocityAboveMaxCount));
             OnPropertyChanged(nameof(VelocityCriticalCount));
             OnPropertyChanged(nameof(VelocityNotCalculatedCount));
+            OnPropertyChanged(nameof(VelocityColoredDuctCount));
+            OnPropertyChanged(nameof(VelocityColoredFittingCount));
+            OnPropertyChanged(nameof(VelocityNotCalculatedFittingCount));
             OnPropertyChanged(nameof(HighlightStatusText));
         }
 
@@ -2657,8 +2829,40 @@ namespace VentCalc.UI.ViewModels
             HighlightCriticalPath("Ribbon: Критическая трасса");
         }
 
+        public void ToggleCriticalPathFromRibbon()
+        {
+            if (HighlightState.ActiveMode == HighlightMode.CriticalPath)
+            {
+                ClearHighlight("Ribbon: Критическая трасса");
+                return;
+            }
+
+            if (HighlightState.ActiveMode != HighlightMode.None)
+            {
+                ClearHighlight("Ribbon: Критическая трасса");
+            }
+
+            HighlightCriticalPath("Ribbon: Критическая трасса");
+        }
+
         public void ApplyVelocityHighlightFromRibbon()
         {
+            ApplyVelocityHighlight("Ribbon: Карта скоростей");
+        }
+
+        public void ToggleVelocityHighlightFromRibbon()
+        {
+            if (HighlightState.ActiveMode == HighlightMode.Velocity)
+            {
+                ClearHighlight("Ribbon: Карта скоростей");
+                return;
+            }
+
+            if (HighlightState.ActiveMode != HighlightMode.None)
+            {
+                ClearHighlight("Ribbon: Карта скоростей");
+            }
+
             ApplyVelocityHighlight("Ribbon: Карта скоростей");
         }
 

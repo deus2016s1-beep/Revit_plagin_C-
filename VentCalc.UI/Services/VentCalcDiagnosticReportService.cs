@@ -475,7 +475,10 @@ namespace VentCalc.UI.Services
                         normal = viewModel.HighlightState.VelocityGroups.Normal,
                         aboveMax = viewModel.HighlightState.VelocityGroups.AboveMax,
                         critical = viewModel.HighlightState.VelocityGroups.Critical,
-                        notCalculated = viewModel.HighlightState.VelocityGroups.NotCalculated
+                        notCalculated = viewModel.HighlightState.VelocityGroups.NotCalculated,
+                        coloredDuctCount = viewModel.HighlightState.VelocityGroups.ColoredDuctCount,
+                        coloredFittingCount = viewModel.HighlightState.VelocityGroups.ColoredFittingCount,
+                        notCalculatedFittingCount = viewModel.HighlightState.VelocityGroups.NotCalculatedFittingCount
                     },
                     pressureLossGroups = new
                     {

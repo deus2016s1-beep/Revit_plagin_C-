@@ -17,7 +17,15 @@
             <TextBlock Text="Минимальная скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
             <TextBlock Text="Максимальная скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
             <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-            <TextBlock Text="Настройки подсветки перенесены во вкладку VentCalc Center → Настройки → Подсветка." Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
+            <TextBlock Text="Цвета карты скоростей" FontWeight="Bold" Margin="0,12,0,4" />
+            <TextBlock Text="Ниже минимальной, HEX" /><TextBox Text="{Binding Settings.LowVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Нормальная, HEX" /><TextBox Text="{Binding Settings.NormalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Выше максимальной, HEX" /><TextBox Text="{Binding Settings.HighVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Критическая, HEX" /><TextBox Text="{Binding Settings.CriticalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Цвет критической трассы, HEX" /><TextBox Text="{Binding Settings.CriticalPathColorHex, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Text="Цвет ошибок, HEX" /><TextBox Text="{Binding Settings.IssueColorHex, UpdateSourceTrigger=PropertyChanged}" />
+            <CheckBox Content="Приближать модель после показа элемента / подсветки" IsChecked="{Binding Settings.ZoomToElementOnShow, Mode=TwoWay}" Margin="0,10,0,0" />
+            <TextBlock Text="Цвета задаются в формате #RRGGBB и сохраняются в settings.json." Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
             <WrapPanel Margin="0,14,0,0">
                 <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" Padding="10,6" Margin="0,0,8,0" />
                 <Button Content="Сбросить по умолчанию" Command="{Binding ResetSettingsCommand}" Padding="10,6" />

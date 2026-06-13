@@ -14,12 +14,12 @@ namespace VentCalc.Revit.Commands
 
         public static Result ExecuteCriticalPath(ExternalCommandData commandData, ref string message)
         {
-            return Execute(commandData, ref message, vm => vm.HighlightCriticalPathFromRibbon());
+            return Execute(commandData, ref message, vm => vm.ToggleCriticalPathFromRibbon());
         }
 
         public static Result ExecuteVelocityMap(ExternalCommandData commandData, ref string message)
         {
-            return Execute(commandData, ref message, vm => vm.ApplyVelocityHighlightFromRibbon());
+            return Execute(commandData, ref message, vm => vm.ToggleVelocityHighlightFromRibbon());
         }
 
         public static Result ExecutePressureLossMap(ExternalCommandData commandData, ref string message)
@@ -67,7 +67,13 @@ namespace VentCalc.Revit.Commands
             }
 
             action(viewModel);
-            TaskDialog.Show("VentCalc", viewModel.StatusText);
+            if (viewModel.HighlightState.FailedElementCount > 0 || viewModel.HighlightState.Errors.Count > 0)
+            {
+                TaskDialog.Show("VentCalc", viewModel.StatusText);
+                message = viewModel.StatusText;
+                return Result.Failed;
+            }
+
             return Result.Succeeded;
         }
     }

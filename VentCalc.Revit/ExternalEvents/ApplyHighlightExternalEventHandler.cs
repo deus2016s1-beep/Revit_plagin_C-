@@ -96,6 +96,7 @@ namespace VentCalc.Revit.ExternalEvents
                 StartElementId = request.StartElementId,
                 EndElementId = request.EndElementId,
                 Message = request.StatusMessage,
+                VelocityGroups = request.VelocityGroups,
                 PressureLossGroups = request.PressureLossGroups,
                 MaxElementPressureLossPa = request.MaxElementPressureLossPa
             };
@@ -175,6 +176,7 @@ namespace VentCalc.Revit.ExternalEvents
                 StartElementId = request.StartElementId,
                 EndElementId = request.EndElementId,
                 Message = request.StatusMessage,
+                VelocityGroups = request.VelocityGroups,
                 PressureLossGroups = request.PressureLossGroups,
                 MaxElementPressureLossPa = request.MaxElementPressureLossPa
             };

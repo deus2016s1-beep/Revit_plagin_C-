@@ -73,6 +73,8 @@ namespace VentCalc.UI.Services
 
         public HighlightPressureLossGroupsInfo PressureLossGroups { get; set; } = new HighlightPressureLossGroupsInfo();
 
+        public HighlightVelocityGroupsInfo VelocityGroups { get; set; } = new HighlightVelocityGroupsInfo();
+
         public double MaxElementPressureLossPa { get; set; }
 
         public int RequestedElementCount => Groups.SelectMany(group => group.ElementIds).Distinct().Count();
@@ -132,6 +134,8 @@ namespace VentCalc.UI.Services
 
         public HighlightPressureLossGroupsInfo PressureLossGroups { get; set; } = new HighlightPressureLossGroupsInfo();
 
+        public HighlightVelocityGroupsInfo VelocityGroups { get; set; } = new HighlightVelocityGroupsInfo();
+
         public double MaxElementPressureLossPa { get; set; }
 
         public bool ApplySucceeded => FailedElementCount == 0 && (RequestedElementCount == 0 || HighlightedElementCount > 0 || ActiveMode == HighlightMode.None);
@@ -152,6 +156,12 @@ namespace VentCalc.UI.Services
         public int Critical { get; set; }
 
         public int NotCalculated { get; set; }
+
+        public int ColoredDuctCount { get; set; }
+
+        public int ColoredFittingCount { get; set; }
+
+        public int NotCalculatedFittingCount { get; set; }
     }
 
     public sealed class HighlightPressureLossGroupsInfo

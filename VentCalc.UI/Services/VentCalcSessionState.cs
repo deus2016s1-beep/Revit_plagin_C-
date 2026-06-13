@@ -44,6 +44,14 @@ namespace VentCalc.UI.Services
             LastHighlightState.HighlightApplySucceeded = state.HighlightApplySucceeded;
             LastHighlightState.HighlightClearSucceeded = state.HighlightClearSucceeded;
             LastHighlightState.OriginalOverridesRestored = state.OriginalOverridesRestored;
+            LastHighlightState.VelocityGroups.BelowMin = state.VelocityGroups.BelowMin;
+            LastHighlightState.VelocityGroups.Normal = state.VelocityGroups.Normal;
+            LastHighlightState.VelocityGroups.AboveMax = state.VelocityGroups.AboveMax;
+            LastHighlightState.VelocityGroups.Critical = state.VelocityGroups.Critical;
+            LastHighlightState.VelocityGroups.NotCalculated = state.VelocityGroups.NotCalculated;
+            LastHighlightState.VelocityGroups.ColoredDuctCount = state.VelocityGroups.ColoredDuctCount;
+            LastHighlightState.VelocityGroups.ColoredFittingCount = state.VelocityGroups.ColoredFittingCount;
+            LastHighlightState.VelocityGroups.NotCalculatedFittingCount = state.VelocityGroups.NotCalculatedFittingCount;
             LastHighlightState.Errors = state.Errors;
         }
     }
