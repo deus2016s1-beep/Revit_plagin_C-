@@ -65,6 +65,8 @@ namespace VentCalc.Core.Models
             ? string.Empty
             : string.Join(", ", ElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)));
 
+        public string StartEndDisplay => string.Create(CultureInfo.InvariantCulture, $"{StartElementId}–{EndElementId}");
+
         public string WarningText => string.Join("; ", Warnings);
     }
 }

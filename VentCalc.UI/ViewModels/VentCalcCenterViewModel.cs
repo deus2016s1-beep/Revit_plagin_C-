@@ -35,6 +35,8 @@ namespace VentCalc.UI.ViewModels
         private ProjectZetaCatalogRow? selectedProjectZetaCatalogRow;
         private bool isSynchronizingManualZeta;
         private string localResistanceScopeMode = "CurrentPath";
+        private string calculationViewMode = "Основные данные";
+        private string issuesFilter = "Требуют внимания";
         private bool showAllProjectZetaCatalogRoles;
         private string selectedElementId = "—";
         private string systemName = "—";
@@ -79,6 +81,7 @@ namespace VentCalc.UI.ViewModels
                     Message = settingsService.LastWarning,
                     Recommendation = "Проверьте файл %APPDATA%\\VentCalc\\settings.json; повреждённый файл переименован."
                 });
+                RefreshFilteredIssues();
             }
 
             LoadSelectedSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SelectedElement));
@@ -236,6 +239,8 @@ namespace VentCalc.UI.ViewModels
 
         public ObservableCollection<VentIssueInfo> Issues { get; } = new ObservableCollection<VentIssueInfo>();
 
+        public ObservableCollection<VentIssueInfo> FilteredIssues { get; } = new ObservableCollection<VentIssueInfo>();
+
         public HighlightStateInfo HighlightState { get; } = new HighlightStateInfo();
 
         public int VelocityBelowMinCount => HighlightState.VelocityGroups.BelowMin;
@@ -247,6 +252,45 @@ namespace VentCalc.UI.ViewModels
         public int VelocityCriticalCount => HighlightState.VelocityGroups.Critical;
 
         public int VelocityNotCalculatedCount => HighlightState.VelocityGroups.NotCalculated;
+
+        public string CalculationViewMode
+        {
+            get => calculationViewMode;
+            set
+            {
+                if (SetProperty(ref calculationViewMode, string.IsNullOrWhiteSpace(value) ? "Основные данные" : value))
+                {
+                    OnPropertyChanged(nameof(IsCalculationMainView));
+                    OnPropertyChanged(nameof(IsCalculationEngineeringView));
+                }
+            }
+        }
+
+        public bool IsCalculationMainView => string.Equals(CalculationViewMode, "Основные данные", StringComparison.Ordinal);
+
+        public bool IsCalculationEngineeringView => string.Equals(CalculationViewMode, "Инженерные данные", StringComparison.Ordinal);
+
+        public string IssuesFilter
+        {
+            get => issuesFilter;
+            set
+            {
+                if (SetProperty(ref issuesFilter, string.IsNullOrWhiteSpace(value) ? "Требуют внимания" : value))
+                {
+                    RefreshFilteredIssues();
+                }
+            }
+        }
+
+        public int ErrorIssueCount => Issues.Count(issue => IsSeverity(issue, "Error"));
+
+        public int WarningIssueCount => Issues.Count(issue => IsSeverity(issue, "Warning"));
+
+        public int InfoIssueCount => Issues.Count(issue => !IsSeverity(issue, "Error") && !IsSeverity(issue, "Warning"));
+
+        public double SelectedPathFlowM3h => SelectedPath?.FlowM3hNumeric ?? 0;
+
+        public int SelectedPathSectionCount => SelectedPathSections.Count;
 
         public string HighlightStatusText => HighlightState.ActiveMode == HighlightMode.None
             ? "Подсветка не активна."
@@ -693,6 +737,7 @@ namespace VentCalc.UI.ViewModels
             Replace(SystemCatalog, data.SystemCatalog);
             SynchronizeSelectedCatalogSystem(data);
             Replace(Issues, SortIssues(BuildIssues(data)));
+            RefreshFilteredIssues();
             if (!string.IsNullOrWhiteSpace(settingsWarning))
             {
                 Issues.Insert(0, new VentIssueInfo
@@ -702,6 +747,7 @@ namespace VentCalc.UI.ViewModels
                     Message = settingsWarning,
                     Recommendation = "Проверьте файл %APPDATA%\\VentCalc\\settings.json; повреждённый файл переименован."
                 });
+                RefreshFilteredIssues();
             }
             Replace(StartCandidateDetails, data.PathSummary?.StartCandidateDetails ?? Array.Empty<string>());
             Replace(EndCandidateDetails, data.PathSummary?.EndCandidateDetails ?? Array.Empty<string>());
@@ -726,6 +772,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(LoadedSystemDisplay));
             OnPropertyChanged(nameof(CriticalPathIndex));
             OnPropertyChanged(nameof(CriticalPathDisplay));
+            RefreshFilteredIssues();
             OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
             OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
             OnPropertyChanged(nameof(LastLoadedElementId));
@@ -734,6 +781,8 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            OnPropertyChanged(nameof(SelectedPathFlowM3h));
+            OnPropertyChanged(nameof(SelectedPathSectionCount));
             OnPropertyChanged(nameof(ReportText));
             BuildProjectZetaCatalogRows();
             RefreshDisplayedLocalResistances();
@@ -1035,6 +1084,28 @@ namespace VentCalc.UI.ViewModels
                 .ToList();
         }
 
+        private void RefreshFilteredIssues()
+        {
+            IEnumerable<VentIssueInfo> filtered = IssuesFilter switch
+            {
+                "Все" => Issues,
+                "Ошибки" => Issues.Where(issue => IsSeverity(issue, "Error")),
+                "Предупреждения" => Issues.Where(issue => IsSeverity(issue, "Warning")),
+                "Сведения" => Issues.Where(issue => !IsSeverity(issue, "Error") && !IsSeverity(issue, "Warning")),
+                _ => Issues.Where(issue => IsSeverity(issue, "Error") || IsSeverity(issue, "Warning"))
+            };
+
+            Replace(FilteredIssues, filtered);
+            OnPropertyChanged(nameof(ErrorIssueCount));
+            OnPropertyChanged(nameof(WarningIssueCount));
+            OnPropertyChanged(nameof(InfoIssueCount));
+        }
+
+        private static bool IsSeverity(VentIssueInfo issue, string severity)
+        {
+            return string.Equals(issue.Severity, severity, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void AddDuctIssue(List<VentIssueInfo> issues, long elementId, string category, string message, string recommendation, string severity = "Warning")
         {
             issues.Add(new VentIssueInfo
@@ -1060,6 +1131,7 @@ namespace VentCalc.UI.ViewModels
             NotifySelectionChanged();
             Replace(SelectedPathDucts, SelectedPath?.Calculation?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>());
             Replace(SelectedPathSections, SelectedPath?.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>());
+            OnPropertyChanged(nameof(SelectedPathSectionCount));
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
             SubscribeLocalResistanceRows();
             RefreshDisplayedLocalResistances();
@@ -1070,6 +1142,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            OnPropertyChanged(nameof(SelectedPathFlowM3h));
         }
 
         private void SubscribeLocalResistanceRows()
@@ -1997,6 +2070,7 @@ namespace VentCalc.UI.ViewModels
                 PathSummary = PathSummary,
                 AerodynamicSummary = AerodynamicSummary
             })));
+            RefreshFilteredIssues();
 
             OnPropertyChanged(nameof(CriticalPathText));
             OnPropertyChanged(nameof(NearCriticalPathIndexes));
