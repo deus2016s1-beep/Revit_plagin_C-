@@ -470,22 +470,58 @@
             </TabItem>
 
             <TabItem Header="Настройки">
-                <StackPanel Margin="16" MaxWidth="460" HorizontalAlignment="Left">
-                    <TextBlock Text="Расчётные настройки" FontWeight="Bold" FontSize="16" />
-                    <TextBlock Text="Плотность воздуха, кг/м³" /><TextBox Text="{Binding Settings.AirDensityKgM3, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Динамическая вязкость воздуха, Па·с" /><TextBox Text="{Binding Settings.AirDynamicViscosityText, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Обычно для воздуха при 20°C: 1.81e-5 Па·с" Foreground="#FF666666" FontSize="11" />
-                    <TextBlock Text="Шероховатость воздуховода, мм" /><TextBox Text="{Binding Settings.RoughnessMm, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Запас давления, %" /><TextBox Text="{Binding Settings.PressureReservePercent, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Минимальная скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Максимальная скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="VentCalc v2.0 — инженерный расчёт вентиляции" Foreground="#FF555555" Margin="0,12,0,0" />
-                    <WrapPanel Margin="0,12,0,0">
-                        <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" />
-                        <Button Content="Сбросить по умолчанию" Command="{Binding ResetSettingsCommand}" />
+                <DockPanel Margin="16">
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                        <Button Content="Сохранить настройки" Command="{Binding SaveSettingsCommand}" />
+                        <Button Content="Восстановить все настройки" Command="{Binding ResetSettingsCommand}" />
+                        <TextBlock Text="VentCalc v2.0 — инженерный расчёт вентиляции" Foreground="#FF555555" Margin="12,8,0,0" />
                     </WrapPanel>
-                </StackPanel>
+                    <TabControl SelectedValue="{Binding SelectedSettingsSection, Mode=TwoWay}" SelectedValuePath="Header">
+                        <TabItem Header="Воздух и расчёт">
+                            <StackPanel Margin="12" MaxWidth="520" HorizontalAlignment="Left">
+                                <TextBlock Text="Плотность воздуха, кг/м³" FontWeight="Bold" /><TextBox Text="{Binding Settings.AirDensityKgM3, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Обычно 1.2 кг/м³ при нормальных условиях." Foreground="#FF666666" FontSize="11" />
+                                <TextBlock Text="Динамическая вязкость воздуха, Па·с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.AirDynamicViscosityText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Обычно 1.81E-5 Па·с при 20 °C." Foreground="#FF666666" FontSize="11" />
+                                <TextBlock Text="Шероховатость воздуховода, мм" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.RoughnessMm, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Для оцинкованной стали часто принимают около 0.1 мм." Foreground="#FF666666" FontSize="11" />
+                                <TextBlock Text="Запас давления, %" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.PressureReservePercent, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Добавляется к итоговым потерям трассы." Foreground="#FF666666" FontSize="11" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Воздух и расчёт" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Скорости">
+                            <StackPanel Margin="12" MaxWidth="520" HorizontalAlignment="Left">
+                                <TextBlock Text="Минимальная скорость, м/с" FontWeight="Bold" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Максимальная скорость, м/с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Критическая скорость, м/с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Перед сохранением проверяется: минимальная меньше максимальной, максимальная меньше критической." Foreground="#FF666666" TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Скорости" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Трассировка">
+                            <StackPanel Margin="12" MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Расширенные настройки трассировки будут добавлены позже. Сейчас используется стабильная автоматическая логика VentCalc." TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Трассировка" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Интерфейс">
+                            <StackPanel Margin="12" MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Вкладка после загрузки системы" FontWeight="Bold" />
+                                <ComboBox SelectedValue="{Binding Settings.UiDefaultTabAfterLoad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Content" Width="220" Margin="4">
+                                    <ComboBoxItem Content="Расчёт" IsSelected="True" />
+                                    <ComboBoxItem Content="Местные сопротивления" />
+                                    <ComboBoxItem Content="Проверки" />
+                                </ComboBox>
+                                <CheckBox Content="Запоминать размер и положение окон" IsChecked="{Binding Settings.RememberWindowPlacement, Mode=TwoWay}" Margin="4,8,4,4" />
+                                <CheckBox Content="Приближать модель к показанному элементу" IsChecked="{Binding Settings.ZoomToElementOnShow, Mode=TwoWay}" Margin="4" />
+                                <CheckBox Content="Подтверждать массовые изменения ζ" IsChecked="{Binding Settings.ConfirmBulkZetaChanges, Mode=TwoWay}" Margin="4" />
+                                <TextBlock Text="Настройки интерфейса сохраняются в settings.json. Сейчас к логике подключена только вкладка после загрузки системы." Foreground="#FF666666" TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Интерфейс" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                    </TabControl>
+                </DockPanel>
             </TabItem>
         </TabControl>
     </DockPanel>

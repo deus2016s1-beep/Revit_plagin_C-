@@ -35,6 +35,7 @@ namespace VentCalc.UI.ViewModels
         private ProjectZetaCatalogRow? selectedProjectZetaCatalogRow;
         private bool isSynchronizingManualZeta;
         private string localResistanceScopeMode = "CurrentPath";
+        private string selectedSettingsSection = "Воздух и расчёт";
         private string calculationViewMode = "Основные данные";
         private string issuesFilter = "Требуют внимания";
         private bool showAllProjectZetaCatalogRoles;
@@ -95,6 +96,7 @@ namespace VentCalc.UI.ViewModels
             SelectLoadedPathThroughElementInRevitCommand = new RelayCommand(_ => SelectLoadedPathThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
             SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
             ResetSettingsCommand = new RelayCommand(_ => ResetSettings());
+            ResetSettingsSectionCommand = new RelayCommand(parameter => ResetSettingsSection(parameter?.ToString() ?? SelectedSettingsSection));
             ApplyVelocityHighlightCommand = new RelayCommand(_ => ApplyVelocityHighlight(), _ => AerodynamicSummary != null);
             ResetVelocityHighlightCommand = new RelayCommand(_ => ClearHighlight());
             PickLowVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.LowVelocityColorHex, value => Settings.LowVelocityColorHex = value));
@@ -252,6 +254,12 @@ namespace VentCalc.UI.ViewModels
         public int VelocityCriticalCount => HighlightState.VelocityGroups.Critical;
 
         public int VelocityNotCalculatedCount => HighlightState.VelocityGroups.NotCalculated;
+
+        public string SelectedSettingsSection
+        {
+            get => selectedSettingsSection;
+            set => SetProperty(ref selectedSettingsSection, string.IsNullOrWhiteSpace(value) ? "Воздух и расчёт" : value);
+        }
 
         public string CalculationViewMode
         {
@@ -604,6 +612,8 @@ namespace VentCalc.UI.ViewModels
         public ICommand SaveSettingsCommand { get; }
 
         public ICommand ResetSettingsCommand { get; }
+
+        public ICommand ResetSettingsSectionCommand { get; }
 
         public ICommand ApplyVelocityHighlightCommand { get; }
 
@@ -2305,20 +2315,102 @@ namespace VentCalc.UI.ViewModels
 
         private void SaveSettings()
         {
+            if (!ValidateVelocitySettings())
+            {
+                return;
+            }
+
             settingsService.Save(Settings);
-            OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
-            OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
+            NotifySettingsChanged();
             StatusText = string.IsNullOrWhiteSpace(settingsService.LastWarning) ? "Настройки сохранены." : settingsService.LastWarning;
         }
 
         private void ResetSettings()
         {
+            Forms.DialogResult result = Forms.MessageBox.Show(
+                "Будут восстановлены стандартные настройки VentCalc. Расчёт текущей системы будет обновлён. Продолжить?",
+                "VentCalc",
+                Forms.MessageBoxButtons.YesNo,
+                Forms.MessageBoxIcon.Question);
+
+            if (result != Forms.DialogResult.Yes)
+            {
+                return;
+            }
+
             Settings = VentCalcSettings.CreateDefault();
             settingsService.Save(Settings);
             OnPropertyChanged(nameof(Settings));
+            NotifySettingsChanged();
+            RecalculateLoadedSystemIfAvailable();
+            StatusText = "Настройки VentCalc восстановлены.";
+            LogAction(StatusText);
+        }
+
+        private void ResetSettingsSection(string section)
+        {
+            VentCalcSettings defaults = VentCalcSettings.CreateDefault();
+            switch (section)
+            {
+                case "Скорости":
+                    Settings.MinVelocityMs = defaults.MinVelocityMs;
+                    Settings.MaxVelocityMs = defaults.MaxVelocityMs;
+                    Settings.CriticalVelocityMs = defaults.CriticalVelocityMs;
+                    break;
+                case "Интерфейс":
+                    Settings.UiDefaultTabAfterLoad = defaults.UiDefaultTabAfterLoad;
+                    Settings.RememberWindowPlacement = defaults.RememberWindowPlacement;
+                    Settings.ZoomToElementOnShow = defaults.ZoomToElementOnShow;
+                    Settings.ConfirmBulkZetaChanges = defaults.ConfirmBulkZetaChanges;
+                    break;
+                case "Трассировка":
+                    StatusText = "В этом разделе пока нет подключённых пользовательских настроек.";
+                    return;
+                default:
+                    Settings.AirDensityKgM3 = defaults.AirDensityKgM3;
+                    Settings.AirDynamicViscosityPaS = defaults.AirDynamicViscosityPaS;
+                    Settings.RoughnessMm = defaults.RoughnessMm;
+                    Settings.PressureReservePercent = defaults.PressureReservePercent;
+                    break;
+            }
+
+            if (!ValidateVelocitySettings())
+            {
+                return;
+            }
+
+            settingsService.Save(Settings);
+            NotifySettingsChanged();
+            RecalculateLoadedSystemIfAvailable();
+            StatusText = "Раздел настроек восстановлен.";
+            LogAction(StatusText);
+        }
+
+        private bool ValidateVelocitySettings()
+        {
+            if (Settings.MinVelocityMs < Settings.MaxVelocityMs && Settings.MaxVelocityMs < Settings.CriticalVelocityMs)
+            {
+                return true;
+            }
+
+            const string message = "Проверьте пороги скоростей: минимальная должна быть меньше максимальной, а максимальная меньше критической.";
+            StatusText = message;
+            showMessage?.Invoke(message);
+            return false;
+        }
+
+        private void NotifySettingsChanged()
+        {
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
-            StatusText = "Настройки сброшены по умолчанию и сохранены.";
+        }
+
+        private void RecalculateLoadedSystemIfAvailable()
+        {
+            if (LastLoadedElementId.HasValue)
+            {
+                RequestLoadSelectedSystem(VentCalcLoadRequestMode.LastLoadedElement);
+            }
         }
 
 
@@ -2715,6 +2807,11 @@ namespace VentCalc.UI.ViewModels
         private string selectedPathColorHex = "#00BCD4";
         private string criticalPathColorHex = "#E91E63";
         private string issueColorHex = "#D50000";
+        private int settingsSchemaVersion = 1;
+        private string uiDefaultTabAfterLoad = "Расчёт";
+        private bool rememberWindowPlacement;
+        private bool zoomToElementOnShow = true;
+        private bool confirmBulkZetaChanges = true;
 
         public double AirDensityKgM3
         {
@@ -2831,6 +2928,36 @@ namespace VentCalc.UI.ViewModels
             set => SetProperty(ref issueColorHex, NormalizeColorHex(value, "#D50000"));
         }
 
+        public int SettingsSchemaVersion
+        {
+            get => settingsSchemaVersion;
+            set => SetProperty(ref settingsSchemaVersion, value <= 0 ? 1 : value);
+        }
+
+        public string UiDefaultTabAfterLoad
+        {
+            get => uiDefaultTabAfterLoad;
+            set => SetProperty(ref uiDefaultTabAfterLoad, NormalizeDefaultTab(value));
+        }
+
+        public bool RememberWindowPlacement
+        {
+            get => rememberWindowPlacement;
+            set => SetProperty(ref rememberWindowPlacement, value);
+        }
+
+        public bool ZoomToElementOnShow
+        {
+            get => zoomToElementOnShow;
+            set => SetProperty(ref zoomToElementOnShow, value);
+        }
+
+        public bool ConfirmBulkZetaChanges
+        {
+            get => confirmBulkZetaChanges;
+            set => SetProperty(ref confirmBulkZetaChanges, value);
+        }
+
         public static VentCalcSettings CreateDefault()
         {
             return new VentCalcSettings();
@@ -2839,6 +2966,11 @@ namespace VentCalc.UI.ViewModels
         private static bool TryParseDouble(string value, out double parsed)
         {
             return double.TryParse(value?.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out parsed);
+        }
+
+        private static string NormalizeDefaultTab(string? value)
+        {
+            return value == "Местные сопротивления" || value == "Проверки" ? value : "Расчёт";
         }
 
         private static string NormalizeColorHex(string value, string fallback)

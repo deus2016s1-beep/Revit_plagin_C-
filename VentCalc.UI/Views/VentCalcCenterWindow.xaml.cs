@@ -27,14 +27,18 @@ namespace VentCalc.UI.Views
                 return;
             }
 
-            Dispatcher.BeginInvoke(SelectCalculationTab, DispatcherPriority.Background);
+            Dispatcher.BeginInvoke(SelectDefaultTabAfterLoad, DispatcherPriority.Background);
         }
 
-        private void SelectCalculationTab()
+        private void SelectDefaultTabAfterLoad()
         {
+            string targetHeader = DataContext is VentCalcCenterViewModel viewModel
+                ? viewModel.Settings.UiDefaultTabAfterLoad
+                : "Расчёт";
+
             foreach (TabItem tab in MainTabs.Items.OfType<TabItem>())
             {
-                if (tab.Header?.ToString() == "Расчёт")
+                if (tab.Header?.ToString() == targetHeader)
                 {
                     MainTabs.SelectedItem = tab;
                     return;

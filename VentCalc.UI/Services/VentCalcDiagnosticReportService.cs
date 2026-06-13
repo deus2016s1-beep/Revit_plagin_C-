@@ -407,7 +407,13 @@ namespace VentCalc.UI.Services
                     criticalVelocityColorHex = viewModel.Settings.CriticalVelocityColorHex,
                     selectedPathColorHex = viewModel.Settings.SelectedPathColorHex,
                     criticalPathColorHex = viewModel.Settings.CriticalPathColorHex,
-                    issueColorHex = viewModel.Settings.IssueColorHex
+                    issueColorHex = viewModel.Settings.IssueColorHex,
+                    settingsSchemaVersion = viewModel.Settings.SettingsSchemaVersion,
+                    selectedSettingsSection = viewModel.SelectedSettingsSection,
+                    uiDefaultTabAfterLoad = viewModel.Settings.UiDefaultTabAfterLoad,
+                    rememberWindowPlacement = viewModel.Settings.RememberWindowPlacement,
+                    zoomToElementOnShow = viewModel.Settings.ZoomToElementOnShow,
+                    confirmBulkZetaChanges = viewModel.Settings.ConfirmBulkZetaChanges
                 },
                 highlighting = new
                 {
