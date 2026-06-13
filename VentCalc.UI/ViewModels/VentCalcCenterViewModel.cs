@@ -52,6 +52,10 @@ namespace VentCalc.UI.ViewModels
         private DateTime? lastExcelExportCreatedAt;
         private bool lastExcelExportSucceeded;
         private int lastExcelExportSheetCount;
+        private int lastExcelExportAeroSectionRowCount;
+        private double lastExcelExportAeroLocalResistanceDistributedPa;
+        private double lastExcelExportAeroLocalResistanceTotalPa;
+        private double lastExcelExportAeroTotalPressureLossPa;
         private string reportPreviewText = "Отчёт для проверки ещё не сформирован.";
         private string lastActionMessage = "Действий пока не было.";
         private string revitVersion = "—";
@@ -646,6 +650,30 @@ namespace VentCalc.UI.ViewModels
         {
             get => lastExcelExportCreatedAt;
             private set => SetProperty(ref lastExcelExportCreatedAt, value);
+        }
+
+        public int LastExcelExportAeroSectionRowCount
+        {
+            get => lastExcelExportAeroSectionRowCount;
+            private set => SetProperty(ref lastExcelExportAeroSectionRowCount, value);
+        }
+
+        public double LastExcelExportAeroLocalResistanceDistributedPa
+        {
+            get => lastExcelExportAeroLocalResistanceDistributedPa;
+            private set => SetProperty(ref lastExcelExportAeroLocalResistanceDistributedPa, value);
+        }
+
+        public double LastExcelExportAeroLocalResistanceTotalPa
+        {
+            get => lastExcelExportAeroLocalResistanceTotalPa;
+            private set => SetProperty(ref lastExcelExportAeroLocalResistanceTotalPa, value);
+        }
+
+        public double LastExcelExportAeroTotalPressureLossPa
+        {
+            get => lastExcelExportAeroTotalPressureLossPa;
+            private set => SetProperty(ref lastExcelExportAeroTotalPressureLossPa, value);
         }
 
         public string LastActionMessage
@@ -2975,6 +3003,10 @@ namespace VentCalc.UI.ViewModels
                 LastExcelExportSheetCount = result.SheetCount;
                 LastExcelExportError = string.Empty;
                 LastExcelExportCreatedAt = result.CreatedAt;
+                LastExcelExportAeroSectionRowCount = result.AeroSectionRowCount;
+                LastExcelExportAeroLocalResistanceDistributedPa = result.AeroLocalResistanceDistributedPa;
+                LastExcelExportAeroLocalResistanceTotalPa = result.AeroLocalResistanceTotalPa;
+                LastExcelExportAeroTotalPressureLossPa = result.AeroTotalPressureLossPa;
                 StatusText = $"Excel аэродинамического расчёта создан: {result.Path}";
                 LogAction(StatusText);
                 new VentCalc.UI.Views.ExcelExportResultWindow(result.Path).ShowDialog();
@@ -2985,6 +3017,10 @@ namespace VentCalc.UI.ViewModels
                 LastExcelExportError = exception.Message;
                 LastExcelExportSheetCount = 0;
                 LastExcelExportCreatedAt = DateTime.Now;
+                LastExcelExportAeroSectionRowCount = 0;
+                LastExcelExportAeroLocalResistanceDistributedPa = 0;
+                LastExcelExportAeroLocalResistanceTotalPa = 0;
+                LastExcelExportAeroTotalPressureLossPa = 0;
                 StatusText = exception.Message;
                 showMessage?.Invoke(exception.Message);
                 reportException?.Invoke(exception);

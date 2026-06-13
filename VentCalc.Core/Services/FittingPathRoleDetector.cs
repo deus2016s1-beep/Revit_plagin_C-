@@ -194,22 +194,16 @@ namespace VentCalc.Core.Services
             DuctCalculationInfo? next,
             FittingPathRoleInfo role)
         {
-            if (TryResolveAngleFromText(text, out string roleFromText))
-            {
-                role.Reason = "Угол отвода определён по имени/типу элемента.";
-                return roleFromText;
-            }
-
             double? angle = TryCalculateConnectorAngle(data, previous?.ElementId, next?.ElementId);
             if (angle.HasValue && TryClassifyElbowAngle(angle.Value, out string roleFromConnectors, out double roundedAngle, out string roundingWarning))
             {
                 role.ActualAngleDeg = angle.Value;
                 role.RoundedAngleDeg = roundedAngle;
                 role.AngleWasRounded = Math.Abs(angle.Value - roundedAngle) > 0.1;
+                role.AngleSource = "ConnectorDirections";
+                role.AngleReason = $"Угол отвода определён по направлениям коннекторов: {angle.Value:0.#}°, принято {roundedAngle:0.#}°.";
                 role.AngleRoundingWarning = roundingWarning;
-                role.Reason = role.AngleWasRounded
-                    ? $"Фактический угол {angle.Value:0.#}° округлён до расчётного угла {roundedAngle:0.#}°."
-                    : $"Угол отвода определён по направлениям коннекторов: {angle.Value:0.#}°.";
+                role.Reason = role.AngleReason;
                 if (!string.IsNullOrWhiteSpace(roundingWarning))
                 {
                     role.Warnings.Add(roundingWarning);
@@ -217,9 +211,53 @@ namespace VentCalc.Core.Services
                 return roleFromConnectors;
             }
 
-            role.Reason = "Угол отвода не найден по имени/типу и не определён по коннекторам.";
+            if (TryResolveAngleFromData(data, text, out string roleFromText, out double textAngle, out string textAngleSource))
+            {
+                role.ActualAngleDeg = textAngle;
+                role.RoundedAngleDeg = textAngle;
+                role.AngleWasRounded = false;
+                role.AngleSource = textAngleSource;
+                role.AngleReason = $"Угол отвода определён по имени типа: {textAngle:0.#}°.";
+                role.Reason = role.AngleReason;
+                return roleFromText;
+            }
+
+            role.AngleSource = "Fallback";
+            role.AngleReason = "Угол отвода не найден по имени/типу и не определён по коннекторам.";
+            role.Reason = role.AngleReason;
             role.Warnings.Add("Угол отвода не найден по имени/типу; роль отвода требует проверки.");
             return "Unknown";
+        }
+
+        private static bool TryResolveAngleFromData(
+            LocalResistanceElementData data,
+            string fallbackText,
+            out string pathRole,
+            out double acceptedAngle,
+            out string source)
+        {
+            if (TryResolveAngleFromText(data.TypeName ?? string.Empty, out pathRole, out acceptedAngle))
+            {
+                source = "TypeName";
+                return true;
+            }
+
+            if (TryResolveAngleFromText(data.FamilyName ?? string.Empty, out pathRole, out acceptedAngle))
+            {
+                source = "FamilyName";
+                return true;
+            }
+
+            if (TryResolveAngleFromText(fallbackText, out pathRole, out acceptedAngle))
+            {
+                source = "Fallback";
+                return true;
+            }
+
+            source = string.Empty;
+            pathRole = string.Empty;
+            acceptedAngle = 0;
+            return false;
         }
 
         private static string ResolvePassOrBranch(long previousElementId, long nextElementId, IReadOnlySet<long> mainLine)
@@ -322,10 +360,11 @@ namespace VentCalc.Core.Services
             }
 
             double dot = Math.Clamp(Dot(previous, next), -1.0, 1.0);
-            return Math.Acos(dot) * 180.0 / Math.PI;
+            double rawAngle = Math.Acos(dot) * 180.0 / Math.PI;
+            return Math.Min(rawAngle, 180.0 - rawAngle);
         }
 
-        private static bool TryResolveAngleFromText(string text, out string pathRole)
+        private static bool TryResolveAngleFromText(string text, out string pathRole, out double acceptedAngle)
         {
             foreach ((double angle, string role) in ElbowAngleRoles)
             {
@@ -333,11 +372,13 @@ namespace VentCalc.Core.Services
                 if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
                 {
                     pathRole = role;
+                    acceptedAngle = angle;
                     return true;
                 }
             }
 
             pathRole = string.Empty;
+            acceptedAngle = 0;
             return false;
         }
 
@@ -351,28 +392,17 @@ namespace VentCalc.Core.Services
                 return false;
             }
 
-            if (angle < 7.5)
-            {
-                roundedAngle = 15.0;
-                pathRole = "Elbow15";
-                warning = "Малый угол округлён до 15°.";
-                return true;
-            }
-
-            if (angle > 90.0)
-            {
-                roundedAngle = 90.0;
-                pathRole = "Elbow90";
-                warning = "Угол больше 90° ограничен расчётным значением 90°. Требуется проверка.";
-                return true;
-            }
-
             (double Angle, string Role) best = ElbowAngleRoles
                 .OrderBy(candidate => Math.Abs(angle - candidate.Angle))
-                .ThenByDescending(candidate => candidate.Angle)
+                .ThenBy(candidate => candidate.Angle)
                 .First();
             roundedAngle = best.Angle;
             pathRole = best.Role;
+            if (Math.Abs(angle - roundedAngle) > 7.5)
+            {
+                warning = $"Угол отвода рассчитан по направлениям коннекторов: {angle:0.#}°, округлён до {roundedAngle:0.#}°. Требуется проверка.";
+            }
+
             return true;
         }
 

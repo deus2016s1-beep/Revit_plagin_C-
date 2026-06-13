@@ -504,7 +504,11 @@ namespace VentCalc.UI.Services
                     sheetCount = viewModel.LastExcelExportSheetCount,
                     lastExcelExportError = viewModel.LastExcelExportError,
                     lastExcelExportCreatedAt = viewModel.LastExcelExportCreatedAt?.ToString("O", CultureInfo.InvariantCulture),
-                    exportFolderPath = viewModel.Settings.ExportFolderPath
+                    exportFolderPath = viewModel.Settings.ExportFolderPath,
+                    aeroSectionRowCount = viewModel.LastExcelExportAeroSectionRowCount,
+                    aeroLocalResistanceDistributedPa = viewModel.LastExcelExportAeroLocalResistanceDistributedPa,
+                    aeroLocalResistanceTotalPa = viewModel.LastExcelExportAeroLocalResistanceTotalPa,
+                    aeroTotalPressureLossPa = viewModel.LastExcelExportAeroTotalPressureLossPa
                 },
                 uiState = new
                 {
@@ -600,6 +604,8 @@ namespace VentCalc.UI.Services
                     roundedAngleDeg = item.Local.RoundedAngleDeg,
                     angleWasRounded = item.Local.AngleWasRounded,
                     angleRoundingWarning = item.Local.AngleRoundingWarning,
+                    angleSource = item.Local.AngleSource,
+                    angleReason = item.Local.AngleReason,
                     storageType = item.Local.OverrideStorageType,
                     overrideKey = item.Local.OverrideKey,
                     pathDependent = item.Local.PathDependent,
@@ -611,6 +617,25 @@ namespace VentCalc.UI.Services
                     sourceAfterReload = item.Local.ZetaSource,
                     validationMessage = item.Local.ValidationMessage
                 }),
+                localResistanceAngleDiagnostics = GetLocalApplications(viewModel)
+                    .Where(item => item.Local.PathRole.StartsWith("Elbow", StringComparison.OrdinalIgnoreCase)
+                                   || item.Local.ActualAngleDeg.HasValue
+                                   || !string.IsNullOrWhiteSpace(item.Local.AngleSource))
+                    .Select(item => new
+                    {
+                        elementId = item.Local.ElementId,
+                        familyName = item.Local.FamilyName,
+                        typeName = item.Local.TypeName,
+                        calculatedAngleDeg = item.Local.ActualAngleDeg,
+                        acceptedAngleDeg = item.Local.RoundedAngleDeg,
+                        angleSource = item.Local.AngleSource,
+                        pathRole = item.Local.PathRole,
+                        autoZeta = item.Local.AutoZeta,
+                        effectiveZeta = item.Local.EffectiveZeta,
+                        reason = string.IsNullOrWhiteSpace(item.Local.AngleReason)
+                            ? item.Local.RoleReason
+                            : item.Local.AngleReason
+                    }),
                 stateConsistencyErrors = GetStateConsistencyErrors(GetAllLocalResistances(viewModel).ToList()),
                 issues = viewModel.Issues.Select(issue => new
                 {

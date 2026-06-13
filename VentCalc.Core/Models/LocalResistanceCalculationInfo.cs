@@ -62,6 +62,10 @@ namespace VentCalc.Core.Models
 
         public bool AngleWasRounded { get; set; }
 
+        public string AngleSource { get; set; } = string.Empty;
+
+        public string AngleReason { get; set; } = string.Empty;
+
         public string AngleRoundingWarning { get; set; } = string.Empty;
 
         public double Zeta
@@ -206,7 +210,7 @@ namespace VentCalc.Core.Models
 
         public string DisplayRole => string.IsNullOrWhiteSpace(PathRole) ? LocalKind : PathRole;
 
-        public string TechnicalDetails => $"Prev={PreviousDuctElementId}; Next={NextDuctElementId}; PrevA={PreviousAreaM2:0.####}; NextA={NextAreaM2:0.####}; PrevQ={PreviousFlowM3h:0.###}; NextQ={NextFlowM3h:0.###}; ActualAngle={ActualAngleDeg:0.#}; RoundedAngle={RoundedAngleDeg:0.#}; Reason={RoleReason}; Comment={ZetaComment}; Verification={ValidationMessage}";
+        public string TechnicalDetails => $"Prev={PreviousDuctElementId}; Next={NextDuctElementId}; PrevA={PreviousAreaM2:0.####}; NextA={NextAreaM2:0.####}; PrevQ={PreviousFlowM3h:0.###}; NextQ={NextFlowM3h:0.###}; ActualAngle={ActualAngleDeg:0.#}; RoundedAngle={RoundedAngleDeg:0.#}; AngleSource={AngleSource}; AngleReason={AngleReason}; Reason={RoleReason}; Comment={ZetaComment}; Verification={ValidationMessage}";
 
         public string ValidationMessage
         {
