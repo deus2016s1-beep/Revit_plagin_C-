@@ -47,7 +47,7 @@ namespace VentCalc.UI.Services
             DateTime createdAt = DateTime.Now;
             string path = Path.Combine(
                 VentCalcDiagnosticReportService.GetReportsDirectory(),
-                $"ventcalc_aero_{createdAt:yyyyMMdd_HHmmss}.xlsx");
+                $"ventcalc_aero_calc_{createdAt:yyyyMMdd_HHmmss}.xlsx");
 
             List<SheetData> sheets = BuildSheets(viewModel, viewModel.CriticalPath, createdAt);
             using (FileStream stream = File.Create(path))

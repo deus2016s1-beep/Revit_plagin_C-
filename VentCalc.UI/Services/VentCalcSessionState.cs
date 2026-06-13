@@ -50,6 +50,8 @@ namespace VentCalc.UI.Services
             LastHighlightState.VelocityGroups.Critical = state.VelocityGroups.Critical;
             LastHighlightState.VelocityGroups.NotCalculated = state.VelocityGroups.NotCalculated;
             LastHighlightState.VelocityGroups.ColoredDuctCount = state.VelocityGroups.ColoredDuctCount;
+            LastHighlightState.VelocityGroups.NotCalculatedDuctCount = state.VelocityGroups.NotCalculatedDuctCount;
+            LastHighlightState.VelocityGroups.Scope = state.VelocityGroups.Scope;
             LastHighlightState.VelocityGroups.ColoredFittingCount = state.VelocityGroups.ColoredFittingCount;
             LastHighlightState.VelocityGroups.NotCalculatedFittingCount = state.VelocityGroups.NotCalculatedFittingCount;
             LastHighlightState.Errors = state.Errors;

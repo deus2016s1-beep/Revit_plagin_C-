@@ -288,7 +288,10 @@
                     </Border>
                     <Button DockPanel.Dock="Bottom" Content="Показать выбранный участок в модели" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
                     <StackPanel>
-                        <TextBlock Text="Расчётная таблица критической трассы" FontWeight="Bold" FontSize="15" Margin="4,0,4,6" />
+                        <DockPanel Margin="4,0,4,6">
+                            <Button DockPanel.Dock="Right" Content="Создать Excel" Command="{Binding ExportExcelCommand}" Padding="10,4" ToolTip="Создать Excel аэродинамического расчёта" />
+                            <TextBlock Text="Расчётная таблица критической трассы" FontWeight="Bold" FontSize="15" VerticalAlignment="Center" />
+                        </DockPanel>
                         <DataGrid ItemsSource="{Binding SelectedPathSections}" SelectedItem="{Binding SelectedPathSection, Mode=TwoWay}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Участок" Binding="{Binding SectionDisplayName}" Width="70" />

@@ -445,7 +445,8 @@ namespace VentCalc.UI.Services
                 highlighting = new
                 {
                     lastRibbonCommand = viewModel.HighlightState.WindowSource,
-                    activeMode = viewModel.HighlightState.ActiveMode.ToString(),
+                    activeMode = viewModel.HighlightState.ActiveMode == HighlightMode.Velocity ? "VelocityMap" : viewModel.HighlightState.ActiveMode.ToString(),
+                    velocityScope = string.IsNullOrWhiteSpace(viewModel.HighlightState.VelocityGroups.Scope) ? null : viewModel.HighlightState.VelocityGroups.Scope,
                     windowSource = viewModel.HighlightState.WindowSource,
                     activeDisplayMode = viewModel.HighlightState.ActiveDisplayMode.ToString(),
                     systemNameAtApply = viewModel.HighlightState.SystemNameAtApply,
@@ -476,7 +477,9 @@ namespace VentCalc.UI.Services
                         aboveMax = viewModel.HighlightState.VelocityGroups.AboveMax,
                         critical = viewModel.HighlightState.VelocityGroups.Critical,
                         notCalculated = viewModel.HighlightState.VelocityGroups.NotCalculated,
+                        velocityScope = string.IsNullOrWhiteSpace(viewModel.HighlightState.VelocityGroups.Scope) ? null : viewModel.HighlightState.VelocityGroups.Scope,
                         coloredDuctCount = viewModel.HighlightState.VelocityGroups.ColoredDuctCount,
+                        notCalculatedDuctCount = viewModel.HighlightState.VelocityGroups.NotCalculatedDuctCount,
                         coloredFittingCount = viewModel.HighlightState.VelocityGroups.ColoredFittingCount,
                         notCalculatedFittingCount = viewModel.HighlightState.VelocityGroups.NotCalculatedFittingCount
                     },

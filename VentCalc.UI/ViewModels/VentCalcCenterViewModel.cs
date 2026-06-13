@@ -1724,6 +1724,8 @@ namespace VentCalc.UI.ViewModels
             HighlightState.VelocityGroups.Critical = result.VelocityGroups.Critical;
             HighlightState.VelocityGroups.NotCalculated = result.VelocityGroups.NotCalculated;
             HighlightState.VelocityGroups.ColoredDuctCount = result.VelocityGroups.ColoredDuctCount;
+            HighlightState.VelocityGroups.NotCalculatedDuctCount = result.VelocityGroups.NotCalculatedDuctCount;
+            HighlightState.VelocityGroups.Scope = result.VelocityGroups.Scope;
             HighlightState.VelocityGroups.ColoredFittingCount = result.VelocityGroups.ColoredFittingCount;
             HighlightState.VelocityGroups.NotCalculatedFittingCount = result.VelocityGroups.NotCalculatedFittingCount;
             HighlightState.PressureLossGroups.Low = result.PressureLossGroups.Low;
@@ -1914,6 +1916,8 @@ namespace VentCalc.UI.ViewModels
             HighlightState.VelocityGroups.Critical = state.VelocityGroups.Critical;
             HighlightState.VelocityGroups.NotCalculated = state.VelocityGroups.NotCalculated;
             HighlightState.VelocityGroups.ColoredDuctCount = state.VelocityGroups.ColoredDuctCount;
+            HighlightState.VelocityGroups.NotCalculatedDuctCount = state.VelocityGroups.NotCalculatedDuctCount;
+            HighlightState.VelocityGroups.Scope = state.VelocityGroups.Scope;
             HighlightState.VelocityGroups.ColoredFittingCount = state.VelocityGroups.ColoredFittingCount;
             HighlightState.VelocityGroups.NotCalculatedFittingCount = state.VelocityGroups.NotCalculatedFittingCount;
             HighlightState.PressureLossGroups.Low = state.PressureLossGroups.Low;
@@ -2017,6 +2021,8 @@ namespace VentCalc.UI.ViewModels
                 Critical = critical.Count,
                 NotCalculated = notCalculated,
                 ColoredDuctCount = coloredDuctCount,
+                NotCalculatedDuctCount = notCalculated - notCalculatedFittings,
+                Scope = "System",
                 ColoredFittingCount = coloredFittingCount,
                 NotCalculatedFittingCount = notCalculatedFittings
             };
@@ -2026,6 +2032,8 @@ namespace VentCalc.UI.ViewModels
             HighlightState.VelocityGroups.Critical = critical.Count;
             HighlightState.VelocityGroups.NotCalculated = notCalculated;
             HighlightState.VelocityGroups.ColoredDuctCount = coloredDuctCount;
+            HighlightState.VelocityGroups.NotCalculatedDuctCount = notCalculated - notCalculatedFittings;
+            HighlightState.VelocityGroups.Scope = "System";
             HighlightState.VelocityGroups.ColoredFittingCount = coloredFittingCount;
             HighlightState.VelocityGroups.NotCalculatedFittingCount = notCalculatedFittings;
             NotifyHighlightStateChanged();
@@ -2961,7 +2969,7 @@ namespace VentCalc.UI.ViewModels
                 LastExcelExportSheetCount = result.SheetCount;
                 LastExcelExportError = string.Empty;
                 LastExcelExportCreatedAt = result.CreatedAt;
-                StatusText = $"Excel-экспорт сохранён: {result.Path}";
+                StatusText = $"Excel аэродинамического расчёта создан: {result.Path}";
                 LogAction(StatusText);
             }
             catch (Exception exception)

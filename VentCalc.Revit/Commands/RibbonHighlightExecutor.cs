@@ -19,7 +19,7 @@ namespace VentCalc.Revit.Commands
 
         public static Result ExecuteVelocityMap(ExternalCommandData commandData, ref string message)
         {
-            return Execute(commandData, ref message, vm => vm.ToggleVelocityHighlightFromRibbon());
+            return ExecuteProjectVelocityMap(commandData, ref message);
         }
 
         public static Result ExecutePressureLossMap(ExternalCommandData commandData, ref string message)
@@ -75,6 +75,80 @@ namespace VentCalc.Revit.Commands
             }
 
             return Result.Succeeded;
+        }
+
+        private static Result ExecuteProjectVelocityMap(ExternalCommandData commandData, ref string message)
+        {
+            UIApplication uiApplication = commandData.Application;
+            UIDocument? uiDocument = uiApplication.ActiveUIDocument;
+            if (uiDocument == null)
+            {
+                TaskDialog.Show("VentCalc", NeedSystemMessage);
+                return Result.Cancelled;
+            }
+
+            var settingsService = new VentCalcSettingsService();
+            settingsService.Load();
+            var highlightHandler = new ApplyHighlightExternalEventHandler(null);
+            var viewModel = new VentCalcCenterViewModel(
+                (_, _) => { },
+                null,
+                null,
+                text => TaskDialog.Show("VentCalc", text),
+                settingsService);
+
+            HighlightResult Apply(HighlightRequest request)
+            {
+                HighlightResult result = highlightHandler.ApplyNow(uiApplication, request);
+                viewModel.ApplyHighlightResult(result);
+                VentCalcCenterCommand.ApplyHighlightResultToActiveWindow(result);
+                return result;
+            }
+
+            if (viewModel.HighlightState.ActiveMode == HighlightMode.Velocity)
+            {
+                Apply(BuildClearRequest(viewModel, "Ribbon: Карта скоростей"));
+                return Result.Succeeded;
+            }
+
+            if (viewModel.HighlightState.ActiveMode != HighlightMode.None)
+            {
+                Apply(BuildClearRequest(viewModel, "Ribbon: Карта скоростей"));
+            }
+
+            HighlightRequest request = new ProjectVelocityMapRequestBuilder().Build(uiDocument.Document, viewModel);
+            if (request.RequestedElementCount == 0)
+            {
+                const string noVelocityMessage = "Не удалось определить скорость воздуховодов или фитингов в проекте.";
+                TaskDialog.Show("VentCalc", noVelocityMessage);
+                message = noVelocityMessage;
+                return Result.Cancelled;
+            }
+
+            HighlightResult applyResult = Apply(request);
+            if (applyResult.FailedElementCount > 0 || applyResult.Errors.Count > 0)
+            {
+                TaskDialog.Show("VentCalc", viewModel.StatusText);
+                message = viewModel.StatusText;
+                return Result.Failed;
+            }
+
+            return Result.Succeeded;
+        }
+
+        private static HighlightRequest BuildClearRequest(VentCalcCenterViewModel viewModel, string windowSource)
+        {
+            return new HighlightRequest
+            {
+                Action = HighlightAction.Clear,
+                Mode = HighlightMode.None,
+                SelectElements = false,
+                ShowElements = false,
+                WindowSource = windowSource,
+                DisplayMode = HighlightDisplayMode.Normal,
+                SystemName = viewModel.SystemName,
+                StatusMessage = "Подсветка VentCalc очищена."
+            };
         }
     }
 }

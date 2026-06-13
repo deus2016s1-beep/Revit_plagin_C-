@@ -159,6 +159,10 @@ namespace VentCalc.UI.Services
 
         public int ColoredDuctCount { get; set; }
 
+        public int NotCalculatedDuctCount { get; set; }
+
+        public string Scope { get; set; } = string.Empty;
+
         public int ColoredFittingCount { get; set; }
 
         public int NotCalculatedFittingCount { get; set; }
