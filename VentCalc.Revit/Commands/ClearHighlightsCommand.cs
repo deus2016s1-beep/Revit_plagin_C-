@@ -31,8 +31,8 @@ namespace VentCalc.Revit.Commands
 
             int selectionCountAfter = uiDocument.Selection.GetElementIds().Count;
             string details = errors.Count == 0
-                ? $"Подсветка VentCalc очищена: элементов {restored}."
-                : $"Подсветка VentCalc очищена: элементов {restored}; ошибок {errors.Count}.";
+                ? $"Подсветка VentCalc снята: восстановлено {restored} элементов."
+                : $"Подсветка VentCalc снята: восстановлено {restored} элементов; ошибок {errors.Count}.";
             VentCalcCenterCommand.ApplyHighlightResultToActiveWindow(new HighlightResult
             {
                 ActiveMode = HighlightMode.None,

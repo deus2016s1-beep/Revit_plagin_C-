@@ -417,6 +417,7 @@ namespace VentCalc.UI.Services
                 },
                 highlighting = new
                 {
+                    lastRibbonCommand = viewModel.HighlightState.WindowSource,
                     activeMode = viewModel.HighlightState.ActiveMode.ToString(),
                     windowSource = viewModel.HighlightState.WindowSource,
                     activeDisplayMode = viewModel.HighlightState.ActiveDisplayMode.ToString(),

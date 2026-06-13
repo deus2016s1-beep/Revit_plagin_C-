@@ -1625,7 +1625,7 @@ namespace VentCalc.UI.ViewModels
             RequestHighlight(BuildPathHighlightRequest(SelectedPath, false, "PathHighlightWindow"));
         }
 
-        private void HighlightCriticalPath()
+        private void HighlightCriticalPath(string windowSource = "PathHighlightWindow")
         {
             if (CriticalPath == null)
             {
@@ -1640,7 +1640,7 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            RequestHighlight(BuildPathHighlightRequest(CriticalPath, true, "PathHighlightWindow"));
+            RequestHighlight(BuildPathHighlightRequest(CriticalPath, true, windowSource));
         }
 
         private HighlightRequest BuildPathHighlightRequest(PathRow path, bool isCritical, string windowSource)
@@ -1701,7 +1701,7 @@ namespace VentCalc.UI.ViewModels
                 Action = HighlightAction.Apply,
                 Mode = isCritical ? HighlightMode.CriticalPath : HighlightMode.SelectedPath,
                 SelectElements = false,
-                ShowElements = true,
+                ShowElements = Settings.ZoomToElementOnShow,
                 WindowSource = windowSource,
                 DisplayMode = HighlightDisplayMode,
                 SystemName = SystemName,
@@ -1712,7 +1712,7 @@ namespace VentCalc.UI.ViewModels
                 StartElementId = startId,
                 EndElementId = endId,
                 StatusMessage = isCritical
-                    ? $"Подсвечена критическая трасса №{pathIndex}: элементов {pathIds.Count}, потери {totalPressureLossPa:0.###} Па, {startEnd}."
+                    ? $"Показана критическая трасса №{pathIndex}, потери {totalPressureLossPa:0.###} Па."
                     : $"Подсвечена трасса №{pathIndex}: элементов {pathIds.Count}.",
                 Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
             };
@@ -1772,7 +1772,7 @@ namespace VentCalc.UI.ViewModels
             NotifyHighlightStateChanged();
         }
 
-        private void ApplyVelocityHighlight()
+        private void ApplyVelocityHighlight(string windowSource = "VelocityHighlightWindow")
         {
             if (AerodynamicSummary == null)
             {
@@ -1838,10 +1838,10 @@ namespace VentCalc.UI.ViewModels
                 Mode = HighlightMode.Velocity,
                 SelectElements = false,
                 ShowElements = false,
-                WindowSource = "VelocityHighlightWindow",
+                WindowSource = windowSource,
                 DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
                 SystemName = SystemName,
-                StatusMessage = $"Подсветка скоростей применена: воздуховодов {belowMin.Count + normal.Count + aboveMax.Count + critical.Count}; без расчёта {notCalculated}.",
+                StatusMessage = $"Карта скоростей применена: воздуховодов {belowMin.Count + normal.Count + aboveMax.Count + critical.Count}.",
                 Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
             });
         }
@@ -1862,7 +1862,7 @@ namespace VentCalc.UI.ViewModels
                 Action = HighlightAction.Apply,
                 Mode = HighlightMode.Issues,
                 SelectElements = false,
-                ShowElements = true,
+                ShowElements = Settings.ZoomToElementOnShow,
                 WindowSource = "VentCalcCenter",
                 DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
                 SystemName = SystemName,
@@ -2315,7 +2315,7 @@ namespace VentCalc.UI.ViewModels
 
         private void SaveSettings()
         {
-            if (!ValidateVelocitySettings())
+            if (!ValidateVelocitySettings() || !ValidateHighlightColorSettings())
             {
                 return;
             }
@@ -2357,10 +2357,18 @@ namespace VentCalc.UI.ViewModels
                     Settings.MaxVelocityMs = defaults.MaxVelocityMs;
                     Settings.CriticalVelocityMs = defaults.CriticalVelocityMs;
                     break;
+                case "Подсветка":
+                    Settings.LowVelocityColorHex = defaults.LowVelocityColorHex;
+                    Settings.NormalVelocityColorHex = defaults.NormalVelocityColorHex;
+                    Settings.HighVelocityColorHex = defaults.HighVelocityColorHex;
+                    Settings.CriticalVelocityColorHex = defaults.CriticalVelocityColorHex;
+                    Settings.CriticalPathColorHex = defaults.CriticalPathColorHex;
+                    Settings.IssueColorHex = defaults.IssueColorHex;
+                    Settings.ZoomToElementOnShow = defaults.ZoomToElementOnShow;
+                    break;
                 case "Интерфейс":
                     Settings.UiDefaultTabAfterLoad = defaults.UiDefaultTabAfterLoad;
                     Settings.RememberWindowPlacement = defaults.RememberWindowPlacement;
-                    Settings.ZoomToElementOnShow = defaults.ZoomToElementOnShow;
                     Settings.ConfirmBulkZetaChanges = defaults.ConfirmBulkZetaChanges;
                     break;
                 case "Трассировка":
@@ -2374,7 +2382,7 @@ namespace VentCalc.UI.ViewModels
                     break;
             }
 
-            if (!ValidateVelocitySettings())
+            if (!ValidateVelocitySettings() || !ValidateHighlightColorSettings())
             {
                 return;
             }
@@ -2397,6 +2405,55 @@ namespace VentCalc.UI.ViewModels
             StatusText = message;
             showMessage?.Invoke(message);
             return false;
+        }
+
+        private bool ValidateHighlightColorSettings()
+        {
+            string[] values =
+            {
+                Settings.LowVelocityColorHex,
+                Settings.NormalVelocityColorHex,
+                Settings.HighVelocityColorHex,
+                Settings.CriticalVelocityColorHex,
+                Settings.CriticalPathColorHex,
+                Settings.IssueColorHex
+            };
+
+            if (values.All(IsValidColorHex))
+            {
+                return true;
+            }
+
+            const string message = "Проверьте цвета подсветки: используйте HEX в формате #RRGGBB.";
+            StatusText = message;
+            showMessage?.Invoke(message);
+            return false;
+        }
+
+        private static bool IsValidColorHex(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string hex = value.Trim();
+            if (hex.StartsWith("#", StringComparison.Ordinal))
+            {
+                hex = hex.Substring(1);
+            }
+
+            return hex.Length == 6 && hex.All(Uri.IsHexDigit);
+        }
+
+        public void HighlightCriticalPathFromRibbon()
+        {
+            HighlightCriticalPath("Ribbon: Критическая трасса");
+        }
+
+        public void ApplyVelocityHighlightFromRibbon()
+        {
+            ApplyVelocityHighlight("Ribbon: Карта скоростей");
         }
 
         private void NotifySettingsChanged()

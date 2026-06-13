@@ -273,13 +273,7 @@
 
             <TabItem Header="Расчёт">
                 <DockPanel Margin="6">
-                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                        <WrapPanel Margin="0,0,0,6">
-                            <Button Content="Карта скоростей" Command="{Binding ApplyVelocityHighlightCommand}" />
-                            <Button Content="Снять подсветку" Command="{Binding ClearHighlightCommand}" />
-                            <TextBlock Text="{Binding HighlightStatusText}" Margin="12,6,0,0" Foreground="#FF555555" />
-                        </WrapPanel>
-                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding HighlightStatusText}" Margin="4,0,0,8" Foreground="#FF777777" FontSize="11" />
                     <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
                         <StackPanel>
                             <UniformGrid Columns="6" Margin="0,0,0,6">
@@ -522,13 +516,28 @@
                                 <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Воздух и расчёт" HorizontalAlignment="Left" Margin="0,12,0,0" />
                             </StackPanel>
                         </TabItem>
-                        <TabItem Header="Скорости">
+                        <TabItem Header="Пороги скоростей">
                             <StackPanel Margin="12" MaxWidth="520" HorizontalAlignment="Left">
                                 <TextBlock Text="Минимальная скорость, м/с" FontWeight="Bold" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Максимальная скорость, м/с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Критическая скорость, м/с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Перед сохранением проверяется: минимальная меньше максимальной, максимальная меньше критической." Foreground="#FF666666" TextWrapping="Wrap" />
                                 <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Скорости" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Подсветка">
+                            <StackPanel Margin="12" MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Цвета карты скоростей" FontWeight="Bold" FontSize="14" />
+                                <TextBlock Text="Ниже минимальной, HEX" /><TextBox Text="{Binding Settings.LowVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Нормальная, HEX" /><TextBox Text="{Binding Settings.NormalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Выше максимальной, HEX" /><TextBox Text="{Binding Settings.HighVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Критическая, HEX" /><TextBox Text="{Binding Settings.CriticalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Цвета трасс и ошибок" FontWeight="Bold" FontSize="14" Margin="4,12,4,4" />
+                                <TextBlock Text="Критическая трасса, HEX" /><TextBox Text="{Binding Settings.CriticalPathColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Ошибки / предупреждения, HEX" /><TextBox Text="{Binding Settings.IssueColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <CheckBox Content="Приближать модель после подсветки" IsChecked="{Binding Settings.ZoomToElementOnShow, Mode=TwoWay}" Margin="4,8,4,4" />
+                                <TextBlock Text="Введите цвет в формате #RRGGBB. Настройки сохраняются в settings.json." Foreground="#FF666666" TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Подсветка" HorizontalAlignment="Left" Margin="0,12,0,0" />
                             </StackPanel>
                         </TabItem>
                         <TabItem Header="Трассировка">
@@ -546,7 +555,6 @@
                                     <ComboBoxItem Content="Проверки" />
                                 </ComboBox>
                                 <CheckBox Content="Запоминать размер и положение окон" IsChecked="{Binding Settings.RememberWindowPlacement, Mode=TwoWay}" Margin="4,8,4,4" />
-                                <CheckBox Content="Приближать модель к показанному элементу" IsChecked="{Binding Settings.ZoomToElementOnShow, Mode=TwoWay}" Margin="4" />
                                 <CheckBox Content="Подтверждать массовые изменения ζ" IsChecked="{Binding Settings.ConfirmBulkZetaChanges, Mode=TwoWay}" Margin="4" />
                                 <TextBlock Text="Настройки интерфейса сохраняются в settings.json. Сейчас к логике подключена только вкладка после загрузки системы." Foreground="#FF666666" TextWrapping="Wrap" />
                                 <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Интерфейс" HorizontalAlignment="Left" Margin="0,12,0,0" />

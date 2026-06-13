@@ -17,7 +17,7 @@
             <TextBlock Text="Минимальная скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
             <TextBlock Text="Максимальная скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
             <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-            <TextBlock Text="Цвета скоростей настраиваются только в окне «Скорости»." Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
+            <TextBlock Text="Настройки подсветки перенесены во вкладку VentCalc Center → Настройки → Подсветка." Foreground="#FF555555" TextWrapping="Wrap" Margin="0,12,0,0" />
             <WrapPanel Margin="0,14,0,0">
                 <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" Padding="10,6" Margin="0,0,8,0" />
                 <Button Content="Сбросить по умолчанию" Command="{Binding ResetSettingsCommand}" Padding="10,6" />

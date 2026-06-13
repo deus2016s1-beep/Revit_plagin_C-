@@ -44,6 +44,11 @@ namespace VentCalc.Revit.ExternalEvents
                 return;
             }
 
+            ApplyNow(app, request);
+        }
+
+        public HighlightResult ApplyNow(UIApplication app, HighlightRequest request)
+        {
             HighlightResult result;
             try
             {
@@ -52,7 +57,7 @@ namespace VentCalc.Revit.ExternalEvents
                 {
                     result = Failed(request, "Откройте документ Revit перед подсветкой.");
                     Complete(result);
-                    return;
+                    return result;
                 }
 
                 result = request.Action == HighlightAction.Clear
@@ -66,6 +71,7 @@ namespace VentCalc.Revit.ExternalEvents
             }
 
             Complete(result);
+            return result;
         }
 
         private HighlightResult ApplyHighlight(UIDocument uiDocument, HighlightRequest request)

@@ -19,10 +19,9 @@ namespace VentCalc.Revit
             string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
             AddButtonIfMissing<VentCalcCenterCommand>(ventilationPanel, "VentCalcCenter", "VentCalc", assemblyPath);
-            AddButtonIfMissing<PathHighlightCommand>(ventilationPanel, "VentCalcPaths", "Трассы", assemblyPath);
-            AddButtonIfMissing<HighlightVelocityCommand>(ventilationPanel, "VentCalcVelocity", "Скорости", assemblyPath);
-            AddButtonIfMissing<SettingsCommand>(ventilationPanel, "VentCalcSettings", "Настройки", assemblyPath);
-            AddButtonIfMissing<ClearHighlightsCommand>(ventilationPanel, "VentCalcClearHighlights", "Очистить", assemblyPath);
+            AddButtonIfMissing<PathHighlightCommand>(ventilationPanel, "VentCalcPaths", "Критическая трасса", assemblyPath);
+            AddButtonIfMissing<HighlightVelocityCommand>(ventilationPanel, "VentCalcVelocity", "Карта скоростей", assemblyPath);
+            AddButtonIfMissing<ClearHighlightsCommand>(ventilationPanel, "VentCalcClearHighlights", "Снять подсветку", assemblyPath);
         }
 
         private static void CreateTabIfMissing(UIControlledApplication application)
