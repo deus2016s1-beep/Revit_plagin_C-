@@ -54,6 +54,8 @@ namespace VentCalc.Revit.Commands
                     VentCalcCenterCommand.ApplyHighlightResultToActiveWindow(result);
                 });
 
+            viewModel.HighlightState.ActiveMode = HighlightStateStore.GetActiveMode(uiDocument.Document);
+
             if (VentCalcSessionState.CurrentData == null)
             {
                 VentCalcCenterData data = new RevitVentCalcCenterDataLoader().Load(uiDocument, viewModel.Settings.ToAerodynamicSettings());
@@ -105,13 +107,14 @@ namespace VentCalc.Revit.Commands
                 return result;
             }
 
-            if (viewModel.HighlightState.ActiveMode == HighlightMode.Velocity)
+            HighlightMode activeMode = HighlightStateStore.GetActiveMode(uiDocument.Document);
+            if (activeMode == HighlightMode.Velocity)
             {
                 Apply(BuildClearRequest(viewModel, "Ribbon: Карта скоростей"));
                 return Result.Succeeded;
             }
 
-            if (viewModel.HighlightState.ActiveMode != HighlightMode.None)
+            if (activeMode != HighlightMode.None)
             {
                 Apply(BuildClearRequest(viewModel, "Ribbon: Карта скоростей"));
             }

@@ -43,10 +43,10 @@ namespace VentCalc.UI.Services
                 throw new InvalidOperationException("Критическая трасса не найдена. Проверьте трассировку системы.");
             }
 
-            Directory.CreateDirectory(VentCalcDiagnosticReportService.GetReportsDirectory());
+            string exportDirectory = ResolveExportDirectory(viewModel.Settings.ExportFolderPath);
             DateTime createdAt = DateTime.Now;
             string path = Path.Combine(
-                VentCalcDiagnosticReportService.GetReportsDirectory(),
+                exportDirectory,
                 $"ventcalc_aero_calc_{createdAt:yyyyMMdd_HHmmss}.xlsx");
 
             List<SheetData> sheets = BuildSheets(viewModel, viewModel.CriticalPath, createdAt);
@@ -72,46 +72,34 @@ namespace VentCalc.UI.Services
             };
         }
 
+
+        public static string ResolveExportDirectory(string? configuredPath)
+        {
+            string defaultDirectory = VentCalcDiagnosticReportService.GetReportsDirectory();
+            string directory = string.IsNullOrWhiteSpace(configuredPath) ? defaultDirectory : Environment.ExpandEnvironmentVariables(configuredPath.Trim());
+            try
+            {
+                Directory.CreateDirectory(directory);
+                return directory;
+            }
+            catch (Exception)
+            {
+                Directory.CreateDirectory(defaultDirectory);
+                return defaultDirectory;
+            }
+        }
+
         private static List<SheetData> BuildSheets(VentCalcCenterViewModel viewModel, PathCalculationInfo? criticalPath, DateTime createdAt)
         {
             if (criticalPath == null)
             {
                 throw new InvalidOperationException("Критическая трасса не найдена. Проверьте трассировку системы.");
             }
+
             return new List<SheetData>
             {
-                new SheetData("Итоги", BuildSummaryRows(viewModel, createdAt)),
                 new SheetData("Аэродинамический расчёт", BuildAeroRows(viewModel, criticalPath)),
-                new SheetData("Местные сопротивления", BuildLocalRows(criticalPath)),
-                new SheetData("Трассы", BuildPathRows(viewModel)),
-                new SheetData("Проверки", BuildIssueRows(viewModel)),
-                new SheetData("Исходные данные", BuildInputRows(viewModel))
-            };
-        }
-
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildSummaryRows(VentCalcCenterViewModel viewModel, DateTime createdAt)
-        {
-            return new List<IReadOnlyList<object?>>
-            {
-                Row("Параметр", "Значение"),
-                Row("VentCalc", "v2.0"),
-                Row("Дата формирования", createdAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
-                Row("Файл Revit", viewModel.RevitFilePath),
-                Row("Система", viewModel.SystemName),
-                Row("Тип системы", viewModel.SystemType),
-                Row("Направление", viewModel.Direction),
-                Row("Количество элементов", viewModel.TotalElements),
-                Row("Количество воздуховодов", viewModel.DuctCount),
-                Row("Количество фитингов", viewModel.FittingCount),
-                Row("Количество терминалов/решёток/зонтов", viewModel.TerminalCount),
-                Row("Количество трасс", viewModel.Paths.Count),
-                Row("Критическая трасса", viewModel.CriticalPathDisplay),
-                Row("Потери на трение, Па", Round(viewModel.SelectedPathFrictionPressureLossPa, 3)),
-                Row("Местные сопротивления, Па", Round(viewModel.SelectedPathLocalPressureLossPa, 3)),
-                Row("Запас давления, %", Round(viewModel.Settings.PressureReservePercent, 3)),
-                Row("Итоговые потери, Па", Round(viewModel.SelectedPathTotalWithReservePa, 3)),
-                Row("selfCheck status", "См. JSON/TXT диагностику"),
-                Row("Предупреждения", string.Join("; ", viewModel.Issues.Where(issue => string.Equals(issue.Severity, "Warning", StringComparison.OrdinalIgnoreCase)).Select(issue => issue.DisplayMessage)))
+                new SheetData("Исходные данные", BuildInputRows(viewModel, createdAt))
             };
         }
 
@@ -119,71 +107,65 @@ namespace VentCalc.UI.Services
         {
             var rows = new List<IReadOnlyList<object?>>
             {
-                Row("Участок", "ElementIds", "Start", "End", "Размер", "Расход, м³/ч", "Длина, м", "Площадь, м²", "Dэкв, м", "Скорость, м/с", "Re", "λ", "Pv, Па", "R, Па/м", "R·l, Па", "Причина", "Предупреждение")
+                Row($"Аэродинамический расчёт системы {viewModel.SystemName}"),
+                Row("№ п/п", "Участок", "Размер воздуховода, мм", "Расход L, м³/ч", "Длина l, м", "Площадь F, м²", "Экв. диаметр dэкв, м", "Скорость v, м/с", "Re", "λ", "Дин. давление Pv, Па", "Уд. потери R, Па/м", "Потери на трение R·l, Па", "Местные сопротивления Z, Па", "Потери участка ΔP, Па", "Примечание")
             };
+
+            int rowNumber = 1;
             foreach (CalculationSectionInfo section in criticalPath.Sections)
             {
-                rows.Add(Row(section.SectionDisplayName, section.ElementIdsText, section.StartElementId, section.EndElementId, section.Size, Round(section.FlowM3h, 3), Round(section.TotalLengthM, 3), Round(section.AreaM2, 4), Round(section.EquivalentDiameterM, 4), Round(section.VelocityMs, 3), Round(section.Reynolds, 1), Round(section.Lambda, 4), Round(section.DynamicPressurePa, 3), Round(section.SpecificPressureLossPaPerM, 3), Round(section.FrictionPressureLossPa, 3), section.SplitReasonShort, section.WarningText));
+                rows.Add(Row(
+                    rowNumber++,
+                    section.SectionDisplayName,
+                    section.Size,
+                    Round(section.FlowM3h, 3),
+                    Round(section.TotalLengthM, 3),
+                    Round(section.AreaM2, 4),
+                    Round(section.EquivalentDiameterM, 4),
+                    Round(section.VelocityMs, 3),
+                    Round(section.Reynolds, 0),
+                    Round(section.Lambda, 4),
+                    Round(section.DynamicPressurePa, 3),
+                    Round(section.SpecificPressureLossPaPerM, 3),
+                    Round(section.FrictionPressureLossPa, 3),
+                    string.Empty,
+                    Round(section.FrictionPressureLossPa, 3),
+                    section.WarningShortText));
             }
 
+            double totalWithoutReserve = criticalPath.TotalPressureLossPa;
+            double totalWithReserve = totalWithoutReserve * (1.0 + viewModel.Settings.PressureReservePercent / 100.0);
             rows.Add(Row(string.Empty));
-            rows.Add(Row("Итого", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, Round(criticalPath.Sections.Sum(section => section.TotalLengthM), 3), string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, Round(criticalPath.TotalFrictionPressureLossPa, 3), "Местные сопротивления, Па", Round(criticalPath.TotalLocalPressureLossPa, 3)));
-            rows.Add(Row("Итоговые потери, Па", Round(criticalPath.TotalPressureLossPa, 3)));
-            rows.Add(Row("Итоговые потери с запасом, Па", Round(criticalPath.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0), 3)));
+            rows.Add(Row("Итоговый блок"));
+            rows.Add(Row("Суммарная длина, м", Round(criticalPath.Sections.Sum(section => section.TotalLengthM), 3)));
+            rows.Add(Row("Потери на трение, Па", Round(criticalPath.TotalFrictionPressureLossPa, 3)));
+            rows.Add(Row("Местные сопротивления, Па", Round(criticalPath.TotalLocalPressureLossPa, 3)));
+            rows.Add(Row("Итого без запаса, Па", Round(totalWithoutReserve, 3)));
+            rows.Add(Row("Запас давления, %", Round(viewModel.Settings.PressureReservePercent, 3)));
+            rows.Add(Row("Итого с запасом, Па", Round(totalWithReserve, 3)));
             return rows;
         }
 
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildLocalRows(PathCalculationInfo criticalPath)
-        {
-            var rows = new List<IReadOnlyList<object?>>
-            {
-                Row("ElementId", "Тип элемента", "Семейство", "Размер", "Вид МС", "Роль", "Auto ζ", "Manual ζ", "Effective ζ", "Источник ζ", "Скорость, м/с", "Pv, Па", "Z, Па", "Комментарий / предупреждение")
-            };
-            rows.AddRange(criticalPath.LocalResistances.Select(local => Row(local.ElementId, local.TypeName, local.FamilyName, local.Size, local.LocalKind, local.PathRole, Round(local.AutoZeta, 3), local.ManualZeta.HasValue ? Round(local.ManualZeta.Value, 3) : "—", Round(local.EffectiveZeta, 3), local.ZetaSource, Round(local.VelocityMs, 3), Round(local.DynamicPressurePa, 3), Round(local.LocalPressureLossPa, 3), local.WarningText)));
-            return rows;
-        }
-
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildPathRows(VentCalcCenterViewModel viewModel)
-        {
-            var rows = new List<IReadOnlyList<object?>>
-            {
-                Row("№ трассы", "Статус", "Start", "End", "Элементов", "Воздуховодов", "Фитингов", "Терминалов/зонтов", "Длина, м", "Расход, м³/ч", "Потери, Па", "Δ к критической, Па", "Цепочка ElementId")
-            };
-            rows.AddRange(viewModel.Paths.Select(path => Row(path.PathIndex, path.CriticalStatus, path.StartElementId, path.EndElementId, path.TotalElementCount, path.DuctCount, path.FittingCount, path.TerminalCount, Round(path.TotalDuctLengthM, 3), path.FlowM3h, Round(path.TotalPressureLossPa, 3), Round(path.PressureLossDeltaFromCriticalPa, 3), string.Join(" → ", path.ElementIds))));
-            return rows;
-        }
-
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildIssueRows(VentCalcCenterViewModel viewModel)
-        {
-            var rows = new List<IReadOnlyList<object?>> { Row("Уровень", "ElementId", "Раздел", "Проблема", "Рекомендация") };
-            rows.AddRange(viewModel.Issues.Select(issue => Row(issue.DisplaySeverity, issue.ElementId, issue.DisplaySection, issue.DisplayMessage, issue.Recommendation)));
-            return rows;
-        }
-
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildInputRows(VentCalcCenterViewModel viewModel)
+        private static IReadOnlyList<IReadOnlyList<object?>> BuildInputRows(VentCalcCenterViewModel viewModel, DateTime createdAt)
         {
             return new List<IReadOnlyList<object?>>
             {
-                Row("Параметр", "Значение"),
-                Row("Плотность воздуха, кг/м³", viewModel.Settings.AirDensityKgM3),
-                Row("Динамическая вязкость, Па·с", viewModel.Settings.AirDynamicViscosityPaS),
-                Row("Шероховатость, мм", viewModel.Settings.RoughnessMm),
-                Row("Шероховатость, м", viewModel.Settings.RoughnessM),
-                Row("Запас давления, %", viewModel.Settings.PressureReservePercent),
-                Row("Минимальная скорость, м/с", viewModel.Settings.MinVelocityMs),
-                Row("Максимальная скорость, м/с", viewModel.Settings.MaxVelocityMs),
-                Row("Критическая скорость, м/с", viewModel.Settings.CriticalVelocityMs),
-                Row("settingsSchemaVersion", viewModel.Settings.SettingsSchemaVersion),
-                Row("selectedElementId", viewModel.SelectedElementId),
-                Row("systemName", viewModel.SystemName),
-                Row("systemType", viewModel.SystemType),
-                Row("direction", viewModel.Direction),
-                Row("totalElements", viewModel.TotalElements),
-                Row("ductCount", viewModel.DuctCount),
-                Row("fittingCount", viewModel.FittingCount),
-                Row("terminalCount", viewModel.TerminalCount),
-                Row("connectionCount", viewModel.ConnectionCount),
-                Row("openConnectorCount", viewModel.OpenConnectorCount)
+                Row("Исходные данные"),
+                Row("Параметр", "Значение", "Ед. изм.", "Примечание"),
+                Row("Система", viewModel.SystemName, string.Empty, string.Empty),
+                Row("Тип системы", viewModel.SystemType, string.Empty, string.Empty),
+                Row("Направление", viewModel.Direction, string.Empty, string.Empty),
+                Row("Количество трасс", viewModel.Paths.Count, "шт.", string.Empty),
+                Row("Критическая трасса", viewModel.CriticalPathDisplay, string.Empty, string.Empty),
+                Row("Плотность воздуха", Round(viewModel.Settings.AirDensityKgM3, 3), "кг/м³", "Обычно 1.2 кг/м³."),
+                Row("Динамическая вязкость", viewModel.Settings.AirDynamicViscosityPaS.ToString("0.#######E+0", CultureInfo.InvariantCulture), "Па·с", "Обычно 1.81E-5 Па·с при 20 °C."),
+                Row("Шероховатость воздуховода", Round(viewModel.Settings.RoughnessMm, 3), "мм", "Для оцинкованной стали часто принимают около 0.1 мм."),
+                Row("Запас давления", Round(viewModel.Settings.PressureReservePercent, 3), "%", "Добавляется к итоговым потерям критической трассы."),
+                Row("Минимальная скорость", Round(viewModel.Settings.MinVelocityMs, 3), "м/с", string.Empty),
+                Row("Максимальная скорость", Round(viewModel.Settings.MaxVelocityMs, 3), "м/с", string.Empty),
+                Row("Критическая скорость", Round(viewModel.Settings.CriticalVelocityMs, 3), "м/с", string.Empty),
+                Row("Дата формирования", createdAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), string.Empty, string.Empty),
+                Row("Файл Revit", viewModel.RevitFilePath, string.Empty, string.Empty)
             };
         }
 
@@ -238,7 +220,9 @@ namespace VentCalc.UI.Services
         private static string BuildWorksheet(IReadOnlyList<IReadOnlyList<object?>> rows)
         {
             int maxColumns = Math.Max(1, rows.Any() ? rows.Max(row => row.Count) : 1);
-            var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews><sheetData>");
+            var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"2\" topLeftCell=\"A3\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
+            builder.Append(BuildColumns(rows, maxColumns));
+            builder.Append("<sheetData>");
             for (int r = 0; r < rows.Count; r++)
             {
                 builder.Append($"<row r=\"{r + 1}\">");
@@ -246,7 +230,7 @@ namespace VentCalc.UI.Services
                 {
                     object? value = rows[r][c];
                     string cell = ColumnName(c + 1) + (r + 1).ToString(CultureInfo.InvariantCulture);
-                    string style = r == 0 ? " s=\"1\"" : string.Empty;
+                    string style = r == 0 ? " s=\"1\"" : r == 1 ? " s=\"2\"" : " s=\"3\"";
                     if (value is int or long or double or float or decimal)
                     {
                         builder.Append($"<c r=\"{cell}\"{style}><v>{Convert.ToString(value, CultureInfo.InvariantCulture)}</v></c>");
@@ -262,15 +246,35 @@ namespace VentCalc.UI.Services
             builder.Append("</sheetData>");
             if (rows.Count > 0)
             {
-                builder.Append($"<autoFilter ref=\"A1:{ColumnName(maxColumns)}{rows.Count}\"/>");
+                int headerRow = rows.Count > 1 ? 2 : 1;
+                builder.Append($"<autoFilter ref=\"A{headerRow}:{ColumnName(maxColumns)}{rows.Count}\"/>");
             }
             builder.Append("</worksheet>");
             return builder.ToString();
         }
 
+        private static string BuildColumns(IReadOnlyList<IReadOnlyList<object?>> rows, int maxColumns)
+        {
+            var builder = new StringBuilder("<cols>");
+            for (int c = 0; c < maxColumns; c++)
+            {
+                int maxLength = rows
+                    .Where(row => row.Count > c)
+                    .Select(row => Convert.ToString(row[c], CultureInfo.InvariantCulture)?.Length ?? 0)
+                    .DefaultIfEmpty(8)
+                    .Max();
+                double width = Math.Max(10, Math.Min(42, maxLength + 2));
+                string widthText = width.ToString("0.##", CultureInfo.InvariantCulture);
+                builder.Append($"<col min=\"{c + 1}\" max=\"{c + 1}\" width=\"{widthText}\" customWidth=\"1\"/>");
+            }
+
+            builder.Append("</cols>");
+            return builder.ToString();
+        }
+
         private static string BuildStyles()
         {
-            return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font></fonts><fills count=\"1\"><fill><patternFill patternType=\"none\"/></fill></fills><borders count=\"1\"><border><left style=\"thin\"/><right style=\"thin\"/><top style=\"thin\"/><bottom style=\"thin\"/><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyBorder=\"1\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyBorder=\"1\"/></cellXfs></styleSheet>";
+            return @"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?><styleSheet xmlns=""http://schemas.openxmlformats.org/spreadsheetml/2006/main""><fonts count=""2""><font><sz val=""11""/><name val=""Calibri""/></font><font><b/><sz val=""11""/><name val=""Calibri""/></font></fonts><fills count=""3""><fill><patternFill patternType=""none""/></fill><fill><patternFill patternType=""gray125""/></fill><fill><patternFill patternType=""solid""><fgColor rgb=""FFE6E6E6""/><bgColor indexed=""64""/></patternFill></fill></fills><borders count=""1""><border><left style=""thin""/><right style=""thin""/><top style=""thin""/><bottom style=""thin""/><diagonal/></border></borders><cellStyleXfs count=""1""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0""/></cellStyleXfs><cellXfs count=""4""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0""/><xf numFmtId=""0"" fontId=""1"" fillId=""0"" borderId=""0"" xfId=""0"" applyFont=""1""/><xf numFmtId=""0"" fontId=""1"" fillId=""2"" borderId=""0"" xfId=""0"" applyFont=""1"" applyFill=""1"" applyBorder=""1""/><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0"" applyBorder=""1""/></cellXfs></styleSheet>";
         }
 
         private static string ColumnName(int column)

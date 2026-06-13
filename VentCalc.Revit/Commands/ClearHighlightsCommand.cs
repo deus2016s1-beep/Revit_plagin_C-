@@ -26,6 +26,7 @@ namespace VentCalc.Revit.Commands
             {
                 transaction.Start();
                 restored = HighlightStateStore.RestoreAll(uiDocument.Document, errors);
+                HighlightStateStore.SetActiveMode(uiDocument.Document, HighlightMode.None);
                 transaction.Commit();
             }
 

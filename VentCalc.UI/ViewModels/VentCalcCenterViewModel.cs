@@ -131,7 +131,9 @@ namespace VentCalc.UI.ViewModels
             AcceptRecommendedZetaCommand = new RelayCommand(_ => AcceptRecommendedZeta(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
             WriteZetaToCommentsCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
             OpenReportsFolderCommand = new RelayCommand(_ => OpenReportsFolder());
-            ExportExcelCommand = new RelayCommand(_ => ExportExcel(), _ => NetworkInfo != null && AerodynamicSummary != null);
+            SelectExcelExportFolderCommand = new RelayCommand(_ => SelectExcelExportFolder());
+            OpenExcelExportFolderCommand = new RelayCommand(_ => OpenExcelExportFolder());
+            ExportExcelCommand = new RelayCommand(_ => ExportExcel());
             OpenSettingsFolderCommand = new RelayCommand(_ => OpenSettingsFolder());
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
             if (VentCalcSessionState.CurrentData != null)
@@ -741,6 +743,10 @@ namespace VentCalc.UI.ViewModels
         public ICommand WriteZetaToCommentsCommand { get; }
 
         public ICommand OpenReportsFolderCommand { get; }
+
+        public ICommand SelectExcelExportFolderCommand { get; }
+
+        public ICommand OpenExcelExportFolderCommand { get; }
 
         public ICommand ExportExcelCommand { get; }
 
@@ -2971,6 +2977,7 @@ namespace VentCalc.UI.ViewModels
                 LastExcelExportCreatedAt = result.CreatedAt;
                 StatusText = $"Excel аэродинамического расчёта создан: {result.Path}";
                 LogAction(StatusText);
+                new VentCalc.UI.Views.ExcelExportResultWindow(result.Path).ShowDialog();
             }
             catch (Exception exception)
             {
@@ -3005,6 +3012,49 @@ namespace VentCalc.UI.ViewModels
             catch (Exception exception)
             {
                 StatusText = $"Не удалось открыть папку настроек: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
+        }
+
+        private void SelectExcelExportFolder()
+        {
+            try
+            {
+                using var dialog = new Forms.FolderBrowserDialog
+                {
+                    Description = "Выберите папку экспорта Excel VentCalc",
+                    SelectedPath = VentCalcExcelExportService.ResolveExportDirectory(Settings.ExportFolderPath),
+                    ShowNewFolderButton = true
+                };
+
+                if (dialog.ShowDialog() == Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                {
+                    Settings.ExportFolderPath = dialog.SelectedPath;
+                    StatusText = "Папка экспорта Excel выбрана. Нажмите «Применить» или «Сохранить».";
+                }
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось выбрать папку экспорта Excel: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
+        }
+
+        private void OpenExcelExportFolder()
+        {
+            try
+            {
+                string exportDirectory = VentCalcExcelExportService.ResolveExportDirectory(Settings.ExportFolderPath);
+                Settings.ExportFolderPath = exportDirectory;
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = exportDirectory,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось открыть папку экспорта Excel: {exception.Message}";
                 reportException?.Invoke(exception);
             }
         }
@@ -3404,6 +3454,7 @@ namespace VentCalc.UI.ViewModels
         private string mediumPressureLossColorHex = "#FFEB3B";
         private string highPressureLossColorHex = "#FF9800";
         private string maxPressureLossColorHex = "#F44336";
+        private string exportFolderPath = VentCalcDiagnosticReportService.GetReportsDirectory();
 
         public double AirDensityKgM3
         {
@@ -3548,6 +3599,12 @@ namespace VentCalc.UI.ViewModels
         {
             get => confirmBulkZetaChanges;
             set => SetProperty(ref confirmBulkZetaChanges, value);
+        }
+
+        public string ExportFolderPath
+        {
+            get => exportFolderPath;
+            set => SetProperty(ref exportFolderPath, string.IsNullOrWhiteSpace(value) ? VentCalcDiagnosticReportService.GetReportsDirectory() : value.Trim());
         }
 
         public string LowPressureLossColorHex

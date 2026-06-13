@@ -140,6 +140,7 @@ namespace VentCalc.Revit.ExternalEvents
                 transaction.Commit();
             }
 
+            HighlightStateStore.SetActiveMode(document, result.ApplySucceeded ? request.Mode : HighlightMode.None);
             result.SnapshotCount = HighlightStateStore.SnapshotCount;
             result.LastApplySucceeded = result.ApplySucceeded;
             result.LastClearSucceeded = true;
@@ -188,6 +189,7 @@ namespace VentCalc.Revit.ExternalEvents
                 transaction.Commit();
             }
 
+            HighlightStateStore.SetActiveMode(document, HighlightMode.None);
             result.SelectionElementCountAfter = uiDocument.Selection.GetElementIds().Count;
             result.FailedElementCount = result.Errors.Count;
             result.SnapshotCount = HighlightStateStore.SnapshotCount;

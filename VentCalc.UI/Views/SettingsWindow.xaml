@@ -95,7 +95,19 @@
             </TabItem>
             <TabItem Header="Сервис">
                 <StackPanel Margin="16" MaxWidth="560" HorizontalAlignment="Left">
-                    <Button Content="Открыть папку настроек" Command="{Binding OpenSettingsFolderCommand}" HorizontalAlignment="Left" Padding="10,6" />
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="Папка экспорта Excel" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding Settings.ExportFolderPath, UpdateSourceTrigger=PropertyChanged}" MinWidth="360" />
+                        <Button Grid.Column="1" Content="Выбрать папку" Command="{Binding SelectExcelExportFolderCommand}" Padding="10,5" Margin="8,0,0,0" />
+                        <Button Grid.Column="2" Content="Открыть папку" Command="{Binding OpenExcelExportFolderCommand}" Padding="10,5" Margin="8,0,0,0" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource HintText}" Text="По умолчанию используется %APPDATA%\VentCalc\reports. Если папка отсутствует, VentCalc создаст её автоматически." />
+                    <Button Content="Открыть папку настроек" Command="{Binding OpenSettingsFolderCommand}" HorizontalAlignment="Left" Padding="10,6" Margin="0,8,0,0" />
                     <Button Content="Открыть папку отчётов" Command="{Binding OpenReportsFolderCommand}" HorizontalAlignment="Left" Padding="10,6" Margin="0,8,0,0" />
                     <Button Content="Сбросить настройки по умолчанию" Command="{Binding ResetSettingsCommand}" HorizontalAlignment="Left" Padding="10,6" Margin="0,8,0,0" />
                     <TextBlock Style="{StaticResource HintText}" Text="Перед полным сбросом будет показано подтверждение. Повреждённые HEX-цвета при чтении заменяются только на стандартные значения соответствующего цвета." />

@@ -440,7 +440,8 @@ namespace VentCalc.UI.Services
                     uiDefaultTabAfterLoad = viewModel.Settings.UiDefaultTabAfterLoad,
                     rememberWindowPlacement = viewModel.Settings.RememberWindowPlacement,
                     zoomToElementOnShow = viewModel.Settings.ZoomToElementOnShow,
-                    confirmBulkZetaChanges = viewModel.Settings.ConfirmBulkZetaChanges
+                    confirmBulkZetaChanges = viewModel.Settings.ConfirmBulkZetaChanges,
+                    exportFolderPath = viewModel.Settings.ExportFolderPath
                 },
                 highlighting = new
                 {
@@ -501,7 +502,8 @@ namespace VentCalc.UI.Services
                     lastExcelExportSucceeded = viewModel.LastExcelExportSucceeded,
                     lastExcelExportSheetCount = viewModel.LastExcelExportSheetCount,
                     lastExcelExportError = viewModel.LastExcelExportError,
-                    lastExcelExportCreatedAt = viewModel.LastExcelExportCreatedAt?.ToString("O", CultureInfo.InvariantCulture)
+                    lastExcelExportCreatedAt = viewModel.LastExcelExportCreatedAt?.ToString("O", CultureInfo.InvariantCulture),
+                    exportFolderPath = viewModel.Settings.ExportFolderPath
                 },
                 uiState = new
                 {
