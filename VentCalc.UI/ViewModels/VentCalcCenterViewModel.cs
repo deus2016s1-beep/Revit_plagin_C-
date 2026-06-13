@@ -440,6 +440,32 @@ namespace VentCalc.UI.ViewModels
 
         public double SelectedPathTotalWithReservePa => SelectedPathTotalPressureLossPa * (1.0 + Settings.PressureReservePercent / 100.0);
 
+        public double CriticalPathDuctLengthSumM => CriticalPath?.Ducts.Sum(duct => duct.LengthM) ?? 0;
+
+        public double CriticalPathSectionLengthSumM => CriticalPath?.Sections.Sum(section => section.TotalLengthM) ?? 0;
+
+        public double CriticalPathLengthDifferenceM => CriticalPathSectionLengthSumM - CriticalPathDuctLengthSumM;
+
+        public int CriticalPathDuctCount => CriticalPath?.Ducts.Count ?? 0;
+
+        public int CriticalPathSectionCount => CriticalPath?.Sections.Count ?? 0;
+
+        public int CriticalPathFittingCount => CountCriticalPathElementsByCategory("Fitting", "Фитинг");
+
+        public int CriticalPathLocalResistanceCount => CriticalPath?.LocalResistances.Count ?? 0;
+
+        public int CriticalPathElementCount => CriticalPath?.ElementIds.Count ?? 0;
+
+        public int CriticalPathShortDuctAttachedCount => CriticalPath?.Sections.Count(section => section.ContainsShortDucts) ?? 0;
+
+        public int CriticalPathShortDuctStandaloneCount => CriticalPath?.Ducts.Count(duct => duct.LengthM > 0 && duct.LengthM < 0.02) ?? 0;
+
+        public string CriticalPathLengthWarning => Math.Abs(CriticalPathLengthDifferenceM) > 0.05
+            ? "Сумма длин расчётных участков отличается от суммы длин воздуховодов. Проверьте объединение коротких участков."
+            : string.Empty;
+
+        public IEnumerable<CriticalPathDuctLengthAuditRow> CriticalPathDuctLengthRows => BuildCriticalPathDuctLengthRows();
+
         public string LoadModeDisplay { get; private set; } = "—";
 
         public int SystemComponentCount { get; private set; }
@@ -785,6 +811,7 @@ namespace VentCalc.UI.ViewModels
             RefreshFilteredIssues();
             OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
             OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
+            NotifyCriticalPathLengthAuditChanged();
             OnPropertyChanged(nameof(LastLoadedElementId));
             OnPropertyChanged(nameof(SelectedElementDisplay));
             OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
@@ -806,6 +833,59 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(TraceWarningsSummary));
             VentCalcSessionState.StoreData(data);
             CommandManager.InvalidateRequerySuggested();
+        }
+
+
+        private IEnumerable<CriticalPathDuctLengthAuditRow> BuildCriticalPathDuctLengthRows()
+        {
+            if (CriticalPath == null)
+            {
+                return Enumerable.Empty<CriticalPathDuctLengthAuditRow>();
+            }
+
+            return CriticalPath.Ducts.Select(duct =>
+            {
+                CalculationSectionInfo? section = CriticalPath.Sections.FirstOrDefault(item => item.ElementIds.Contains(duct.ElementId));
+                return new CriticalPathDuctLengthAuditRow
+                {
+                    ElementId = duct.ElementId,
+                    Size = duct.Size,
+                    FlowM3h = duct.FlowM3h,
+                    LengthM = duct.LengthM,
+                    Source = "Revit duct length",
+                    IncludedInSection = section != null,
+                    SectionIndex = section?.SectionIndex
+                };
+            }).ToList();
+        }
+
+        private void NotifyCriticalPathLengthAuditChanged()
+        {
+            OnPropertyChanged(nameof(CriticalPathDuctLengthSumM));
+            OnPropertyChanged(nameof(CriticalPathSectionLengthSumM));
+            OnPropertyChanged(nameof(CriticalPathLengthDifferenceM));
+            OnPropertyChanged(nameof(CriticalPathDuctCount));
+            OnPropertyChanged(nameof(CriticalPathSectionCount));
+            OnPropertyChanged(nameof(CriticalPathFittingCount));
+            OnPropertyChanged(nameof(CriticalPathLocalResistanceCount));
+            OnPropertyChanged(nameof(CriticalPathElementCount));
+            OnPropertyChanged(nameof(CriticalPathShortDuctAttachedCount));
+            OnPropertyChanged(nameof(CriticalPathShortDuctStandaloneCount));
+            OnPropertyChanged(nameof(CriticalPathLengthWarning));
+            OnPropertyChanged(nameof(CriticalPathDuctLengthRows));
+        }
+
+        private int CountCriticalPathElementsByCategory(params string[] categoryTokens)
+        {
+            if (CriticalPath == null || categoryTokens.Length == 0)
+            {
+                return 0;
+            }
+
+            HashSet<string> criticalIds = new HashSet<string>(CriticalPath.ElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
+            return NetworkElements.Count(row =>
+                criticalIds.Contains(row.ElementId)
+                && categoryTokens.Any(token => row.Category.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0));
         }
 
         private static IReadOnlyList<VentSystemSummary> BuildSystemSummaries(VentCalcCenterData data)
@@ -2753,6 +2833,24 @@ namespace VentCalc.UI.ViewModels
         public string ConnectedElementIds { get; set; } = string.Empty;
 
         public string Warnings { get; set; } = string.Empty;
+    }
+
+
+    public sealed class CriticalPathDuctLengthAuditRow
+    {
+        public long ElementId { get; set; }
+
+        public string Size { get; set; } = string.Empty;
+
+        public double FlowM3h { get; set; }
+
+        public double LengthM { get; set; }
+
+        public string Source { get; set; } = string.Empty;
+
+        public bool IncludedInSection { get; set; }
+
+        public int? SectionIndex { get; set; }
     }
 
     public sealed class PathRow

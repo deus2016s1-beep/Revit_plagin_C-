@@ -244,6 +244,29 @@ namespace VentCalc.UI.Services
             }
             builder.AppendLine();
 
+
+            builder.AppendLine("7б. Проверка длины критической трассы");
+            builder.AppendLine($"Сумма длин воздуховодов: {viewModel.CriticalPathDuctLengthSumM:0.###} м");
+            builder.AppendLine($"Сумма длин расчётных участков: {viewModel.CriticalPathSectionLengthSumM:0.###} м");
+            builder.AppendLine($"Разница: {viewModel.CriticalPathLengthDifferenceM:0.###} м");
+            builder.AppendLine($"Воздуховодов: {viewModel.CriticalPathDuctCount}; участков: {viewModel.CriticalPathSectionCount}; фитингов: {viewModel.CriticalPathFittingCount}; местных сопротивлений: {viewModel.CriticalPathLocalResistanceCount}; элементов: {viewModel.CriticalPathElementCount}");
+            builder.AppendLine("Расчётная длина включает длины прямых воздуховодов. Фитинги учитываются отдельными местными сопротивлениями ζ и не добавляются как длина воздуховода.");
+            if (!string.IsNullOrWhiteSpace(viewModel.CriticalPathLengthWarning))
+            {
+                builder.AppendLine("Предупреждение: " + viewModel.CriticalPathLengthWarning);
+            }
+            builder.AppendLine("Воздуховоды критической трассы с длинами:");
+            foreach (CriticalPathDuctLengthAuditRow row in viewModel.CriticalPathDuctLengthRows)
+            {
+                builder.AppendLine($"  ElementId={row.ElementId}; размер={row.Size}; Q={row.FlowM3h:0.###}; L={row.LengthM:0.###} м; участок={row.SectionIndex?.ToString(CultureInfo.InvariantCulture) ?? "—"}; included={row.IncludedInSection}; source={row.Source}");
+            }
+            builder.AppendLine("Расчётные участки с длинами:");
+            foreach (CalculationSectionInfo section in criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>())
+            {
+                builder.AppendLine($"  Участок {section.SectionDisplayName}; elements={section.ElementIdsText}; размер={section.Size}; Q={section.FlowM3h:0.###}; L={section.TotalLengthM:0.###} м; split={section.SplitReason}; warnings={section.WarningText}");
+            }
+            builder.AppendLine();
+
             builder.AppendLine("8. Местные сопротивления критической трассы");
             foreach (LocalResistanceCalculationInfo local in criticalPath?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
@@ -628,6 +651,44 @@ namespace VentCalc.UI.Services
                     totalPressureLossPa = criticalPath.TotalPressureLossPa,
                     totalPressureLossWithReservePa = criticalPath.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0),
                     elementIds = criticalPath.ElementIds
+                },
+
+                criticalPathLengthAudit = new
+                {
+                    pathIndex = criticalPath?.PathIndex,
+                    ductLengthSumM = viewModel.CriticalPathDuctLengthSumM,
+                    sectionLengthSumM = viewModel.CriticalPathSectionLengthSumM,
+                    differenceDuctVsSectionM = viewModel.CriticalPathLengthDifferenceM,
+                    ductCountInCriticalPath = viewModel.CriticalPathDuctCount,
+                    sectionCountInCriticalPath = viewModel.CriticalPathSectionCount,
+                    fittingCountInCriticalPath = viewModel.CriticalPathFittingCount,
+                    localResistanceCountInCriticalPath = viewModel.CriticalPathLocalResistanceCount,
+                    shortDuctAttachedCount = viewModel.CriticalPathShortDuctAttachedCount,
+                    shortDuctStandaloneCount = viewModel.CriticalPathShortDuctStandaloneCount,
+                    criticalPathElementCount = viewModel.CriticalPathElementCount,
+                    warningIfSuspicious = viewModel.CriticalPathLengthWarning,
+                    explanation = "Расчётная длина включает длины прямых воздуховодов. Фитинги учитываются отдельными местными сопротивлениями ζ и не добавляются как длина воздуховода.",
+                    ductLengthBreakdown = viewModel.CriticalPathDuctLengthRows.Select(row => new
+                    {
+                        row.ElementId,
+                        row.Size,
+                        row.FlowM3h,
+                        row.LengthM,
+                        row.Source,
+                        row.IncludedInSection,
+                        row.SectionIndex
+                    }),
+                    sectionLengthBreakdown = (criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>()).Select(section => new
+                    {
+                        section.SectionIndex,
+                        sectionDisplayName = section.SectionDisplayName,
+                        section.ElementIds,
+                        section.Size,
+                        section.FlowM3h,
+                        section.TotalLengthM,
+                        section.SplitReason,
+                        section.WarningText
+                    })
                 },
                 criticalPathSections = criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>(),
                 sectionSplitReasons = GetAllSections(viewModel).Select(section => new { section.PathIndex, section.SectionIndex, section.SplitReason }).ToList(),

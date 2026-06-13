@@ -324,6 +324,26 @@
                                 </DataGridTextColumn>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <Expander Header="Проверка длины трассы" IsExpanded="False" Margin="0,8,0,0">
+                            <StackPanel>
+                                <UniformGrid Columns="4" Margin="0,0,0,6">
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Сумма длин воздуховодов" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDuctLengthSumM, StringFormat={}{0:0.###} м}" /></StackPanel>
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Сумма длин участков" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathSectionLengthSumM, StringFormat={}{0:0.###} м}" /></StackPanel>
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Разница" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathLengthDifferenceM, StringFormat={}{0:0.###} м}" /></StackPanel>
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Коротких присоединённых" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathShortDuctAttachedCount}" /></StackPanel>
+                                </UniformGrid>
+                                <TextBlock Text="{Binding CriticalPathLengthWarning}" Foreground="#FFD84315" TextWrapping="Wrap" />
+                                <DataGrid ItemsSource="{Binding CriticalPathDuctLengthRows}" MaxHeight="180">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
+                                        <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="110" />
+                                        <DataGridTextColumn Header="Расход" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="90" />
+                                        <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="90" />
+                                        <DataGridTextColumn Header="Участок" Binding="{Binding SectionIndex}" Width="80" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </DockPanel>
             </TabItem>
@@ -532,11 +552,6 @@
                                 <TextBlock Text="Нормальная, HEX" /><TextBox Text="{Binding Settings.NormalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Выше максимальной, HEX" /><TextBox Text="{Binding Settings.HighVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Критическая, HEX" /><TextBox Text="{Binding Settings.CriticalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Карта потерь" FontWeight="Bold" FontSize="14" Margin="4,12,4,4" />
-                                <TextBlock Text="Низкие потери, HEX" /><TextBox Text="{Binding Settings.LowPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Средние потери, HEX" /><TextBox Text="{Binding Settings.MediumPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Высокие потери, HEX" /><TextBox Text="{Binding Settings.HighPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Максимальные потери, HEX" /><TextBox Text="{Binding Settings.MaxPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Цвета трасс и ошибок" FontWeight="Bold" FontSize="14" Margin="4,12,4,4" />
                                 <TextBlock Text="Критическая трасса, HEX" /><TextBox Text="{Binding Settings.CriticalPathColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Ошибки / предупреждения, HEX" /><TextBox Text="{Binding Settings.IssueColorHex, UpdateSourceTrigger=PropertyChanged}" />
