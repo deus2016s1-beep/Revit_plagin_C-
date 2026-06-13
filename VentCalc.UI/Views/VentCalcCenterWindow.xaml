@@ -40,16 +40,48 @@
     <DockPanel Margin="10">
         <Border DockPanel.Dock="Top" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8" Background="#FFF8F8F8">
             <DockPanel>
-                <WrapPanel DockPanel.Dock="Top">
-                    <Button Content="Рассчитать выбранную систему" Command="{Binding LoadSelectedSystemCommand}" />
-                    <Button Content="Рассчитать систему из списка" Command="{Binding LoadCatalogSystemCommand}" />
-                    <Button Content="Пересчитать" Command="{Binding RefreshCommand}" />
-                    <Button Content="Выбрать стартовый элемент в Revit" Command="{Binding SelectStartElementInRevitCommand}" />
-                    <Button Content="Выбрать критическую трассу в Revit" Command="{Binding SelectCriticalPathInRevitCommand}" />
-                    <TextBlock Text="Система:" FontWeight="Bold" />
-                    <ComboBox ItemsSource="{Binding SystemCatalog}" SelectedItem="{Binding SelectedCatalogSystem, Mode=TwoWay}" Width="320" DisplayMemberPath="DisplayName" Margin="4" />
-                    <TextBlock Text="{Binding SelectedElementDisplay}" FontWeight="Bold" MinWidth="140" />
-                </WrapPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <WrapPanel>
+                        <Border BorderBrush="#FFD9D9D9" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,6,4" Background="#FFFFFFFF">
+                            <StackPanel>
+                                <TextBlock Text="Расчёт" FontWeight="SemiBold" Foreground="#FF555555" Margin="4,0,4,2" />
+                                <WrapPanel>
+                                    <Button Content="Рассчитать по выбранному элементу"
+                                            Command="{Binding LoadSelectedSystemCommand}"
+                                            ToolTip="Выберите воздуховод, фитинг, решётку или оборудование в Revit и рассчитайте связанную вентиляционную систему." />
+                                    <Button Content="Пересчитать"
+                                            Command="{Binding RefreshCommand}"
+                                            ToolTip="Повторить расчёт текущей загруженной системы с текущими настройками." />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border BorderBrush="#FFD9D9D9" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,6,4" Background="#FFFFFFFF">
+                            <StackPanel>
+                                <TextBlock Text="Система" FontWeight="SemiBold" Foreground="#FF555555" Margin="4,0,4,2" />
+                                <WrapPanel>
+                                    <ComboBox ItemsSource="{Binding SystemCatalog}" SelectedItem="{Binding SelectedCatalogSystem, Mode=TwoWay}" Width="320" DisplayMemberPath="DisplayName" Margin="4" />
+                                    <Button Content="Рассчитать из списка"
+                                            Command="{Binding LoadCatalogSystemCommand}"
+                                            ToolTip="Рассчитать систему, выбранную в списке, без выбора элемента в модели." />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border BorderBrush="#FFD9D9D9" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,6,4" Background="#FFFFFFFF">
+                            <StackPanel>
+                                <TextBlock Text="Показать в модели" FontWeight="SemiBold" Foreground="#FF555555" Margin="4,0,4,2" />
+                                <WrapPanel>
+                                    <Button Content="Показать старт"
+                                            Command="{Binding SelectStartElementInRevitCommand}"
+                                            ToolTip="Показать в модели стартовый элемент текущей трассировки." />
+                                    <Button Content="Показать критическую трассу"
+                                            Command="{Binding SelectCriticalPathInRevitCommand}"
+                                            ToolTip="Показать в модели трассу с максимальными потерями давления." />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding SelectedElementDisplay}" Foreground="#FF777777" FontSize="11" Margin="4,0,4,2" />
+                </StackPanel>
                 <UniformGrid DockPanel.Dock="Top" Columns="7" Margin="0,8,0,4">
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Тип" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemType}" /></StackPanel>
@@ -60,7 +92,7 @@
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итоговые потери" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                 </UniformGrid>
                 <StackPanel DockPanel.Dock="Bottom">
-                    <TextBlock Text="{Binding LastActionDisplay}" FontWeight="SemiBold" Foreground="#FF333333" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding LastActionDisplay}" Foreground="#FF777777" FontSize="11" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" />
                 </StackPanel>
             </DockPanel>
