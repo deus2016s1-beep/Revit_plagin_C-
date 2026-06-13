@@ -3581,7 +3581,7 @@ namespace VentCalc.UI.ViewModels
             return value == "Местные сопротивления" || value == "Проверки" ? value : "Расчёт";
         }
 
-        private static string NormalizeColorHex(string value, string fallback)
+        private static string NormalizeColorHex(string? value, string fallback)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
@@ -3590,7 +3590,23 @@ namespace VentCalc.UI.ViewModels
 
             string trimmed = value.Trim();
             string normalized = trimmed.StartsWith("#", StringComparison.Ordinal) ? trimmed : $"#{trimmed}";
-            return IsValidColorHex(normalized) ? normalized.ToUpperInvariant() : fallback;
+            return IsValidSettingsColorHex(normalized) ? normalized.ToUpperInvariant() : fallback;
+        }
+
+        private static bool IsValidSettingsColorHex(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string hex = value.Trim();
+            if (hex.StartsWith("#", StringComparison.Ordinal))
+            {
+                hex = hex.Substring(1);
+            }
+
+            return hex.Length == 6 && hex.All(Uri.IsHexDigit);
         }
 
         public AerodynamicSettings ToAerodynamicSettings()

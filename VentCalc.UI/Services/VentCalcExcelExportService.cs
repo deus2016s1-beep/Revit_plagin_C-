@@ -49,7 +49,7 @@ namespace VentCalc.UI.Services
                 VentCalcDiagnosticReportService.GetReportsDirectory(),
                 $"ventcalc_aero_{createdAt:yyyyMMdd_HHmmss}.xlsx");
 
-            List<SheetData> sheets = BuildSheets(viewModel, createdAt);
+            List<SheetData> sheets = BuildSheets(viewModel, viewModel.CriticalPath, createdAt);
             using (FileStream stream = File.Create(path))
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
             {
@@ -72,9 +72,12 @@ namespace VentCalc.UI.Services
             };
         }
 
-        private static List<SheetData> BuildSheets(VentCalcCenterViewModel viewModel, DateTime createdAt)
+        private static List<SheetData> BuildSheets(VentCalcCenterViewModel viewModel, PathCalculationInfo? criticalPath, DateTime createdAt)
         {
-            PathCalculationInfo criticalPath = viewModel.CriticalPath!;
+            if (criticalPath == null)
+            {
+                throw new InvalidOperationException("Критическая трасса не найдена. Проверьте трассировку системы.");
+            }
             return new List<SheetData>
             {
                 new SheetData("Итоги", BuildSummaryRows(viewModel, createdAt)),
