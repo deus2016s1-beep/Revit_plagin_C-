@@ -22,6 +22,11 @@ namespace VentCalc.Revit.Commands
             return Execute(commandData, ref message, vm => vm.ApplyVelocityHighlightFromRibbon());
         }
 
+        public static Result ExecutePressureLossMap(ExternalCommandData commandData, ref string message)
+        {
+            return Execute(commandData, ref message, vm => vm.ApplyPressureLossMapFromRibbon());
+        }
+
         private static Result Execute(ExternalCommandData commandData, ref string message, Action<VentCalcCenterViewModel> action)
         {
             UIApplication uiApplication = commandData.Application;

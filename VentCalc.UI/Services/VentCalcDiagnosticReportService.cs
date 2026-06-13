@@ -408,6 +408,10 @@ namespace VentCalc.UI.Services
                     selectedPathColorHex = viewModel.Settings.SelectedPathColorHex,
                     criticalPathColorHex = viewModel.Settings.CriticalPathColorHex,
                     issueColorHex = viewModel.Settings.IssueColorHex,
+                    lowPressureLossColorHex = viewModel.Settings.LowPressureLossColorHex,
+                    mediumPressureLossColorHex = viewModel.Settings.MediumPressureLossColorHex,
+                    highPressureLossColorHex = viewModel.Settings.HighPressureLossColorHex,
+                    maxPressureLossColorHex = viewModel.Settings.MaxPressureLossColorHex,
                     settingsSchemaVersion = viewModel.Settings.SettingsSchemaVersion,
                     selectedSettingsSection = viewModel.SelectedSettingsSection,
                     uiDefaultTabAfterLoad = viewModel.Settings.UiDefaultTabAfterLoad,
@@ -450,6 +454,15 @@ namespace VentCalc.UI.Services
                         critical = viewModel.HighlightState.VelocityGroups.Critical,
                         notCalculated = viewModel.HighlightState.VelocityGroups.NotCalculated
                     },
+                    pressureLossGroups = new
+                    {
+                        low = viewModel.HighlightState.PressureLossGroups.Low,
+                        medium = viewModel.HighlightState.PressureLossGroups.Medium,
+                        high = viewModel.HighlightState.PressureLossGroups.High,
+                        maximum = viewModel.HighlightState.PressureLossGroups.Maximum,
+                        zeroOrSkipped = viewModel.HighlightState.PressureLossGroups.ZeroOrSkipped
+                    },
+                    maxElementPressureLossPa = viewModel.HighlightState.MaxElementPressureLossPa,
                     issueElementCount = viewModel.HighlightState.IssueElementCount,
                     errors = viewModel.HighlightState.Errors
                 },

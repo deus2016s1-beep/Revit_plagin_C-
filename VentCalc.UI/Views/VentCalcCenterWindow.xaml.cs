@@ -30,20 +30,25 @@ namespace VentCalc.UI.Views
             Dispatcher.BeginInvoke(SelectDefaultTabAfterLoad, DispatcherPriority.Background);
         }
 
+        public void SelectMainTab(string header)
+        {
+            foreach (TabItem tab in MainTabs.Items.OfType<TabItem>())
+            {
+                if (tab.Header?.ToString() == header)
+                {
+                    MainTabs.SelectedItem = tab;
+                    return;
+                }
+            }
+        }
+
         private void SelectDefaultTabAfterLoad()
         {
             string targetHeader = DataContext is VentCalcCenterViewModel viewModel
                 ? viewModel.Settings.UiDefaultTabAfterLoad
                 : "Расчёт";
 
-            foreach (TabItem tab in MainTabs.Items.OfType<TabItem>())
-            {
-                if (tab.Header?.ToString() == targetHeader)
-                {
-                    MainTabs.SelectedItem = tab;
-                    return;
-                }
-            }
+            SelectMainTab(targetHeader);
         }
 
         private void LocalResistancesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)

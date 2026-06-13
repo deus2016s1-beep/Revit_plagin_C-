@@ -532,6 +532,11 @@
                                 <TextBlock Text="Нормальная, HEX" /><TextBox Text="{Binding Settings.NormalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Выше максимальной, HEX" /><TextBox Text="{Binding Settings.HighVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Критическая, HEX" /><TextBox Text="{Binding Settings.CriticalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Карта потерь" FontWeight="Bold" FontSize="14" Margin="4,12,4,4" />
+                                <TextBlock Text="Низкие потери, HEX" /><TextBox Text="{Binding Settings.LowPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Средние потери, HEX" /><TextBox Text="{Binding Settings.MediumPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Высокие потери, HEX" /><TextBox Text="{Binding Settings.HighPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Максимальные потери, HEX" /><TextBox Text="{Binding Settings.MaxPressureLossColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Цвета трасс и ошибок" FontWeight="Bold" FontSize="14" Margin="4,12,4,4" />
                                 <TextBlock Text="Критическая трасса, HEX" /><TextBox Text="{Binding Settings.CriticalPathColorHex, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Ошибки / предупреждения, HEX" /><TextBox Text="{Binding Settings.IssueColorHex, UpdateSourceTrigger=PropertyChanged}" />

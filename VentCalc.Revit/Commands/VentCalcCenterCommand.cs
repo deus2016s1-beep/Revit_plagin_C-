@@ -17,13 +17,27 @@ namespace VentCalc.Revit.Commands
     public sealed class VentCalcCenterCommand : IExternalCommand
     {
         private static VentCalcCenterWindow? activeWindow;
+        private static string? initialTabHeader;
+
+        public static Result OpenSettings(ExternalCommandData commandData, ref string message)
+        {
+            initialTabHeader = "Настройки";
+            return ExecuteCore(commandData, ref message);
+        }
 
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            return ExecuteCore(commandData, ref message);
+        }
+
+        private static Result ExecuteCore(ExternalCommandData commandData, ref string message)
         {
             string launchLogPath = ErrorReporter.CreateLaunchLog();
             UIApplication uiApplication = commandData.Application;
             try
             {
+                string? requestedInitialTab = initialTabHeader;
+                initialTabHeader = null;
                 ErrorReporter.WriteTrace(launchLogPath, "Command started");
                 UIDocument? uiDocument = uiApplication.ActiveUIDocument;
                 if (uiDocument == null)
@@ -35,6 +49,11 @@ namespace VentCalc.Revit.Commands
 
                 if (activeWindow?.IsVisible == true)
                 {
+                    if (!string.IsNullOrWhiteSpace(requestedInitialTab))
+                    {
+                        activeWindow.Dispatcher.BeginInvoke(new Action(() => activeWindow.SelectMainTab(requestedInitialTab)));
+                    }
+
                     ActivateWindow(activeWindow);
                     ErrorReporter.WriteTrace(launchLogPath, "Existing VentCalc Center activated");
                     return Result.Succeeded;
@@ -98,6 +117,11 @@ namespace VentCalc.Revit.Commands
 
                 ErrorReporter.WriteTrace(launchLogPath, "Show modeless started");
                 window.Show();
+                if (!string.IsNullOrWhiteSpace(requestedInitialTab))
+                {
+                    window.SelectMainTab(requestedInitialTab);
+                }
+
                 ErrorReporter.WriteTrace(launchLogPath, "Show modeless returned");
                 return Result.Succeeded;
             }

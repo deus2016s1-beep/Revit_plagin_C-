@@ -95,7 +95,9 @@ namespace VentCalc.Revit.ExternalEvents
                 DimmedSystemElementCount = request.DimmedSystemElementCount,
                 StartElementId = request.StartElementId,
                 EndElementId = request.EndElementId,
-                Message = request.StatusMessage
+                Message = request.StatusMessage,
+                PressureLossGroups = request.PressureLossGroups,
+                MaxElementPressureLossPa = request.MaxElementPressureLossPa
             };
 
             var highlightedIds = new List<ElementId>();
@@ -172,7 +174,9 @@ namespace VentCalc.Revit.ExternalEvents
                 DimmedSystemElementCount = request.DimmedSystemElementCount,
                 StartElementId = request.StartElementId,
                 EndElementId = request.EndElementId,
-                Message = request.StatusMessage
+                Message = request.StatusMessage,
+                PressureLossGroups = request.PressureLossGroups,
+                MaxElementPressureLossPa = request.MaxElementPressureLossPa
             };
 
             using (var transaction = new Transaction(document, "VentCalc: очистить подсветку"))

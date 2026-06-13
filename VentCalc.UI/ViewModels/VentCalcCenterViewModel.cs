@@ -1592,6 +1592,12 @@ namespace VentCalc.UI.ViewModels
             HighlightState.HighlightApplySucceeded = result.ActiveMode == HighlightMode.None || result.ApplySucceeded;
             HighlightState.HighlightClearSucceeded = result.ClearSucceeded;
             HighlightState.OriginalOverridesRestored = result.OriginalOverridesRestored;
+            HighlightState.PressureLossGroups.Low = result.PressureLossGroups.Low;
+            HighlightState.PressureLossGroups.Medium = result.PressureLossGroups.Medium;
+            HighlightState.PressureLossGroups.High = result.PressureLossGroups.High;
+            HighlightState.PressureLossGroups.Maximum = result.PressureLossGroups.Maximum;
+            HighlightState.PressureLossGroups.ZeroOrSkipped = result.PressureLossGroups.ZeroOrSkipped;
+            HighlightState.MaxElementPressureLossPa = result.MaxElementPressureLossPa;
             HighlightState.Errors = result.Errors.ToList();
             VentCalcSessionState.StoreHighlight(HighlightState);
             NotifyHighlightStateChanged();
@@ -1768,6 +1774,12 @@ namespace VentCalc.UI.ViewModels
             HighlightState.HighlightApplySucceeded = state.HighlightApplySucceeded;
             HighlightState.HighlightClearSucceeded = state.HighlightClearSucceeded;
             HighlightState.OriginalOverridesRestored = state.OriginalOverridesRestored;
+            HighlightState.PressureLossGroups.Low = state.PressureLossGroups.Low;
+            HighlightState.PressureLossGroups.Medium = state.PressureLossGroups.Medium;
+            HighlightState.PressureLossGroups.High = state.PressureLossGroups.High;
+            HighlightState.PressureLossGroups.Maximum = state.PressureLossGroups.Maximum;
+            HighlightState.PressureLossGroups.ZeroOrSkipped = state.PressureLossGroups.ZeroOrSkipped;
+            HighlightState.MaxElementPressureLossPa = state.MaxElementPressureLossPa;
             HighlightState.Errors = state.Errors.ToList();
             NotifyHighlightStateChanged();
         }
@@ -1842,6 +1854,112 @@ namespace VentCalc.UI.ViewModels
                 DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
                 SystemName = SystemName,
                 StatusMessage = $"Карта скоростей применена: воздуховодов {belowMin.Count + normal.Count + aboveMax.Count + critical.Count}.",
+                Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
+            });
+        }
+
+
+        private void ApplyPressureLossMap(string windowSource = "Ribbon: Карта потерь")
+        {
+            if (CriticalPath == null)
+            {
+                StatusText = "Критическая трасса не найдена. Проверьте трассировку системы.";
+                return;
+            }
+
+            var lossesByElement = new Dictionary<long, double>();
+            foreach (DuctCalculationInfo duct in CriticalPath.Ducts.Where(duct => duct.ElementId > 0))
+            {
+                lossesByElement[duct.ElementId] = lossesByElement.TryGetValue(duct.ElementId, out double current)
+                    ? current + duct.FrictionPressureLossPa
+                    : duct.FrictionPressureLossPa;
+            }
+
+            foreach (LocalResistanceCalculationInfo local in CriticalPath.LocalResistances.Where(local => local.ElementId > 0))
+            {
+                lossesByElement[local.ElementId] = lossesByElement.TryGetValue(local.ElementId, out double current)
+                    ? current + local.LocalPressureLossPa
+                    : local.LocalPressureLossPa;
+            }
+
+            double maxLoss = lossesByElement.Count == 0 ? 0 : lossesByElement.Values.Max();
+            if (maxLoss <= 0)
+            {
+                StatusText = "Карта потерь не применена: нет положительных потерь по элементам критической трассы.";
+                return;
+            }
+
+            var low = new List<long>();
+            var medium = new List<long>();
+            var high = new List<long>();
+            var maximum = new List<long>();
+            int zeroOrSkipped = 0;
+            foreach (KeyValuePair<long, double> pair in lossesByElement)
+            {
+                if (pair.Value <= 0)
+                {
+                    zeroOrSkipped++;
+                    continue;
+                }
+
+                double ratio = pair.Value / maxLoss;
+                if (ratio <= 0.25)
+                {
+                    low.Add(pair.Key);
+                }
+                else if (ratio <= 0.50)
+                {
+                    medium.Add(pair.Key);
+                }
+                else if (ratio <= 0.75)
+                {
+                    high.Add(pair.Key);
+                }
+                else
+                {
+                    maximum.Add(pair.Key);
+                }
+            }
+
+            var pressureLossGroups = new HighlightPressureLossGroupsInfo
+            {
+                Low = low.Count,
+                Medium = medium.Count,
+                High = high.Count,
+                Maximum = maximum.Count,
+                ZeroOrSkipped = zeroOrSkipped
+            };
+            HighlightState.PressureLossGroups.Low = pressureLossGroups.Low;
+            HighlightState.PressureLossGroups.Medium = pressureLossGroups.Medium;
+            HighlightState.PressureLossGroups.High = pressureLossGroups.High;
+            HighlightState.PressureLossGroups.Maximum = pressureLossGroups.Maximum;
+            HighlightState.PressureLossGroups.ZeroOrSkipped = pressureLossGroups.ZeroOrSkipped;
+            HighlightState.MaxElementPressureLossPa = maxLoss;
+            NotifyHighlightStateChanged();
+
+            var groups = new List<HighlightElementGroup>
+            {
+                CreateHighlightGroup("Низкие потери", Settings.LowPressureLossColorHex, low, 5, 20),
+                CreateHighlightGroup("Средние потери", Settings.MediumPressureLossColorHex, medium, 6, 15),
+                CreateHighlightGroup("Высокие потери", Settings.HighPressureLossColorHex, high, 7, 10),
+                CreateHighlightGroup("Максимальные потери", Settings.MaxPressureLossColorHex, maximum, 7, 0)
+            };
+
+            RequestHighlight(new HighlightRequest
+            {
+                Action = HighlightAction.Apply,
+                Mode = HighlightMode.PressureLoss,
+                SelectElements = false,
+                ShowElements = Settings.ZoomToElementOnShow,
+                WindowSource = windowSource,
+                DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
+                SystemName = SystemName,
+                PathIndex = CriticalPath.PathIndex,
+                IsCriticalPath = true,
+                HighlightedPathElementCount = lossesByElement.Count,
+                PressureLossGroups = pressureLossGroups,
+                MaxElementPressureLossPa = maxLoss,
+                StatusMessage = $"Карта потерь применена: элементов {low.Count + medium.Count + high.Count + maximum.Count}. Максимальный вклад {maxLoss:0.###} Па. Низкие: {low.Count}; средние: {medium.Count}; высокие: {high.Count}; максимальные: {maximum.Count}.",
                 Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
             });
         }
@@ -2364,6 +2482,10 @@ namespace VentCalc.UI.ViewModels
                     Settings.CriticalVelocityColorHex = defaults.CriticalVelocityColorHex;
                     Settings.CriticalPathColorHex = defaults.CriticalPathColorHex;
                     Settings.IssueColorHex = defaults.IssueColorHex;
+                    Settings.LowPressureLossColorHex = defaults.LowPressureLossColorHex;
+                    Settings.MediumPressureLossColorHex = defaults.MediumPressureLossColorHex;
+                    Settings.HighPressureLossColorHex = defaults.HighPressureLossColorHex;
+                    Settings.MaxPressureLossColorHex = defaults.MaxPressureLossColorHex;
                     Settings.ZoomToElementOnShow = defaults.ZoomToElementOnShow;
                     break;
                 case "Интерфейс":
@@ -2416,7 +2538,11 @@ namespace VentCalc.UI.ViewModels
                 Settings.HighVelocityColorHex,
                 Settings.CriticalVelocityColorHex,
                 Settings.CriticalPathColorHex,
-                Settings.IssueColorHex
+                Settings.IssueColorHex,
+                Settings.LowPressureLossColorHex,
+                Settings.MediumPressureLossColorHex,
+                Settings.HighPressureLossColorHex,
+                Settings.MaxPressureLossColorHex
             };
 
             if (values.All(IsValidColorHex))
@@ -2454,6 +2580,11 @@ namespace VentCalc.UI.ViewModels
         public void ApplyVelocityHighlightFromRibbon()
         {
             ApplyVelocityHighlight("Ribbon: Карта скоростей");
+        }
+
+        public void ApplyPressureLossMapFromRibbon()
+        {
+            ApplyPressureLossMap();
         }
 
         private void NotifySettingsChanged()
@@ -2869,6 +3000,10 @@ namespace VentCalc.UI.ViewModels
         private bool rememberWindowPlacement;
         private bool zoomToElementOnShow = true;
         private bool confirmBulkZetaChanges = true;
+        private string lowPressureLossColorHex = "#4CAF50";
+        private string mediumPressureLossColorHex = "#FFEB3B";
+        private string highPressureLossColorHex = "#FF9800";
+        private string maxPressureLossColorHex = "#F44336";
 
         public double AirDensityKgM3
         {
@@ -3013,6 +3148,30 @@ namespace VentCalc.UI.ViewModels
         {
             get => confirmBulkZetaChanges;
             set => SetProperty(ref confirmBulkZetaChanges, value);
+        }
+
+        public string LowPressureLossColorHex
+        {
+            get => lowPressureLossColorHex;
+            set => SetProperty(ref lowPressureLossColorHex, NormalizeColorHex(value, "#4CAF50"));
+        }
+
+        public string MediumPressureLossColorHex
+        {
+            get => mediumPressureLossColorHex;
+            set => SetProperty(ref mediumPressureLossColorHex, NormalizeColorHex(value, "#FFEB3B"));
+        }
+
+        public string HighPressureLossColorHex
+        {
+            get => highPressureLossColorHex;
+            set => SetProperty(ref highPressureLossColorHex, NormalizeColorHex(value, "#FF9800"));
+        }
+
+        public string MaxPressureLossColorHex
+        {
+            get => maxPressureLossColorHex;
+            set => SetProperty(ref maxPressureLossColorHex, NormalizeColorHex(value, "#F44336"));
         }
 
         public static VentCalcSettings CreateDefault()

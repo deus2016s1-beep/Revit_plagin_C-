@@ -21,6 +21,8 @@ namespace VentCalc.Revit
             AddButtonIfMissing<VentCalcCenterCommand>(ventilationPanel, "VentCalcCenter", "VentCalc", assemblyPath);
             AddButtonIfMissing<PathHighlightCommand>(ventilationPanel, "VentCalcPaths", "Критическая трасса", assemblyPath);
             AddButtonIfMissing<HighlightVelocityCommand>(ventilationPanel, "VentCalcVelocity", "Карта скоростей", assemblyPath);
+            AddButtonIfMissing<PressureLossMapCommand>(ventilationPanel, "VentCalcPressureLossMap", "Карта потерь", assemblyPath);
+            AddButtonIfMissing<SettingsCommand>(ventilationPanel, "VentCalcSettings", "Настройки", assemblyPath);
             AddButtonIfMissing<ClearHighlightsCommand>(ventilationPanel, "VentCalcClearHighlights", "Снять подсветку", assemblyPath);
         }
 
