@@ -67,6 +67,17 @@ namespace VentCalc.Core.Models
 
         public string StartEndDisplay => string.Create(CultureInfo.InvariantCulture, $"{StartElementId}–{EndElementId}");
 
+        public string SectionDisplayName => string.Create(CultureInfo.InvariantCulture, $"{SectionIndex - 1}–{SectionIndex}");
+
         public string WarningText => string.Join("; ", Warnings);
+
+        public string WarningShortText
+        {
+            get
+            {
+                string text = WarningText;
+                return text.Length <= 80 ? text : string.Concat(text.AsSpan(0, 77), "...");
+            }
+        }
     }
 }

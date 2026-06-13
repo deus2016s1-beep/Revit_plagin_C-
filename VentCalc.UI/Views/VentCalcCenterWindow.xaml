@@ -127,22 +127,22 @@
                                 <ComboBoxItem Content="Сведения" />
                             </ComboBox>
                         </WrapPanel>
+                        <Expander Header="Состав системы и технические данные" IsExpanded="False" Margin="0,8,0,0">
+                            <DataGrid ItemsSource="{Binding NetworkElements}" SelectedItem="{Binding SelectedNetworkElement, Mode=TwoWay}" MaxHeight="220">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
+                                    <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="170" />
+                                    <DataGridTextColumn Header="Роль" Binding="{Binding Role}" Width="130" />
+                                    <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
+                                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h}" Width="110" />
+                                    <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="Система" Binding="{Binding SystemName}" Width="100" />
+                                    <DataGridTextColumn Header="Подключения" Binding="{Binding ConnectedElementIds}" Width="180" />
+                                    <DataGridTextColumn Header="Предупреждения" Binding="{Binding Warnings}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Expander>
                     </StackPanel>
-                    <Expander DockPanel.Dock="Bottom" Header="Состав системы и технические данные" IsExpanded="False" Margin="0,8,0,0">
-                        <DataGrid ItemsSource="{Binding NetworkElements}" SelectedItem="{Binding SelectedNetworkElement, Mode=TwoWay}" MaxHeight="220">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                                <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="170" />
-                                <DataGridTextColumn Header="Роль" Binding="{Binding Role}" Width="130" />
-                                <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                                <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h}" Width="110" />
-                                <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
-                                <DataGridTextColumn Header="Система" Binding="{Binding SystemName}" Width="100" />
-                                <DataGridTextColumn Header="Подключения" Binding="{Binding ConnectedElementIds}" Width="180" />
-                                <DataGridTextColumn Header="Предупреждения" Binding="{Binding Warnings}" Width="*" />
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </Expander>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
                         <Button Content="Подсветить ошибки" Command="{Binding HighlightIssuesCommand}" />
                         <Button Content="Очистить подсветку" Command="{Binding ClearHighlightCommand}" />
@@ -250,76 +250,52 @@
                     </StackPanel>
                     <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
                         <StackPanel>
-                            <UniformGrid Columns="4" Margin="0,0,0,6">
-                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Расход системы, м³/ч" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathFlowM3h, StringFormat={}{0:0.###}}" /></StackPanel>
+                            <UniformGrid Columns="6" Margin="0,0,0,6">
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
                                 <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDisplay}" /></StackPanel>
-                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Потери давления, Па" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalPressureLossPa, StringFormat={}{0:0.###}}" /></StackPanel>
-                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Расчётных участков" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathSectionCount}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Трение" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathFrictionPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Местные" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathLocalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Запас" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding Settings.PressureReservePercent, StringFormat={}{0:0.###} %}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итоговые потери" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalWithReservePa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                             </UniformGrid>
-                            <WrapPanel>
-                                <TextBlock Text="Трение:" FontWeight="Bold" /><TextBlock Text="{Binding SelectedPathFrictionPressureLossPa, StringFormat={}{0:0.###} Па}" />
-                                <TextBlock Text="Местные сопротивления:" FontWeight="Bold" Margin="16,4,4,4" /><TextBlock Text="{Binding SelectedPathLocalPressureLossPa, StringFormat={}{0:0.###} Па}" />
-                                <TextBlock Text="Запас:" FontWeight="Bold" Margin="16,4,4,4" /><TextBlock Text="{Binding Settings.PressureReservePercent, StringFormat={}{0:0.###} %}" />
-                                <TextBlock Text="Итого:" FontWeight="Bold" Margin="16,4,4,4" /><TextBlock Text="{Binding SelectedPathTotalWithReservePa, StringFormat={}{0:0.###} Па}" />
-                            </WrapPanel>
                         </StackPanel>
                     </Border>
                     <Button DockPanel.Dock="Bottom" Content="Показать выбранный участок в модели" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
                     <StackPanel>
-                        <WrapPanel Margin="0,0,0,6">
-                            <TextBlock Text="Режим:" FontWeight="Bold" />
-                            <ComboBox SelectedValue="{Binding CalculationViewMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Content" Width="180" Margin="4">
-                                <ComboBoxItem Content="Основные данные" IsSelected="True" />
-                                <ComboBoxItem Content="Инженерные данные" />
-                            </ComboBox>
-                        </WrapPanel>
+                        <TextBlock Text="Расчётная таблица критической трассы" FontWeight="Bold" FontSize="15" Margin="4,0,4,6" />
                         <DataGrid ItemsSource="{Binding SelectedPathSections}" SelectedItem="{Binding SelectedPathSection, Mode=TwoWay}">
-                            <DataGrid.Style>
-                                <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding CalculationViewMode}" Value="Основные данные">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </DataGrid.Style>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="№ участка" Binding="{Binding SectionIndex}" Width="80" />
-                                <DataGridTextColumn Header="Начало–конец" Binding="{Binding StartEndDisplay}" Width="140" />
-                                <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="110" />
-                                <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
-                                <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalLengthM, StringFormat={}{0:0.###}}" Width="80" />
-                                <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
-                                <DataGridTextColumn Header="Потери на трение, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="130" />
-                                <DataGridTextColumn Header="Предупреждение" Binding="{Binding WarningText}" Width="*" />
-                            </DataGrid.Columns>
-                        </DataGrid>
-                        <DataGrid ItemsSource="{Binding SelectedPathSections}" SelectedItem="{Binding SelectedPathSection, Mode=TwoWay}">
-                            <DataGrid.Style>
-                                <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding CalculationViewMode}" Value="Инженерные данные">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </DataGrid.Style>
-                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Участок" Binding="{Binding SectionDisplayName}" Width="70" />
                                 <DataGridTextColumn Header="ElementIds" Binding="{Binding ElementIdsText}" Width="160" />
                                 <DataGridTextColumn Header="Start" Binding="{Binding StartElementId}" Width="90" />
                                 <DataGridTextColumn Header="End" Binding="{Binding EndElementId}" Width="90" />
+                                <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
+                                <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
+                                <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalLengthM, StringFormat={}{0:0.###}}" Width="80" />
                                 <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
                                 <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
+                                <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
                                 <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
                                 <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
                                 <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
                                 <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
                                 <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
-                                <DataGridTextColumn Header="Причина" Binding="{Binding SplitReasonShort}" Width="140" />
-                                <DataGridTextColumn Header="Подробно" Binding="{Binding SplitReason}" Width="220" />
-                                <DataGridTextColumn Header="Предупреждения" Binding="{Binding WarningText}" Width="*" />
+                                <DataGridTextColumn Header="Причина" Binding="{Binding SplitReasonShort}" Width="140">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip" Value="{Binding SplitReason}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Предупреждение" Binding="{Binding WarningShortText}" Width="*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip" Value="{Binding WarningText}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                             </DataGrid.Columns>
                         </DataGrid>
                     </StackPanel>
