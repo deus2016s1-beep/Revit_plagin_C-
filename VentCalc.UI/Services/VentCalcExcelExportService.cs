@@ -49,7 +49,7 @@ namespace VentCalc.UI.Services
                 exportDirectory,
                 $"ventcalc_aero_calc_{createdAt:yyyyMMdd_HHmmss}.xlsx");
 
-            List<SheetData> sheets = BuildSheets(viewModel, viewModel.CriticalPath, createdAt);
+            List<SheetData> sheets = BuildSheets(viewModel, viewModel.CriticalPath);
             using (FileStream stream = File.Create(path))
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
             {
@@ -89,7 +89,7 @@ namespace VentCalc.UI.Services
             }
         }
 
-        private static List<SheetData> BuildSheets(VentCalcCenterViewModel viewModel, PathCalculationInfo? criticalPath, DateTime createdAt)
+        private static List<SheetData> BuildSheets(VentCalcCenterViewModel viewModel, PathCalculationInfo? criticalPath)
         {
             if (criticalPath == null)
             {
@@ -99,21 +99,24 @@ namespace VentCalc.UI.Services
             return new List<SheetData>
             {
                 new SheetData("Аэродинамический расчёт", BuildAeroRows(viewModel, criticalPath)),
-                new SheetData("Исходные данные", BuildInputRows(viewModel, createdAt))
+                new SheetData("Исходные данные", BuildInputRows(viewModel))
             };
         }
 
         private static IReadOnlyList<IReadOnlyList<object?>> BuildAeroRows(VentCalcCenterViewModel viewModel, PathCalculationInfo criticalPath)
         {
+            Dictionary<CalculationSectionInfo, double> localLossBySection = AllocateLocalLossesBySection(criticalPath, out double unassignedLocalLossPa);
+            double assignedLocalLossPa = localLossBySection.Values.Sum();
             var rows = new List<IReadOnlyList<object?>>
             {
                 Row($"Аэродинамический расчёт системы {viewModel.SystemName}"),
-                Row("№ п/п", "Участок", "Размер воздуховода, мм", "Расход L, м³/ч", "Длина l, м", "Площадь F, м²", "Экв. диаметр dэкв, м", "Скорость v, м/с", "Re", "λ", "Дин. давление Pv, Па", "Уд. потери R, Па/м", "Потери на трение R·l, Па", "Местные сопротивления Z, Па", "Потери участка ΔP, Па", "Примечание")
+                Row("№ п/п", "Участок", "Размер воздуховода, мм", "Расход L, м³/ч", "Длина l, м", "Площадь F, м²", "Экв. диаметр dэкв, м", "Скорость v, м/с", "Re", "λ", "Дин. давление Pv, Па", "Уд. потери R, Па/м", "Потери на трение R·l, Па", "Местные сопротивления Z, Па", "Потери участка ΔP, Па")
             };
 
             int rowNumber = 1;
             foreach (CalculationSectionInfo section in criticalPath.Sections)
             {
+                localLossBySection.TryGetValue(section, out double localLossPa);
                 rows.Add(Row(
                     rowNumber++,
                     section.SectionDisplayName,
@@ -128,44 +131,89 @@ namespace VentCalc.UI.Services
                     Round(section.DynamicPressurePa, 3),
                     Round(section.SpecificPressureLossPaPerM, 3),
                     Round(section.FrictionPressureLossPa, 3),
-                    string.Empty,
-                    Round(section.FrictionPressureLossPa, 3),
-                    section.WarningShortText));
+                    Round(localLossPa, 3),
+                    Round(section.FrictionPressureLossPa + localLossPa, 3)));
             }
 
-            double totalWithoutReserve = criticalPath.TotalPressureLossPa;
-            double totalWithReserve = totalWithoutReserve * (1.0 + viewModel.Settings.PressureReservePercent / 100.0);
             rows.Add(Row(string.Empty));
             rows.Add(Row("Итоговый блок"));
             rows.Add(Row("Суммарная длина, м", Round(criticalPath.Sections.Sum(section => section.TotalLengthM), 3)));
             rows.Add(Row("Потери на трение, Па", Round(criticalPath.TotalFrictionPressureLossPa, 3)));
-            rows.Add(Row("Местные сопротивления, Па", Round(criticalPath.TotalLocalPressureLossPa, 3)));
-            rows.Add(Row("Итого без запаса, Па", Round(totalWithoutReserve, 3)));
-            rows.Add(Row("Запас давления, %", Round(viewModel.Settings.PressureReservePercent, 3)));
-            rows.Add(Row("Итого с запасом, Па", Round(totalWithReserve, 3)));
+            if (Math.Abs(unassignedLocalLossPa) > 0.0005)
+            {
+                rows.Add(Row("Местные сопротивления привязанные, Па", Round(assignedLocalLossPa, 3)));
+                rows.Add(Row("Местные сопротивления нераспределённые, Па", Round(unassignedLocalLossPa, 3)));
+                rows.Add(Row("Местные сопротивления всего, Па", Round(criticalPath.TotalLocalPressureLossPa, 3)));
+            }
+            else
+            {
+                rows.Add(Row("Местные сопротивления, Па", Round(criticalPath.TotalLocalPressureLossPa, 3)));
+            }
+            rows.Add(Row("Итого, Па", Round(criticalPath.TotalPressureLossPa, 3)));
             return rows;
         }
 
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildInputRows(VentCalcCenterViewModel viewModel, DateTime createdAt)
+        private static Dictionary<CalculationSectionInfo, double> AllocateLocalLossesBySection(PathCalculationInfo criticalPath, out double unassignedLocalLossPa)
+        {
+            var localLossBySection = new Dictionary<CalculationSectionInfo, double>();
+            unassignedLocalLossPa = 0;
+            foreach (LocalResistanceCalculationInfo local in criticalPath.LocalResistances)
+            {
+                CalculationSectionInfo? section = FindSectionForLocalResistance(criticalPath.Sections, local);
+                if (section == null)
+                {
+                    unassignedLocalLossPa += local.LocalPressureLossPa;
+                    continue;
+                }
+
+                localLossBySection.TryGetValue(section, out double currentLoss);
+                localLossBySection[section] = currentLoss + local.LocalPressureLossPa;
+            }
+
+            return localLossBySection;
+        }
+
+        private static CalculationSectionInfo? FindSectionForLocalResistance(IReadOnlyList<CalculationSectionInfo> sections, LocalResistanceCalculationInfo local)
+        {
+            CalculationSectionInfo? nextSection = FindSectionContainingDuct(sections, local.NextDuctElementId);
+            if (nextSection != null)
+            {
+                return nextSection;
+            }
+
+            CalculationSectionInfo? previousSection = FindSectionContainingDuct(sections, local.PreviousDuctElementId);
+            if (previousSection != null)
+            {
+                return previousSection;
+            }
+
+            return FindSectionContainingDuct(sections, local.ElementId);
+        }
+
+        private static CalculationSectionInfo? FindSectionContainingDuct(IReadOnlyList<CalculationSectionInfo> sections, long? elementId)
+        {
+            if (!elementId.HasValue || elementId.Value <= 0)
+            {
+                return null;
+            }
+
+            return sections.FirstOrDefault(section => section.ElementIds.Contains(elementId.Value));
+        }
+
+        private static IReadOnlyList<IReadOnlyList<object?>> BuildInputRows(VentCalcCenterViewModel viewModel)
         {
             return new List<IReadOnlyList<object?>>
             {
                 Row("Исходные данные"),
-                Row("Параметр", "Значение", "Ед. изм.", "Примечание"),
-                Row("Система", viewModel.SystemName, string.Empty, string.Empty),
-                Row("Тип системы", viewModel.SystemType, string.Empty, string.Empty),
-                Row("Направление", viewModel.Direction, string.Empty, string.Empty),
-                Row("Количество трасс", viewModel.Paths.Count, "шт.", string.Empty),
-                Row("Критическая трасса", viewModel.CriticalPathDisplay, string.Empty, string.Empty),
-                Row("Плотность воздуха", Round(viewModel.Settings.AirDensityKgM3, 3), "кг/м³", "Обычно 1.2 кг/м³."),
-                Row("Динамическая вязкость", viewModel.Settings.AirDynamicViscosityPaS.ToString("0.#######E+0", CultureInfo.InvariantCulture), "Па·с", "Обычно 1.81E-5 Па·с при 20 °C."),
-                Row("Шероховатость воздуховода", Round(viewModel.Settings.RoughnessMm, 3), "мм", "Для оцинкованной стали часто принимают около 0.1 мм."),
-                Row("Запас давления", Round(viewModel.Settings.PressureReservePercent, 3), "%", "Добавляется к итоговым потерям критической трассы."),
-                Row("Минимальная скорость", Round(viewModel.Settings.MinVelocityMs, 3), "м/с", string.Empty),
-                Row("Максимальная скорость", Round(viewModel.Settings.MaxVelocityMs, 3), "м/с", string.Empty),
-                Row("Критическая скорость", Round(viewModel.Settings.CriticalVelocityMs, 3), "м/с", string.Empty),
-                Row("Дата формирования", createdAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), string.Empty, string.Empty),
-                Row("Файл Revit", viewModel.RevitFilePath, string.Empty, string.Empty)
+                Row("Параметр", "Значение", "Ед. изм."),
+                Row("Система", viewModel.SystemName, string.Empty),
+                Row("Тип системы", viewModel.SystemType, string.Empty),
+                Row("Направление", viewModel.Direction, string.Empty),
+                Row("Количество трасс", viewModel.Paths.Count, "шт."),
+                Row("Критическая трасса", viewModel.CriticalPathDisplay, string.Empty),
+                Row("Плотность воздуха", Round(viewModel.Settings.AirDensityKgM3, 3), "кг/м³"),
+                Row("Динамическая вязкость", viewModel.Settings.AirDynamicViscosityPaS.ToString("0.#######E+0", CultureInfo.InvariantCulture), "Па·с"),
+                Row("Шероховатость воздуховода", Round(viewModel.Settings.RoughnessMm, 3), "мм")
             };
         }
 

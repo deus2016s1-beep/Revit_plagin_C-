@@ -19,7 +19,7 @@
         </WrapPanel>
         <StackPanel>
             <TextBlock Text="Путь к файлу:" FontWeight="SemiBold" />
-            <TextBox Text="{Binding FilePath}" IsReadOnly="True" TextWrapping="Wrap" Margin="0,6,0,0" />
+            <TextBox Text="{Binding FilePath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" Margin="0,6,0,0" />
         </StackPanel>
     </DockPanel>
 </Window>

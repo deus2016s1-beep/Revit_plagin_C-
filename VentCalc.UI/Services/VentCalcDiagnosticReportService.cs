@@ -501,6 +501,7 @@ namespace VentCalc.UI.Services
                     lastExcelExportPath = viewModel.LastExcelExportPath,
                     lastExcelExportSucceeded = viewModel.LastExcelExportSucceeded,
                     lastExcelExportSheetCount = viewModel.LastExcelExportSheetCount,
+                    sheetCount = viewModel.LastExcelExportSheetCount,
                     lastExcelExportError = viewModel.LastExcelExportError,
                     lastExcelExportCreatedAt = viewModel.LastExcelExportCreatedAt?.ToString("O", CultureInfo.InvariantCulture),
                     exportFolderPath = viewModel.Settings.ExportFolderPath
