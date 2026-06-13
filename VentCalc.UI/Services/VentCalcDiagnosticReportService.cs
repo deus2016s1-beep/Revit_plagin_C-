@@ -492,6 +492,14 @@ namespace VentCalc.UI.Services
                     issueElementCount = viewModel.HighlightState.IssueElementCount,
                     errors = viewModel.HighlightState.Errors
                 },
+                export = new
+                {
+                    lastExcelExportPath = viewModel.LastExcelExportPath,
+                    lastExcelExportSucceeded = viewModel.LastExcelExportSucceeded,
+                    lastExcelExportSheetCount = viewModel.LastExcelExportSheetCount,
+                    lastExcelExportError = viewModel.LastExcelExportError,
+                    lastExcelExportCreatedAt = viewModel.LastExcelExportCreatedAt?.ToString("O", CultureInfo.InvariantCulture)
+                },
                 uiState = new
                 {
                     selectedTab = "—",

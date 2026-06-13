@@ -47,6 +47,11 @@ namespace VentCalc.UI.ViewModels
         private string statusText = "Выберите элемент вентиляционной системы в Revit и нажмите «Загрузить выбранную систему».";
         private string lastReportTxtPath = "—";
         private string lastReportJsonPath = "—";
+        private string lastExcelExportPath = "—";
+        private string lastExcelExportError = string.Empty;
+        private DateTime? lastExcelExportCreatedAt;
+        private bool lastExcelExportSucceeded;
+        private int lastExcelExportSheetCount;
         private string reportPreviewText = "Отчёт для проверки ещё не сформирован.";
         private string lastActionMessage = "Действий пока не было.";
         private string revitVersion = "—";
@@ -94,7 +99,7 @@ namespace VentCalc.UI.ViewModels
             SelectCriticalPathInRevitCommand = new RelayCommand(_ => SelectCriticalPathInRevit(), _ => CriticalPath != null);
             SelectAllPathsThroughElementInRevitCommand = new RelayCommand(_ => SelectAllPathsThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
             SelectLoadedPathThroughElementInRevitCommand = new RelayCommand(_ => SelectLoadedPathThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
-            SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
+            SaveSettingsCommand = new RelayCommand(_ => { SaveSettings(); });
             ResetSettingsCommand = new RelayCommand(_ => ResetSettings());
             ResetSettingsSectionCommand = new RelayCommand(parameter => ResetSettingsSection(parameter?.ToString() ?? SelectedSettingsSection));
             ApplyVelocityHighlightCommand = new RelayCommand(_ => ApplyVelocityHighlight(), _ => AerodynamicSummary != null);
@@ -126,6 +131,8 @@ namespace VentCalc.UI.ViewModels
             AcceptRecommendedZetaCommand = new RelayCommand(_ => AcceptRecommendedZeta(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
             WriteZetaToCommentsCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
             OpenReportsFolderCommand = new RelayCommand(_ => OpenReportsFolder());
+            ExportExcelCommand = new RelayCommand(_ => ExportExcel(), _ => NetworkInfo != null && AerodynamicSummary != null);
+            OpenSettingsFolderCommand = new RelayCommand(_ => OpenSettingsFolder());
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
             if (VentCalcSessionState.CurrentData != null)
             {
@@ -609,6 +616,36 @@ namespace VentCalc.UI.ViewModels
             private set => SetProperty(ref reportPreviewText, value);
         }
 
+        public string LastExcelExportPath
+        {
+            get => lastExcelExportPath;
+            private set => SetProperty(ref lastExcelExportPath, value);
+        }
+
+        public bool LastExcelExportSucceeded
+        {
+            get => lastExcelExportSucceeded;
+            private set => SetProperty(ref lastExcelExportSucceeded, value);
+        }
+
+        public int LastExcelExportSheetCount
+        {
+            get => lastExcelExportSheetCount;
+            private set => SetProperty(ref lastExcelExportSheetCount, value);
+        }
+
+        public string LastExcelExportError
+        {
+            get => lastExcelExportError;
+            private set => SetProperty(ref lastExcelExportError, value);
+        }
+
+        public DateTime? LastExcelExportCreatedAt
+        {
+            get => lastExcelExportCreatedAt;
+            private set => SetProperty(ref lastExcelExportCreatedAt, value);
+        }
+
         public string LastActionMessage
         {
             get => lastActionMessage;
@@ -704,6 +741,10 @@ namespace VentCalc.UI.ViewModels
         public ICommand WriteZetaToCommentsCommand { get; }
 
         public ICommand OpenReportsFolderCommand { get; }
+
+        public ICommand ExportExcelCommand { get; }
+
+        public ICommand OpenSettingsFolderCommand { get; }
 
         public ICommand StubCommand { get; }
 
@@ -1628,8 +1669,7 @@ namespace VentCalc.UI.ViewModels
                 if (dialog.ShowDialog() == Forms.DialogResult.OK)
                 {
                     setColor($"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}");
-                    settingsService.Save(Settings);
-                    StatusText = "Цвет подсветки сохранён.";
+                    StatusText = "Цвет выбран. Нажмите «Применить» или «Сохранить», чтобы записать settings.json.";
                 }
             }
             catch (Exception exception)
@@ -2267,8 +2307,8 @@ namespace VentCalc.UI.ViewModels
         {
             Settings.LowVelocityColorHex = "#2196F3";
             Settings.NormalVelocityColorHex = "#4CAF50";
-            Settings.HighVelocityColorHex = "#FF9800";
-            Settings.CriticalVelocityColorHex = "#F44336";
+            Settings.HighVelocityColorHex = "#F44336";
+            Settings.CriticalVelocityColorHex = "#B71C1C";
             Settings.SelectedPathColorHex = "#00BCD4";
             Settings.CriticalPathColorHex = "#E91E63";
             Settings.IssueColorHex = "#D50000";
@@ -2683,16 +2723,19 @@ namespace VentCalc.UI.ViewModels
             LogAction(message);
         }
 
-        private void SaveSettings()
+        public bool SaveSettingsFromWindow() => SaveSettings();
+
+        private bool SaveSettings()
         {
             if (!ValidateVelocitySettings() || !ValidateHighlightColorSettings())
             {
-                return;
+                return false;
             }
 
             settingsService.Save(Settings);
             NotifySettingsChanged();
             StatusText = string.IsNullOrWhiteSpace(settingsService.LastWarning) ? "Настройки сохранены." : settingsService.LastWarning;
+            return string.IsNullOrWhiteSpace(settingsService.LastWarning);
         }
 
         private void ResetSettings()
@@ -2790,11 +2833,7 @@ namespace VentCalc.UI.ViewModels
                 Settings.HighVelocityColorHex,
                 Settings.CriticalVelocityColorHex,
                 Settings.CriticalPathColorHex,
-                Settings.IssueColorHex,
-                Settings.LowPressureLossColorHex,
-                Settings.MediumPressureLossColorHex,
-                Settings.HighPressureLossColorHex,
-                Settings.MaxPressureLossColorHex
+                Settings.IssueColorHex
             };
 
             if (values.All(IsValidColorHex))
@@ -2907,6 +2946,57 @@ namespace VentCalc.UI.ViewModels
             catch (Exception exception)
             {
                 StatusText = $"Не удалось сформировать отчёт: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
+        }
+
+
+        private void ExportExcel()
+        {
+            try
+            {
+                VentCalcExcelExportResult result = VentCalcExcelExportService.Export(this);
+                LastExcelExportPath = result.Path;
+                LastExcelExportSucceeded = true;
+                LastExcelExportSheetCount = result.SheetCount;
+                LastExcelExportError = string.Empty;
+                LastExcelExportCreatedAt = result.CreatedAt;
+                StatusText = $"Excel-экспорт сохранён: {result.Path}";
+                LogAction(StatusText);
+            }
+            catch (Exception exception)
+            {
+                LastExcelExportSucceeded = false;
+                LastExcelExportError = exception.Message;
+                LastExcelExportSheetCount = 0;
+                LastExcelExportCreatedAt = DateTime.Now;
+                StatusText = exception.Message;
+                showMessage?.Invoke(exception.Message);
+                reportException?.Invoke(exception);
+            }
+        }
+
+        private void OpenSettingsFolder()
+        {
+            try
+            {
+                string? settingsDirectory = Path.GetDirectoryName(settingsService.SettingsPath);
+                if (string.IsNullOrWhiteSpace(settingsDirectory))
+                {
+                    StatusText = "Папка настроек не определена.";
+                    return;
+                }
+
+                Directory.CreateDirectory(settingsDirectory);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = settingsDirectory,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось открыть папку настроек: {exception.Message}";
                 reportException?.Invoke(exception);
             }
         }
@@ -3292,8 +3382,8 @@ namespace VentCalc.UI.ViewModels
         private double criticalVelocityMs = 12;
         private string lowVelocityColorHex = "#2196F3";
         private string normalVelocityColorHex = "#4CAF50";
-        private string highVelocityColorHex = "#FF9800";
-        private string criticalVelocityColorHex = "#F44336";
+        private string highVelocityColorHex = "#F44336";
+        private string criticalVelocityColorHex = "#B71C1C";
         private string selectedPathColorHex = "#00BCD4";
         private string criticalPathColorHex = "#E91E63";
         private string issueColorHex = "#D50000";
@@ -3395,13 +3485,13 @@ namespace VentCalc.UI.ViewModels
         public string HighVelocityColorHex
         {
             get => highVelocityColorHex;
-            set => SetProperty(ref highVelocityColorHex, NormalizeColorHex(value, "#FF9800"));
+            set => SetProperty(ref highVelocityColorHex, NormalizeColorHex(value, "#F44336"));
         }
 
         public string CriticalVelocityColorHex
         {
             get => criticalVelocityColorHex;
-            set => SetProperty(ref criticalVelocityColorHex, NormalizeColorHex(value, "#F44336"));
+            set => SetProperty(ref criticalVelocityColorHex, NormalizeColorHex(value, "#B71C1C"));
         }
 
         public string SelectedPathColorHex
@@ -3499,7 +3589,8 @@ namespace VentCalc.UI.ViewModels
             }
 
             string trimmed = value.Trim();
-            return trimmed.StartsWith("#", StringComparison.Ordinal) ? trimmed : $"#{trimmed}";
+            string normalized = trimmed.StartsWith("#", StringComparison.Ordinal) ? trimmed : $"#{trimmed}";
+            return IsValidColorHex(normalized) ? normalized.ToUpperInvariant() : fallback;
         }
 
         public AerodynamicSettings ToAerodynamicSettings()

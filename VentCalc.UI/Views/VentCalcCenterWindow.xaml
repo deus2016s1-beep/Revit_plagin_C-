@@ -481,7 +481,7 @@
                             <WrapPanel>
                                 <Button Content="Сформировать отчёт для проверки" Command="{Binding GenerateVerificationReportCommand}" />
                                 <Button Content="Открыть папку отчётов" Command="{Binding OpenReportsFolderCommand}" />
-                                <Button Content="Экспорт Excel" IsEnabled="False" ToolTip="Excel будет добавлен отдельным этапом" />
+                                <Button Content="Экспорт Excel" Command="{Binding ExportExcelCommand}" ToolTip="Сохранить аэродинамический расчёт в .xlsx" />
                             </WrapPanel>
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
@@ -491,11 +491,14 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Последний TXT:" FontWeight="Bold" />
                                 <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LastReportTxtPath, Mode=OneWay}" IsReadOnly="True" />
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Последний JSON:" FontWeight="Bold" />
                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LastReportJsonPath, Mode=OneWay}" IsReadOnly="True" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Последний Excel:" FontWeight="Bold" />
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LastExcelExportPath, Mode=OneWay}" IsReadOnly="True" />
                             </Grid>
                             <TextBlock Text="Отчёт сохраняется в %APPDATA%\VentCalc\reports. Путь к TXT копируется в буфер обмена, если это доступно." Foreground="#FF555555" TextWrapping="Wrap" />
                         </StackPanel>

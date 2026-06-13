@@ -10,5 +10,22 @@ namespace VentCalc.UI.Views
             InitializeComponent();
             DataContext = viewModel;
         }
+
+        private void Save_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is VentCalcCenterViewModel viewModel && !viewModel.SaveSettingsFromWindow())
+            {
+                return;
+            }
+
+            DialogResult = true;
+            Close();
+        }
+
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            DialogResult = false;
+            Close();
+        }
     }
 }
