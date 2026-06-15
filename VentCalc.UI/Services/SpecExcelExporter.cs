@@ -156,7 +156,7 @@ namespace VentCalc.UI.Services
                 "System" => row.System,
                 "Level" => row.Level,
                 "Material" => row.Material,
-                "ImagePath" => profile == "Визуальная спецификация" ? $"__IMG:{row.ImagePath}" : string.Empty,
+                "ImagePath" => profile == "Визуальная спецификация" && !string.IsNullOrWhiteSpace(row.ImagePath) && File.Exists(row.ImagePath) ? $"__IMG:{row.ImagePath}" : string.Empty,
                 "Note" => row.Note,
                 _ => string.Empty
             };
@@ -281,8 +281,10 @@ namespace VentCalc.UI.Services
             var drawing = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">");
             for (int i = 0; i < images.Count; i++)
             {
+                if (!File.Exists(images[i].Path)) continue;
                 string mediaName = $"spec_image_{sheetIndex}_{i + 1}.png";
-                byte[] bytes = File.Exists(images[i].Path) ? File.ReadAllBytes(images[i].Path) : Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAADYG0K1AAAACXBIWXMAAAsTAAALEwEAmpwYAAABGUlEQVR4nO3aMQ6CQBAF0Yz//2k2NhY2YhNwQpK8lq58mMN8ZgAAAAAAAAAAAAAAAAAA4Lx7r9sD8G0gJgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCPwGq3cEbfI8pl0AAAAASUVORK5CYII=");
+                byte[] bytes = File.ReadAllBytes(images[i].Path);
+                if (bytes.Length == 0) continue;
                 ZipArchiveEntry imageEntry = archive.CreateEntry($"xl/media/{mediaName}", CompressionLevel.Optimal);
                 using (Stream stream = imageEntry.Open()) stream.Write(bytes, 0, bytes.Length);
                 drawingRels.Append($"<Relationship Id=\"rId{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{mediaName}\"/>");

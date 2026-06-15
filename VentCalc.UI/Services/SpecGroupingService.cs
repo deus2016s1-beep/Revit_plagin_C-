@@ -51,7 +51,7 @@ namespace VentCalc.UI.Services
                 Status = group.Any(item => item.Status == "Error") ? "Error" : group.Any(item => item.Status == "Warning") ? "Warning" : "OK",
                 Source = group.Any(item => item.Source == "ManualRule") ? "ManualRule" : "Auto",
                 IsManual = group.Any(item => item.Source == "ManualRule"),
-                ImagePath = SpecImageService.GetFallbackImagePath(group.Key.Group, group.Key.Name)
+                ImagePath = SafeGetImagePath(group.Key.Group, group.Key.Name)
             };
 
             foreach (SpecItemRow item in group)
@@ -62,6 +62,18 @@ namespace VentCalc.UI.Services
             }
 
             return row;
+        }
+
+        private static string SafeGetImagePath(string group, string name)
+        {
+            try
+            {
+                return SpecImageService.GetFallbackImagePath(group, name);
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
         }
 
         private static bool IsCountUnit(string unit) => string.Equals(unit, "шт", StringComparison.OrdinalIgnoreCase);
