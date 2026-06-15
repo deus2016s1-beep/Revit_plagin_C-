@@ -3,6 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SpecCalc — Спецификация инженерных систем"
         Width="1280" Height="780" MinWidth="1040" MinHeight="640" WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <DataTemplate x:Key="SelectionCheckBoxTemplate">
+            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center" Focusable="False" />
+        </DataTemplate>
+    </Window.Resources>
     <DockPanel Margin="10">
         <TextBlock DockPanel.Dock="Top" Text="SpecCalc — Конструктор спецификаций вентиляции" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
         <StatusBar DockPanel.Dock="Bottom">
@@ -50,38 +55,48 @@
                             </WrapPanel>
                         </Expander>
                     </StackPanel>
-                    <DataGrid ItemsSource="{Binding FilteredSpecRows}" SelectedItem="{Binding SelectedSpecRow, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True">
-                        <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="✓" Binding="{Binding IsSelected, Mode=TwoWay}" Width="36" />
-                            <DataGridTextColumn Header="Раздел" Binding="{Binding Section}" Width="110" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Группа" Binding="{Binding Group}" Width="150" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Наименование" Binding="{Binding Name}" Width="220" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Тип / марка" Binding="{Binding TypeMark}" Width="150" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="120" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Ед. изм." Binding="{Binding Unit}" Width="75" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Кол-во" Binding="{Binding Quantity, StringFormat={}{0:0.##}}" Width="80" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.##}}" Width="85" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.##}}" Width="95" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Примечание" Binding="{Binding Note}" Width="*" IsReadOnly="True" />
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <DataGrid x:Name="SpecRowsGrid" ItemsSource="{Binding FilteredSpecRows}" SelectedItem="{Binding SelectedSpecRow, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True" SelectionChanged="SpecRowsGrid_SelectionChanged" />
                 </DockPanel>
             </TabItem>
             <TabItem Header="Конструктор">
                 <DockPanel Margin="6">
                     <Button DockPanel.Dock="Top" Content="Сохранить настройки конструктора" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left" Padding="10,5" Margin="0,0,0,6" />
-                    <DataGrid ItemsSource="{Binding ColumnLayouts}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True">
-                        <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="В таблице" Binding="{Binding VisibleInMain, Mode=TwoWay}" Width="90" />
-                            <DataGridCheckBoxColumn Header="В Excel" Binding="{Binding VisibleInExcel, Mode=TwoWay}" Width="80" />
-                            <DataGridCheckBoxColumn Header="Группировать" Binding="{Binding GroupBy, Mode=TwoWay}" Width="100" />
-                            <DataGridCheckBoxColumn Header="Суммировать" Binding="{Binding Sum, Mode=TwoWay}" Width="100" />
-                            <DataGridTextColumn Header="Порядок" Binding="{Binding Order, Mode=TwoWay}" Width="80" />
-                            <DataGridTextColumn Header="Поле" Binding="{Binding FieldName}" Width="120" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Заголовок" Binding="{Binding Header, Mode=TwoWay}" Width="180" />
-                            <DataGridTextColumn Header="Формат" Binding="{Binding Format, Mode=TwoWay}" Width="100" />
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="260" />
+                        </Grid.ColumnDefinitions>
+                        <DockPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock DockPanel.Dock="Top" Text="Доступные поля" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <ListBox ItemsSource="{Binding AvailableColumns}" SelectedItem="{Binding SelectedAvailableColumn, Mode=TwoWay}" DisplayMemberPath="Header" />
+                        </DockPanel>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                            <Button Content="Добавить →" Command="{Binding AddColumnCommand}" Margin="0,0,0,6" />
+                            <Button Content="← Убрать" Command="{Binding RemoveColumnCommand}" Margin="0,0,0,18" />
+                            <Button Content="Вверх" Command="{Binding MoveColumnUpCommand}" Margin="0,0,0,6" />
+                            <Button Content="Вниз" Command="{Binding MoveColumnDownCommand}" />
+                        </StackPanel>
+                        <DockPanel Grid.Column="2" Margin="0,0,8,0">
+                            <TextBlock DockPanel.Dock="Top" Text="Колонки спецификации" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <ListBox ItemsSource="{Binding ActiveColumns}" SelectedItem="{Binding SelectedActiveColumn, Mode=TwoWay}" DisplayMemberPath="Header" />
+                        </DockPanel>
+                        <Grid Grid.Column="3" DataContext="{Binding SelectedActiveColumn}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Свойства колонки" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBox Grid.Row="1" Text="{Binding Header, Mode=TwoWay}" Margin="0,0,0,6" ToolTip="Заголовок" />
+                            <ComboBox Grid.Row="2" Text="{Binding Format, Mode=TwoWay}" IsEditable="True" Margin="0,0,0,8">
+                                <ComboBoxItem Content="Текст"/><ComboBoxItem Content="Целое число"/><ComboBoxItem Content="0.00"/><ComboBoxItem Content="0.000"/><ComboBoxItem Content="м"/><ComboBoxItem Content="м²"/><ComboBoxItem Content="шт"/><ComboBoxItem Content="Изображение"/>
+                            </ComboBox>
+                            <CheckBox Grid.Row="3" Content="Показывать в таблице" IsChecked="{Binding VisibleInMain, Mode=TwoWay}" Margin="0,0,0,6" />
+                            <CheckBox Grid.Row="4" Content="Выводить в Excel" IsChecked="{Binding VisibleInExcel, Mode=TwoWay}" Margin="0,0,0,6" />
+                            <CheckBox Grid.Row="5" Content="Участвует в группировке" IsChecked="{Binding GroupBy, Mode=TwoWay}" Margin="0,0,0,6" />
+                            <CheckBox Grid.Row="6" Content="Суммировать" IsChecked="{Binding Sum, Mode=TwoWay}" />
+                        </Grid>
+                    </Grid>
                 </DockPanel>
             </TabItem>
             <TabItem Header="Сырые данные">
@@ -114,13 +129,6 @@
                     <TextBlock Text="{Binding MissingSystemCount, StringFormat=Без системы: {0}}" />
                     <TextBlock Text="{Binding MissingAdskNameCount, StringFormat=Пустой ADSK_Наименование: {0}}" />
                     <Button Content="Показать все проблемы" Command="{Binding ShowProblemsCommand}" Padding="10,5" HorizontalAlignment="Left" Margin="0,10,0,0" />
-                </StackPanel>
-            </TabItem>
-            <TabItem Header="Правила">
-                <StackPanel Margin="12">
-                    <TextBlock Text="Локальные правила SpecCalc" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <TextBlock Text="{Binding RulesPath}" TextWrapping="Wrap" />
-                    <TextBlock Text="Правила применяются локально и не переименовывают семейства или типы Revit. Запись ADSK выполняется только отдельной кнопкой с подтверждением." TextWrapping="Wrap" Margin="0,10,0,0" />
                 </StackPanel>
             </TabItem>
         </TabControl>

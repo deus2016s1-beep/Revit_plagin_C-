@@ -45,6 +45,7 @@ namespace VentCalc.UI.Services
             string directory = ResolveExportDirectory(exportDirectory);
             DateTime createdAt = DateTime.Now;
             string path = Path.Combine(directory, $"spec_ventilation_{createdAt:yyyyMMdd_HHmmss}.xlsx");
+            bool includeImages = profile == "Визуальная спецификация" && columnLayouts.Any(column => column.VisibleInExcel && column.FieldName == "ImagePath");
             List<SheetData> sheets = new List<SheetData>
             {
                 new SheetData(GetSheetName(profile), BuildSpecificationRows(rows, profile, columnLayouts, createdAt))
@@ -53,14 +54,14 @@ namespace VentCalc.UI.Services
             using (FileStream stream = File.Create(path))
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
             {
-                AddText(archive, "[Content_Types].xml", BuildContentTypes(sheets.Count));
+                AddText(archive, "[Content_Types].xml", BuildContentTypes(sheets.Count, includeImages));
                 AddText(archive, "_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
                 AddText(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRels(sheets.Count));
                 AddText(archive, "xl/styles.xml", BuildStyles());
                 AddText(archive, "xl/workbook.xml", BuildWorkbook(sheets));
                 for (int i = 0; i < sheets.Count; i++)
                 {
-                    AddText(archive, $"xl/worksheets/sheet{i + 1}.xml", BuildWorksheet(sheets[i].Rows));
+                    AddText(archive, $"xl/worksheets/sheet{i + 1}.xml", BuildWorksheet(archive, i + 1, sheets[i].Rows));
                 }
             }
 
@@ -109,19 +110,29 @@ namespace VentCalc.UI.Services
 
         private static List<SpecColumnLayout> ResolveColumns(string profile, IEnumerable<SpecColumnLayout> columnLayouts)
         {
-            string[] fields = profile switch
-            {
-                "Визуальная спецификация" => new[] { "Section", "Name", "Size", "ImagePath", "Unit", "Quantity", "Note" },
-                "Монтажная ведомость" => new[] { "Group", "Name", "Size", "System", "Level", "Unit", "Quantity" },
-                "Закупка" => new[] { "Name", "TypeMark", "Size", "Unit", "Quantity", "Note" },
-                _ => new[] { "Section", "Name", "TypeMark", "Size", "Unit", "Quantity", "Note" }
-            };
-            Dictionary<string, SpecColumnLayout> configured = columnLayouts.ToDictionary(column => column.FieldName, StringComparer.OrdinalIgnoreCase);
-            return fields.Select((field, index) => configured.TryGetValue(field, out SpecColumnLayout? column)
-                    ? new SpecColumnLayout { FieldName = column.FieldName, Header = field == "ImagePath" ? "Изображение" : column.Header, Order = index, VisibleInExcel = true, Format = column.Format, IsNumeric = column.IsNumeric }
-                    : new SpecColumnLayout { FieldName = field, Header = field, Order = index, VisibleInExcel = true })
+            List<SpecColumnLayout> columns = columnLayouts
                 .Where(column => column.VisibleInExcel)
+                .OrderBy(column => column.Order)
+                .Select(column => new SpecColumnLayout
+                {
+                    FieldName = column.FieldName,
+                    Header = column.FieldName == "ImagePath" ? "Изображение" : column.Header,
+                    Order = column.Order,
+                    VisibleInExcel = column.VisibleInExcel,
+                    VisibleInMain = column.VisibleInMain,
+                    Format = column.Format,
+                    IsNumeric = column.IsNumeric
+                })
                 .ToList();
+
+            if (profile != "Визуальная спецификация")
+            {
+                columns.RemoveAll(column => column.FieldName == "ImagePath");
+            }
+
+            return columns.Count == 0
+                ? SpecCalcSettingsService.CreateDefaultColumns().Where(column => column.VisibleInExcel && column.FieldName != "ImagePath").OrderBy(column => column.Order).ToList()
+                : columns;
         }
 
         private static string GetSheetName(string profile)
@@ -145,7 +156,7 @@ namespace VentCalc.UI.Services
                 "System" => row.System,
                 "Level" => row.Level,
                 "Material" => row.Material,
-                "ImagePath" => profile == "Визуальная спецификация" ? (string.IsNullOrWhiteSpace(row.ImagePath) ? "fallback" : row.ImagePath) : string.Empty,
+                "ImagePath" => profile == "Визуальная спецификация" ? $"__IMG:{row.ImagePath}" : string.Empty,
                 "Note" => row.Note,
                 _ => string.Empty
             };
@@ -161,12 +172,16 @@ namespace VentCalc.UI.Services
             writer.Write(content);
         }
 
-        private static string BuildContentTypes(int sheetCount)
+        private static string BuildContentTypes(int sheetCount, bool includeImages)
         {
-            var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>");
+            var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"png\" ContentType=\"image/png\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>");
             for (int i = 1; i <= sheetCount; i++)
             {
                 builder.Append($"<Override PartName=\"/xl/worksheets/sheet{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>");
+                if (includeImages)
+                {
+                    builder.Append($"<Override PartName=\"/xl/drawings/drawing{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/>");
+                }
             }
 
             builder.Append("</Types>");
@@ -197,22 +212,32 @@ namespace VentCalc.UI.Services
             return builder.ToString();
         }
 
-        private static string BuildWorksheet(IReadOnlyList<IReadOnlyList<object?>> rows)
+        private static string BuildWorksheet(ZipArchive archive, int sheetIndex, IReadOnlyList<IReadOnlyList<object?>> rows)
         {
             int maxColumns = Math.Max(1, rows.Any() ? rows.Max(row => row.Count) : 1);
+            var images = new List<(int Row, int Column, string Path)>();
             var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
             builder.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"3\" topLeftCell=\"A4\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             builder.Append(BuildColumns(maxColumns));
             builder.Append("<sheetData>");
             for (int r = 0; r < rows.Count; r++)
             {
-                builder.Append($"<row r=\"{r + 1}\">");
+                int rowNumber = r + 1;
+                bool hasImage = rows[r].Any(value => Convert.ToString(value, CultureInfo.InvariantCulture)?.StartsWith("__IMG:", StringComparison.Ordinal) == true);
+                builder.Append($"<row r=\"{rowNumber}\"{(hasImage ? " ht=\"72\" customHeight=\"1\"" : string.Empty)}>");
                 for (int c = 0; c < rows[r].Count; c++)
                 {
                     object? value = rows[r][c];
-                    string cell = ColumnName(c + 1) + (r + 1).ToString(CultureInfo.InvariantCulture);
+                    int columnNumber = c + 1;
+                    string? textValue = Convert.ToString(value, CultureInfo.InvariantCulture);
+                    string cell = ColumnName(columnNumber) + rowNumber.ToString(CultureInfo.InvariantCulture);
                     string style = r == 0 || r == 2 ? " s=\"1\"" : " s=\"2\"";
-                    if (value is int or long or double or float or decimal)
+                    if (textValue?.StartsWith("__IMG:", StringComparison.Ordinal) == true)
+                    {
+                        images.Add((rowNumber, columnNumber, textValue.Substring("__IMG:".Length)));
+                        builder.Append($"<c r=\"{cell}\"{style}/>");
+                    }
+                    else if (value is int or long or double or float or decimal)
                     {
                         builder.Append($"<c r=\"{cell}\"{style}><v>{Convert.ToString(value, CultureInfo.InvariantCulture)}</v></c>");
                     }
@@ -229,8 +254,39 @@ namespace VentCalc.UI.Services
             {
                 builder.Append($"<autoFilter ref=\"A3:{ColumnName(maxColumns)}{rows.Count}\"/>");
             }
+            if (images.Count > 0)
+            {
+                builder.Append($"<drawing r:id=\"rIdDrawing{sheetIndex}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/>");
+                AddWorksheetImages(archive, sheetIndex, images);
+            }
             builder.Append("</worksheet>");
             return builder.ToString();
+        }
+
+        private static void AddWorksheetImages(ZipArchive archive, int sheetIndex, IReadOnlyList<(int Row, int Column, string Path)> images)
+        {
+            var rels = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+            rels.Append($"<Relationship Id=\"rIdDrawing{sheetIndex}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing{sheetIndex}.xml\"/>");
+            rels.Append("</Relationships>");
+            AddText(archive, $"xl/worksheets/_rels/sheet{sheetIndex}.xml.rels", rels.ToString());
+
+            var drawingRels = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+            var drawing = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">");
+            for (int i = 0; i < images.Count; i++)
+            {
+                string mediaName = $"spec_image_{sheetIndex}_{i + 1}.png";
+                byte[] bytes = File.Exists(images[i].Path) ? File.ReadAllBytes(images[i].Path) : Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAADYG0K1AAAACXBIWXMAAAsTAAALEwEAmpwYAAABGUlEQVR4nO3aMQ6CQBAF0Yz//2k2NhY2YhNwQpK8lq58mMN8ZgAAAAAAAAAAAAAAAAAA4Lx7r9sD8G0gJgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCPwGq3cEbfI8pl0AAAAASUVORK5CYII=");
+                ZipArchiveEntry imageEntry = archive.CreateEntry($"xl/media/{mediaName}", CompressionLevel.Optimal);
+                using (Stream stream = imageEntry.Open()) stream.Write(bytes, 0, bytes.Length);
+                drawingRels.Append($"<Relationship Id=\"rId{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{mediaName}\"/>");
+                int col = images[i].Column - 1;
+                int row = images[i].Row - 1;
+                drawing.Append($"<xdr:oneCellAnchor><xdr:from><xdr:col>{col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx=\"914400\" cy=\"914400\"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"{i + 1}\" name=\"Spec image {i + 1}\"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" r:embed=\"rId{i + 1}\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>");
+            }
+            drawing.Append("</xdr:wsDr>");
+            drawingRels.Append("</Relationships>");
+            AddText(archive, $"xl/drawings/drawing{sheetIndex}.xml", drawing.ToString());
+            AddText(archive, $"xl/drawings/_rels/drawing{sheetIndex}.xml.rels", drawingRels.ToString());
         }
 
         private static string BuildColumns(int maxColumns)

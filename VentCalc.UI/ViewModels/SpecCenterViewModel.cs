@@ -20,6 +20,8 @@ namespace VentCalc.UI.ViewModels
         private readonly SpecCalcSettings settings;
         private SpecGroupRow? selectedSpecRow;
         private SpecItemRow? selectedRawRow;
+        private SpecColumnLayout? selectedAvailableColumn;
+        private SpecColumnLayout? selectedActiveColumn;
         private string statusText = "Нажмите «Обновить», чтобы сформировать спецификацию.";
         private string lastExcelExportPath = "—";
         private string statusFilter = "Все";
@@ -40,11 +42,12 @@ namespace VentCalc.UI.ViewModels
             settings = settingsService.Load();
             selectedExcelProfile = settings.SelectedExcelProfile;
             foreach (SpecColumnLayout column in settings.Columns) ColumnLayouts.Add(column);
+            RefreshColumnLists();
 
             CollectVentilationCommand = new RelayCommand(_ => CollectVentilation());
-            BulkEditCommand = new RelayCommand(_ => BulkEdit(), _ => SpecRows.Count > 0);
+            BulkEditCommand = new RelayCommand(_ => BulkEdit(), _ => SelectedSpecRows.Count > 0 || FilteredSpecRows.Count > 0);
             ExportExcelCommand = new RelayCommand(_ => ExportExcel(), _ => SpecRows.Count > 0);
-            ShowSelectedElementCommand = new RelayCommand(_ => ShowSelectedElement(), _ => SelectedSpecRow?.ElementIds.Count > 0 || SelectedRawRow?.ElementId > 0);
+            ShowSelectedElementCommand = new RelayCommand(_ => ShowSelectedElement(), _ => SelectedSpecRows.Count > 0 || SelectedSpecRow?.ElementIds.Count > 0 || SelectedRawRow?.ElementId > 0);
             ShowProblemsCommand = new RelayCommand(_ => ShowProblems(), _ => ProblemRows.Any(row => row.ElementIds.Count > 0));
             ShowUnknownCommand = new RelayCommand(_ => ShowUnknown(), _ => RawRows.Any(row => row.IsUnrecognized && row.ElementId > 0));
             ClearSpecHighlightCommand = new RelayCommand(_ => ClearSpecHighlight());
@@ -55,22 +58,32 @@ namespace VentCalc.UI.ViewModels
             WriteSelectedAdskCommand = new RelayCommand(_ => WriteSelectedAdsk(), _ => SelectedSpecRow != null || SelectedRawRow != null);
             WriteFilteredAdskCommand = new RelayCommand(_ => WriteFilteredAdsk(), _ => FilteredSpecRows.Count > 0);
             SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
+            AddColumnCommand = new RelayCommand(_ => AddColumn(), _ => SelectedAvailableColumn != null);
+            RemoveColumnCommand = new RelayCommand(_ => RemoveColumn(), _ => SelectedActiveColumn != null);
+            MoveColumnUpCommand = new RelayCommand(_ => MoveColumn(-1), _ => SelectedActiveColumn != null);
+            MoveColumnDownCommand = new RelayCommand(_ => MoveColumn(1), _ => SelectedActiveColumn != null);
         }
 
         public ObservableCollection<SpecItemRow> RawRows { get; } = new ObservableCollection<SpecItemRow>();
         public ObservableCollection<SpecGroupRow> SpecRows { get; } = new ObservableCollection<SpecGroupRow>();
         public ObservableCollection<SpecGroupRow> FilteredSpecRows { get; } = new ObservableCollection<SpecGroupRow>();
+        public ObservableCollection<SpecGroupRow> SelectedSpecRows { get; } = new ObservableCollection<SpecGroupRow>();
         public ObservableCollection<SpecGroupRow> ProblemRows { get; } = new ObservableCollection<SpecGroupRow>();
         public ObservableCollection<SpecColumnLayout> ColumnLayouts { get; } = new ObservableCollection<SpecColumnLayout>();
+        public ObservableCollection<SpecColumnLayout> AvailableColumns { get; } = new ObservableCollection<SpecColumnLayout>();
+        public ObservableCollection<SpecColumnLayout> ActiveColumns { get; } = new ObservableCollection<SpecColumnLayout>();
 
         public IReadOnlyList<string> StatusFilterOptions { get; } = new[] { "Все", "OK", "Warning", "Error" };
         public IReadOnlyList<string> GroupFilterOptions { get; } = new[] { "Все", "Воздуховоды", "Гибкие воздуховоды", "Фасонные части", "Арматура / клапаны", "Воздухораспределители", "Оборудование", "Зонты", "Неопознано" };
         public IReadOnlyList<string> SectionFilterOptions { get; } = new[] { "Все", "Вентиляция" };
         public IReadOnlyList<string> RuleScopeOptions { get; } = new[] { "Element", "Type", "Family", "Group" };
         public IReadOnlyList<string> ExcelProfiles { get; } = new[] { "Проектная спецификация", "Визуальная спецификация", "Монтажная ведомость", "Закупка" };
+        public IReadOnlyList<string> FormatOptions { get; } = new[] { "Текст", "Целое число", "0.00", "0.000", "м", "м²", "шт", "Изображение" };
 
         public SpecGroupRow? SelectedSpecRow { get => selectedSpecRow; set => SetProperty(ref selectedSpecRow, value); }
         public SpecItemRow? SelectedRawRow { get => selectedRawRow; set => SetProperty(ref selectedRawRow, value); }
+        public SpecColumnLayout? SelectedAvailableColumn { get => selectedAvailableColumn; set => SetProperty(ref selectedAvailableColumn, value); }
+        public SpecColumnLayout? SelectedActiveColumn { get => selectedActiveColumn; set => SetProperty(ref selectedActiveColumn, value); }
         public string StatusText { get => statusText; private set => SetProperty(ref statusText, value); }
         public string LastExcelExportPath { get => lastExcelExportPath; private set => SetProperty(ref lastExcelExportPath, value); }
         public string RulesPath => ruleService.RulesPath;
@@ -106,6 +119,10 @@ namespace VentCalc.UI.ViewModels
         public ICommand WriteSelectedAdskCommand { get; }
         public ICommand WriteFilteredAdskCommand { get; }
         public ICommand SaveSettingsCommand { get; }
+        public ICommand AddColumnCommand { get; }
+        public ICommand RemoveColumnCommand { get; }
+        public ICommand MoveColumnUpCommand { get; }
+        public ICommand MoveColumnDownCommand { get; }
 
         public void ApplyCollectedRows(IReadOnlyList<SpecItemRow> rows)
         {
@@ -137,7 +154,7 @@ namespace VentCalc.UI.ViewModels
 
         private void BulkEdit()
         {
-            IReadOnlyList<SpecGroupRow> rows = SelectedSpecRow != null ? new[] { SelectedSpecRow } : FilteredSpecRows.ToList();
+            IReadOnlyList<SpecGroupRow> rows = SelectedSpecRows.Count > 0 ? SelectedSpecRows.ToList() : SelectedSpecRow != null ? new[] { SelectedSpecRow } : FilteredSpecRows.ToList();
             var window = new BulkEditSpecRuleWindow(rows, SelectedRuleScope);
             if (window.ShowDialog() != true) return;
             List<SpecItemRow> rawRows = ExpandGroups(window.TargetFiltered ? FilteredSpecRows : rows).ToList();
@@ -180,7 +197,8 @@ namespace VentCalc.UI.ViewModels
 
         private void ShowSelectedElement()
         {
-            if (SelectedSpecRow?.ElementIds.Count > 0) selectElementsInRevit?.Invoke(SelectedSpecRow.ElementIds);
+            if (SelectedSpecRows.Count > 0) selectElementsInRevit?.Invoke(SelectedSpecRows.SelectMany(row => row.ElementIds).Distinct());
+            else if (SelectedSpecRow?.ElementIds.Count > 0) selectElementsInRevit?.Invoke(SelectedSpecRow.ElementIds);
             else if (SelectedRawRow?.ElementId > 0) selectElementsInRevit?.Invoke(new[] { SelectedRawRow.ElementId });
         }
 
@@ -218,7 +236,7 @@ namespace VentCalc.UI.ViewModels
 
         private void WriteSelectedAdsk()
         {
-            List<SpecItemRow> rows = SelectedSpecRow != null ? SelectedSpecRow.SourceItems.ToList() : SelectedRawRow != null ? new List<SpecItemRow> { SelectedRawRow } : new List<SpecItemRow>();
+            List<SpecItemRow> rows = SelectedSpecRows.Count > 0 ? ExpandGroups(SelectedSpecRows).ToList() : SelectedSpecRow != null ? SelectedSpecRow.SourceItems.ToList() : SelectedRawRow != null ? new List<SpecItemRow> { SelectedRawRow } : new List<SpecItemRow>();
             WriteAdskRows(rows, "Будут изменены ADSK-параметры выбранных строк. Продолжить?");
         }
 
@@ -233,7 +251,47 @@ namespace VentCalc.UI.ViewModels
 
         private void ShowOnlyProblems() { onlyProblems = true; RefreshFilters(); }
         private void ResetFilters() { onlyProblems = false; SectionFilter = "Все"; StatusFilter = "Все"; GroupFilter = "Все"; SearchText = string.Empty; RefreshFilters(); }
-        private void SaveSettings() { settings.Columns = ColumnLayouts.ToList(); settings.SelectedExcelProfile = SelectedExcelProfile; settingsService.Save(settings); StatusText = $"Настройки SpecCalc сохранены: {settingsService.SettingsPath}"; }
+        private void SaveSettings() { settings.Columns = ColumnLayouts.OrderBy(column => column.Order).ToList(); settings.SelectedExcelProfile = SelectedExcelProfile; settingsService.Save(settings); RefreshColumnLists(); StatusText = $"Настройки SpecCalc сохранены: {settingsService.SettingsPath}"; }
+
+        public void UpdateSelectedSpecRows(IEnumerable<SpecGroupRow> rows)
+        {
+            Replace(SelectedSpecRows, rows.ToList());
+        }
+
+        private void AddColumn()
+        {
+            if (SelectedAvailableColumn == null) return;
+            SelectedAvailableColumn.VisibleInMain = true;
+            SelectedAvailableColumn.VisibleInExcel = true;
+            SelectedAvailableColumn.Order = ActiveColumns.Count == 0 ? 1 : ActiveColumns.Max(column => column.Order) + 1;
+            SaveSettings();
+        }
+
+        private void RemoveColumn()
+        {
+            if (SelectedActiveColumn == null) return;
+            SelectedActiveColumn.VisibleInMain = false;
+            SelectedActiveColumn.VisibleInExcel = false;
+            SaveSettings();
+        }
+
+        private void MoveColumn(int delta)
+        {
+            if (SelectedActiveColumn == null) return;
+            List<SpecColumnLayout> active = ActiveColumns.OrderBy(column => column.Order).ToList();
+            int index = active.IndexOf(SelectedActiveColumn);
+            int target = index + delta;
+            if (index < 0 || target < 0 || target >= active.Count) return;
+            (active[index].Order, active[target].Order) = (active[target].Order, active[index].Order);
+            SaveSettings();
+            SelectedActiveColumn = active[target];
+        }
+
+        private void RefreshColumnLists()
+        {
+            Replace(ActiveColumns, ColumnLayouts.Where(column => column.VisibleInMain || column.VisibleInExcel).OrderBy(column => column.Order).ToList());
+            Replace(AvailableColumns, ColumnLayouts.Where(column => !column.VisibleInMain && !column.VisibleInExcel).OrderBy(column => column.Order).ToList());
+        }
 
         private void RefreshFilters()
         {

@@ -11,8 +11,8 @@ namespace VentCalc.UI.Services
         {
             Directory.CreateDirectory(ImageDirectory);
             string key = NormalizeKey($"{group}_{name}");
-            string path = Path.Combine(ImageDirectory, key + ".svg");
-            if (!File.Exists(path)) File.WriteAllText(path, BuildSvg(group, name));
+            string path = Path.Combine(ImageDirectory, key + ".png");
+            if (!File.Exists(path)) File.WriteAllBytes(path, BuildPng());
             return path;
         }
 
@@ -22,13 +22,11 @@ namespace VentCalc.UI.Services
             return string.IsNullOrWhiteSpace(value) ? "unknown" : value.Replace(' ', '_');
         }
 
-        private static string BuildSvg(string group, string name)
+        private static byte[] BuildPng()
         {
-            string label = string.IsNullOrWhiteSpace(name) ? group : name;
-            if (label.Length > 18) label = label.Substring(0, 18);
-            return $"<svg xmlns='http://www.w3.org/2000/svg' width='128' height='96'><rect x='1' y='1' width='126' height='94' fill='#f5f5f5' stroke='#777'/><text x='64' y='50' text-anchor='middle' font-size='12' font-family='Arial'>{Escape(label)}</text></svg>";
+            const string png = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAADYG0K1AAAACXBIWXMAAAsTAAALEwEAmpwYAAABGUlEQVR4nO3aMQ6CQBAF0Yz//2k2NhY2YhNwQpK8lq58mMN8ZgAAAAAAAAAAAAAAAAAA4Lx7r9sD8G0gJgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCIgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCJgImAiYCPwGq3cEbfI8pl0AAAAASUVORK5CYII=";
+            return Convert.FromBase64String(png);
         }
 
-        private static string Escape(string value) => value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
     }
 }
