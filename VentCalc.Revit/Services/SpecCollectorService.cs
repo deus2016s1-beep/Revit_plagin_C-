@@ -78,6 +78,7 @@ namespace VentCalc.Revit.Services
             {
                 item.ElementId = element.Id.Value;
                 item.UniqueId = element.UniqueId;
+                item.TypeId = element.GetTypeId() == ElementId.InvalidElementId ? 0 : element.GetTypeId().Value;
                 item.InternalName = element.Name ?? string.Empty;
                 item.Category = categoryName;
                 item.FamilyName = familyName;
@@ -86,6 +87,8 @@ namespace VentCalc.Revit.Services
                 item.Size = ReadSize(element, type, allText);
                 item.System = ReadSystemName(element);
                 item.Level = ReadLevelName(document, element);
+                item.Section = "Вентиляция";
+                item.Material = FirstNonEmpty(ReadParameterAsString(element, "ADSK_Материал"), ReadParameterAsString(type, "ADSK_Материал"));
                 item.Source = "Category";
             });
 
@@ -220,10 +223,14 @@ namespace VentCalc.Revit.Services
             string adskUnit = ReadParameterAsString(element, "ADSK_Единица измерения");
             string adskQuantity = ReadParameterAsString(element, "ADSK_Количество");
             string adskNote = ReadParameterAsString(element, "ADSK_Примечание");
+            string adskSize = ReadParameterAsString(element, "ADSK_Размер");
 
             bool anyAdsk = false;
             row.ApplySystemValues(item =>
             {
+                item.AdskName = adskName;
+                item.AdskMark = adskMark;
+                item.AdskSize = adskSize;
                 if (!string.IsNullOrWhiteSpace(adskName) && CanUseAdskName(item, adskName)) { item.Name = adskName; anyAdsk = true; }
                 item.HasAdskName = !string.IsNullOrWhiteSpace(adskName);
                 if (!string.IsNullOrWhiteSpace(adskMark)) { item.TypeMark = CleanTypeMark(adskMark); anyAdsk = true; }
@@ -244,9 +251,11 @@ namespace VentCalc.Revit.Services
 
             row.ApplySystemValues(item =>
             {
+                if (!string.IsNullOrWhiteSpace(rule.Section)) item.Section = rule.Section;
                 if (!string.IsNullOrWhiteSpace(rule.Group)) item.Group = rule.Group;
                 if (!string.IsNullOrWhiteSpace(rule.Name)) item.Name = rule.Name;
                 if (!string.IsNullOrWhiteSpace(rule.TypeMark)) item.TypeMark = rule.TypeMark;
+                if (!string.IsNullOrWhiteSpace(rule.Size)) item.Size = rule.Size;
                 if (!string.IsNullOrWhiteSpace(rule.Unit)) item.Unit = rule.Unit;
                 if (!string.IsNullOrWhiteSpace(rule.Note)) item.Note = rule.Note;
                 item.Source = "ManualRule";

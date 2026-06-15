@@ -16,112 +16,84 @@ namespace VentCalc.UI.ViewModels
         private readonly Action<IEnumerable<long>>? selectElementsInRevit;
         private readonly Action<string>? showMessage;
         private readonly SpecRuleService ruleService;
-        private SpecItemRow? selectedVentilationRow;
-        private SpecItemRow? selectedProblemRow;
-        private string statusText = "Нажмите «Собрать вентиляцию», чтобы сформировать спецификацию.";
+        private readonly SpecCalcSettingsService settingsService = new SpecCalcSettingsService();
+        private readonly SpecCalcSettings settings;
+        private SpecGroupRow? selectedSpecRow;
+        private SpecItemRow? selectedRawRow;
+        private string statusText = "Нажмите «Обновить», чтобы сформировать спецификацию.";
         private string lastExcelExportPath = "—";
         private string statusFilter = "Все";
         private string groupFilter = "Все";
+        private string sectionFilter = "Все";
         private string searchText = string.Empty;
         private bool onlyProblems;
         private string selectedRuleScope = "Type";
+        private string selectedExcelProfile;
 
-        public SpecCenterViewModel(
-            Action<SpecCenterViewModel>? requestCollectVentilation,
-            Action<IEnumerable<long>>? selectElementsInRevit,
-            Action<string>? showMessage,
-            SpecRuleService? ruleService = null,
-            Action<SpecCenterViewModel, IReadOnlyList<SpecItemRow>>? requestWriteAdsk = null)
+        public SpecCenterViewModel(Action<SpecCenterViewModel>? requestCollectVentilation, Action<IEnumerable<long>>? selectElementsInRevit, Action<string>? showMessage, SpecRuleService? ruleService = null, Action<SpecCenterViewModel, IReadOnlyList<SpecItemRow>>? requestWriteAdsk = null)
         {
             this.requestCollectVentilation = requestCollectVentilation;
             this.requestWriteAdsk = requestWriteAdsk;
             this.selectElementsInRevit = selectElementsInRevit;
             this.showMessage = showMessage;
             this.ruleService = ruleService ?? new SpecRuleService();
+            settings = settingsService.Load();
+            selectedExcelProfile = settings.SelectedExcelProfile;
+            foreach (SpecColumnLayout column in settings.Columns) ColumnLayouts.Add(column);
 
             CollectVentilationCommand = new RelayCommand(_ => CollectVentilation());
-            ExportExcelCommand = new RelayCommand(_ => ExportExcel(), _ => VentilationRows.Count > 0);
-            ShowSelectedElementCommand = new RelayCommand(_ => ShowSelectedElement(), _ => CurrentSelectedRow?.ElementId > 0);
-            ShowProblemsCommand = new RelayCommand(_ => ShowProblems(), _ => ProblemRows.Any(row => row.ElementId > 0));
-            ShowUnknownCommand = new RelayCommand(_ => ShowUnknown(), _ => VentilationRows.Any(row => row.IsUnrecognized && row.ElementId > 0));
+            BulkEditCommand = new RelayCommand(_ => BulkEdit(), _ => SpecRows.Count > 0);
+            ExportExcelCommand = new RelayCommand(_ => ExportExcel(), _ => SpecRows.Count > 0);
+            ShowSelectedElementCommand = new RelayCommand(_ => ShowSelectedElement(), _ => SelectedSpecRow?.ElementIds.Count > 0 || SelectedRawRow?.ElementId > 0);
+            ShowProblemsCommand = new RelayCommand(_ => ShowProblems(), _ => ProblemRows.Any(row => row.ElementIds.Count > 0));
+            ShowUnknownCommand = new RelayCommand(_ => ShowUnknown(), _ => RawRows.Any(row => row.IsUnrecognized && row.ElementId > 0));
             ClearSpecHighlightCommand = new RelayCommand(_ => ClearSpecHighlight());
-            SaveRulesCommand = new RelayCommand(_ => SaveRules(), _ => VentilationRows.Count > 0);
-            ResetAutoCommand = new RelayCommand(_ => ResetAuto(), _ => CurrentSelectedRow != null);
+            SaveRulesCommand = new RelayCommand(_ => SaveRules(), _ => RawRows.Count > 0);
+            ResetAutoCommand = new RelayCommand(_ => ResetAuto(), _ => SelectedSpecRow != null || SelectedRawRow != null);
             ResetFiltersCommand = new RelayCommand(_ => ResetFilters());
             ShowOnlyProblemsCommand = new RelayCommand(_ => ShowOnlyProblems());
-            WriteSelectedAdskCommand = new RelayCommand(_ => WriteSelectedAdsk(), _ => CurrentSelectedRow != null);
-            WriteFilteredAdskCommand = new RelayCommand(_ => WriteFilteredAdsk(), _ => FilteredVentilationRows.Count > 0);
+            WriteSelectedAdskCommand = new RelayCommand(_ => WriteSelectedAdsk(), _ => SelectedSpecRow != null || SelectedRawRow != null);
+            WriteFilteredAdskCommand = new RelayCommand(_ => WriteFilteredAdsk(), _ => FilteredSpecRows.Count > 0);
+            SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
         }
 
-        public ObservableCollection<SpecItemRow> VentilationRows { get; } = new ObservableCollection<SpecItemRow>();
-        public ObservableCollection<SpecItemRow> FilteredVentilationRows { get; } = new ObservableCollection<SpecItemRow>();
-        public ObservableCollection<SpecItemRow> ProblemRows { get; } = new ObservableCollection<SpecItemRow>();
+        public ObservableCollection<SpecItemRow> RawRows { get; } = new ObservableCollection<SpecItemRow>();
+        public ObservableCollection<SpecGroupRow> SpecRows { get; } = new ObservableCollection<SpecGroupRow>();
+        public ObservableCollection<SpecGroupRow> FilteredSpecRows { get; } = new ObservableCollection<SpecGroupRow>();
+        public ObservableCollection<SpecGroupRow> ProblemRows { get; } = new ObservableCollection<SpecGroupRow>();
+        public ObservableCollection<SpecColumnLayout> ColumnLayouts { get; } = new ObservableCollection<SpecColumnLayout>();
 
         public IReadOnlyList<string> StatusFilterOptions { get; } = new[] { "Все", "OK", "Warning", "Error" };
         public IReadOnlyList<string> GroupFilterOptions { get; } = new[] { "Все", "Воздуховоды", "Гибкие воздуховоды", "Фасонные части", "Арматура / клапаны", "Воздухораспределители", "Оборудование", "Зонты", "Неопознано" };
-        public IReadOnlyList<string> RuleScopeOptions { get; } = new[] { "Element", "Type", "Family" };
+        public IReadOnlyList<string> SectionFilterOptions { get; } = new[] { "Все", "Вентиляция" };
+        public IReadOnlyList<string> RuleScopeOptions { get; } = new[] { "Element", "Type", "Family", "Group" };
+        public IReadOnlyList<string> ExcelProfiles { get; } = new[] { "Проектная спецификация", "Визуальная спецификация", "Монтажная ведомость", "Закупка" };
 
-        public SpecItemRow? SelectedVentilationRow
-        {
-            get => selectedVentilationRow;
-            set => SetProperty(ref selectedVentilationRow, value);
-        }
-
-        public SpecItemRow? SelectedProblemRow
-        {
-            get => selectedProblemRow;
-            set => SetProperty(ref selectedProblemRow, value);
-        }
-
-        private SpecItemRow? CurrentSelectedRow => SelectedProblemRow ?? SelectedVentilationRow;
-
-        public string StatusText
-        {
-            get => statusText;
-            private set => SetProperty(ref statusText, value);
-        }
-
-        public string LastExcelExportPath
-        {
-            get => lastExcelExportPath;
-            private set => SetProperty(ref lastExcelExportPath, value);
-        }
-
-        public string StatusFilter
-        {
-            get => statusFilter;
-            set { if (SetProperty(ref statusFilter, value)) RefreshFilters(); }
-        }
-
-        public string GroupFilter
-        {
-            get => groupFilter;
-            set { if (SetProperty(ref groupFilter, value)) RefreshFilters(); }
-        }
-
-        public string SearchText
-        {
-            get => searchText;
-            set { if (SetProperty(ref searchText, value)) RefreshFilters(); }
-        }
-
-        public string SelectedRuleScope
-        {
-            get => selectedRuleScope;
-            set => SetProperty(ref selectedRuleScope, string.IsNullOrWhiteSpace(value) ? "Type" : value);
-        }
-
-        public int TotalCount => VentilationRows.Count;
-        public int OkCount => VentilationRows.Count(row => row.Status == "OK");
-        public int WarningCount => VentilationRows.Count(row => row.Status == "Warning");
-        public int ErrorCount => VentilationRows.Count(row => row.Status == "Error");
-        public int UnknownCount => VentilationRows.Count(row => row.IsUnrecognized || row.Group == "Неопознано");
-        public int MissingAdskNameCount => VentilationRows.Count(row => !row.HasAdskName);
-        public int MissingSizeCount => VentilationRows.Count(row => row.MissingSize);
-        public int MissingSystemCount => VentilationRows.Count(row => row.MissingSystem);
+        public SpecGroupRow? SelectedSpecRow { get => selectedSpecRow; set => SetProperty(ref selectedSpecRow, value); }
+        public SpecItemRow? SelectedRawRow { get => selectedRawRow; set => SetProperty(ref selectedRawRow, value); }
+        public string StatusText { get => statusText; private set => SetProperty(ref statusText, value); }
+        public string LastExcelExportPath { get => lastExcelExportPath; private set => SetProperty(ref lastExcelExportPath, value); }
         public string RulesPath => ruleService.RulesPath;
+        public string SettingsPath => settingsService.SettingsPath;
+        public string StatusFilter { get => statusFilter; set { if (SetProperty(ref statusFilter, value)) RefreshFilters(); } }
+        public string GroupFilter { get => groupFilter; set { if (SetProperty(ref groupFilter, value)) RefreshFilters(); } }
+        public string SectionFilter { get => sectionFilter; set { if (SetProperty(ref sectionFilter, value)) RefreshFilters(); } }
+        public string SearchText { get => searchText; set { if (SetProperty(ref searchText, value)) RefreshFilters(); } }
+        public string SelectedRuleScope { get => selectedRuleScope; set => SetProperty(ref selectedRuleScope, string.IsNullOrWhiteSpace(value) ? "Type" : value); }
+        public string SelectedExcelProfile { get => selectedExcelProfile; set { if (SetProperty(ref selectedExcelProfile, value)) { settings.SelectedExcelProfile = value; SaveSettings(); } } }
+
+        public int TotalCount => RawRows.Count;
+        public int GroupCount => SpecRows.Count;
+        public int OkCount => RawRows.Count(row => row.Status == "OK");
+        public int WarningCount => RawRows.Count(row => row.Status == "Warning");
+        public int ErrorCount => RawRows.Count(row => row.Status == "Error");
+        public int UnknownCount => RawRows.Count(row => row.IsUnrecognized || row.Group == "Неопознано");
+        public int MissingAdskNameCount => RawRows.Count(row => !row.HasAdskName);
+        public int MissingSizeCount => RawRows.Count(row => row.MissingSize);
+        public int MissingSystemCount => RawRows.Count(row => row.MissingSystem);
 
         public ICommand CollectVentilationCommand { get; }
+        public ICommand BulkEditCommand { get; }
         public ICommand ExportExcelCommand { get; }
         public ICommand ShowSelectedElementCommand { get; }
         public ICommand ShowProblemsCommand { get; }
@@ -133,28 +105,21 @@ namespace VentCalc.UI.ViewModels
         public ICommand ShowOnlyProblemsCommand { get; }
         public ICommand WriteSelectedAdskCommand { get; }
         public ICommand WriteFilteredAdskCommand { get; }
+        public ICommand SaveSettingsCommand { get; }
 
         public void ApplyCollectedRows(IReadOnlyList<SpecItemRow> rows)
         {
-            VentilationRows.Clear();
-            foreach (SpecItemRow row in rows)
-            {
-                VentilationRows.Add(row);
-            }
-
+            Replace(RawRows, rows.ToList());
+            Replace(SpecRows, SpecGroupingService.Group(RawRows, ColumnLayouts).ToList());
             RefreshFilters();
-            SelectedVentilationRow = FilteredVentilationRows.FirstOrDefault();
-            StatusText = $"Собрано элементов вентиляции: {VentilationRows.Count}. OK: {OkCount}; Warning: {WarningCount}; Error: {ErrorCount}.";
+            SelectedSpecRow = FilteredSpecRows.FirstOrDefault();
+            StatusText = $"Собрано элементов: {RawRows.Count}. Строк спецификации: {SpecRows.Count}. OK: {OkCount}; Warning: {WarningCount}; Error: {ErrorCount}.";
             NotifyCounts();
         }
 
         public void ApplyAdskWriteResult(string message, IReadOnlyList<SpecItemRow>? refreshedRows)
         {
-            if (refreshedRows != null)
-            {
-                ApplyCollectedRows(refreshedRows);
-            }
-
+            if (refreshedRows != null) ApplyCollectedRows(refreshedRows);
             StatusText = message;
         }
 
@@ -170,17 +135,38 @@ namespace VentCalc.UI.ViewModels
             requestCollectVentilation?.Invoke(this);
         }
 
+        private void BulkEdit()
+        {
+            IReadOnlyList<SpecGroupRow> rows = SelectedSpecRow != null ? new[] { SelectedSpecRow } : FilteredSpecRows.ToList();
+            var window = new BulkEditSpecRuleWindow(rows, SelectedRuleScope);
+            if (window.ShowDialog() != true) return;
+            List<SpecItemRow> rawRows = ExpandGroups(window.TargetFiltered ? FilteredSpecRows : rows).ToList();
+            foreach (SpecItemRow row in rawRows)
+            {
+                row.ApplySystemValues(item =>
+                {
+                    if (!string.IsNullOrWhiteSpace(window.SectionValue)) item.Section = window.SectionValue;
+                    if (!string.IsNullOrWhiteSpace(window.GroupValue)) item.Group = window.GroupValue;
+                    if (!string.IsNullOrWhiteSpace(window.NameValue)) item.Name = window.NameValue;
+                    if (!string.IsNullOrWhiteSpace(window.TypeMarkValue)) item.TypeMark = window.TypeMarkValue;
+                    if (!string.IsNullOrWhiteSpace(window.SizeValue)) item.Size = window.SizeValue;
+                    if (!string.IsNullOrWhiteSpace(window.UnitValue)) item.Unit = window.UnitValue;
+                    if (!string.IsNullOrWhiteSpace(window.NoteValue)) item.Note = window.NoteValue;
+                    item.Source = "ManualRule";
+                });
+            }
+            ruleService.SaveRules(rawRows, window.RuleScope);
+            Replace(SpecRows, SpecGroupingService.Group(RawRows, ColumnLayouts).ToList());
+            RefreshFilters();
+            StatusText = $"Массовое правило сохранено: {rawRows.Count} элементов. Файл: {ruleService.RulesPath}";
+        }
+
         private void ExportExcel()
         {
             try
             {
-                if ((WarningCount > 0 || ErrorCount > 0)
-                    && MessageBox.Show($"В спецификации есть проблемы: Warning = {WarningCount}, Error = {ErrorCount}. Экспортировать?", "SpecCalc", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
-                {
-                    return;
-                }
-
-                SpecExcelExportResult result = SpecExcelExporter.Export(VentilationRows);
+                if ((WarningCount > 0 || ErrorCount > 0) && MessageBox.Show($"В спецификации есть проблемы: Warning = {WarningCount}, Error = {ErrorCount}. Экспортировать?", "SpecCalc", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                SpecExcelExportResult result = SpecExcelExporter.Export(FilteredSpecRows.Count > 0 ? FilteredSpecRows : SpecRows, SelectedExcelProfile, ColumnLayouts);
                 LastExcelExportPath = result.Path;
                 StatusText = $"Excel спецификации создан: {result.Path}";
                 new ExcelExportResultWindow(result.Path).ShowDialog();
@@ -194,190 +180,85 @@ namespace VentCalc.UI.ViewModels
 
         private void ShowSelectedElement()
         {
-            if (CurrentSelectedRow?.ElementId > 0)
-            {
-                selectElementsInRevit?.Invoke(new[] { CurrentSelectedRow.ElementId });
-            }
+            if (SelectedSpecRow?.ElementIds.Count > 0) selectElementsInRevit?.Invoke(SelectedSpecRow.ElementIds);
+            else if (SelectedRawRow?.ElementId > 0) selectElementsInRevit?.Invoke(new[] { SelectedRawRow.ElementId });
         }
 
-        private void ShowProblems()
-        {
-            SelectRows(ProblemRows, "Проблемные элементы не найдены.", "Выделено проблемных элементов");
-        }
+        private void ShowProblems() => SelectRows(ProblemRows.SelectMany(row => row.ElementIds), "Проблемные элементы не найдены.", "Выделено проблемных элементов");
+        private void ShowUnknown() => SelectRows(RawRows.Where(row => row.IsUnrecognized || row.Group == "Неопознано").Select(row => row.ElementId), "Неопознанные элементы не найдены.", "Выделено неопознанных элементов");
+        private void ClearSpecHighlight() { selectElementsInRevit?.Invoke(Array.Empty<long>()); StatusText = "Подсветка/выделение SpecCalc снято."; }
 
-        private void ShowUnknown()
+        private void SelectRows(IEnumerable<long> elementIds, string emptyMessage, string successPrefix)
         {
-            SelectRows(VentilationRows.Where(row => row.IsUnrecognized || row.Group == "Неопознано"), "Неопознанные элементы не найдены.", "Выделено неопознанных элементов");
-        }
-
-        private void ClearSpecHighlight()
-        {
-            selectElementsInRevit?.Invoke(Array.Empty<long>());
-            StatusText = "Подсветка/выделение SpecCalc снято.";
-        }
-
-        private void SelectRows(IEnumerable<SpecItemRow> rows, string emptyMessage, string successPrefix)
-        {
-            long[] ids = rows.Where(row => row.ElementId > 0).Select(row => row.ElementId).Distinct().ToArray();
-            if (ids.Length == 0)
-            {
-                showMessage?.Invoke(emptyMessage);
-                return;
-            }
-
+            long[] ids = elementIds.Where(id => id > 0).Distinct().ToArray();
+            if (ids.Length == 0) { showMessage?.Invoke(emptyMessage); return; }
             selectElementsInRevit?.Invoke(ids);
             StatusText = $"{successPrefix}: {ids.Length}.";
         }
 
         private void SaveRules()
         {
-            List<SpecItemRow> rowsToSave = VentilationRows.Where(row => row.IsManualEdited).ToList();
-            if (rowsToSave.Count == 0 && CurrentSelectedRow != null)
-            {
-                rowsToSave.Add(CurrentSelectedRow);
-            }
-
-            if (rowsToSave.Count == 0)
-            {
-                showMessage?.Invoke("Нет строк для сохранения правил.");
-                return;
-            }
-
-            try
-            {
-                ruleService.SaveRules(rowsToSave, SelectedRuleScope);
-                StatusText = $"Правила сохранены: {rowsToSave.Count}. Область: {SelectedRuleScope}. Файл: {ruleService.RulesPath}";
-            }
-            catch (Exception exception)
-            {
-                StatusText = exception.Message;
-                showMessage?.Invoke(exception.Message);
-            }
+            List<SpecItemRow> rowsToSave = RawRows.Where(row => row.IsManualEdited).ToList();
+            if (rowsToSave.Count == 0) rowsToSave = SelectedSpecRow != null ? SelectedSpecRow.SourceItems.ToList() : SelectedRawRow != null ? new List<SpecItemRow> { SelectedRawRow } : new List<SpecItemRow>();
+            if (rowsToSave.Count == 0) { showMessage?.Invoke("Нет строк для сохранения правил."); return; }
+            ruleService.SaveRules(rowsToSave, SelectedRuleScope);
+            Replace(SpecRows, SpecGroupingService.Group(RawRows, ColumnLayouts).ToList());
+            RefreshFilters();
+            StatusText = $"Правила сохранены: {rowsToSave.Count}. Область: {SelectedRuleScope}. Файл: {ruleService.RulesPath}";
         }
 
         private void ResetAuto()
         {
-            if (CurrentSelectedRow == null)
-            {
-                return;
-            }
-
-            bool removed = ruleService.RemoveRule(CurrentSelectedRow, SelectedRuleScope);
-            StatusText = removed
-                ? "Ручное правило выбранной области удалено. Выполняется пересборка."
-                : "Для выбранной строки не найдено сохранённое ручное правило в выбранной области. Выполняется пересборка.";
+            SpecItemRow? row = SelectedSpecRow?.SourceItems.FirstOrDefault() ?? SelectedRawRow;
+            if (row == null) return;
+            ruleService.RemoveRule(row, SelectedRuleScope);
+            StatusText = "Ручное правило удалено. Выполняется пересборка.";
             requestCollectVentilation?.Invoke(this);
         }
 
         private void WriteSelectedAdsk()
         {
-            if (CurrentSelectedRow == null)
-            {
-                return;
-            }
-
-            WriteAdskRows(new[] { CurrentSelectedRow }, "Будут изменены ADSK-параметры выбранной строки. Продолжить?");
+            List<SpecItemRow> rows = SelectedSpecRow != null ? SelectedSpecRow.SourceItems.ToList() : SelectedRawRow != null ? new List<SpecItemRow> { SelectedRawRow } : new List<SpecItemRow>();
+            WriteAdskRows(rows, "Будут изменены ADSK-параметры выбранных строк. Продолжить?");
         }
 
-        private void WriteFilteredAdsk()
-        {
-            WriteAdskRows(FilteredVentilationRows.ToList(), "Будут изменены ADSK-параметры выбранных/отфильтрованных элементов. Продолжить?");
-        }
+        private void WriteFilteredAdsk() => WriteAdskRows(ExpandGroups(FilteredSpecRows).ToList(), "Будут изменены ADSK-параметры отфильтрованных строк. Продолжить?");
 
         private void WriteAdskRows(IReadOnlyList<SpecItemRow> rows, string confirmation)
         {
-            if (rows.Count == 0)
-            {
-                showMessage?.Invoke("Нет строк для записи ADSK.");
-                return;
-            }
-
-            if (MessageBox.Show(confirmation, "SpecCalc", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
-            {
-                return;
-            }
-
+            if (rows.Count == 0) { showMessage?.Invoke("Нет строк для записи ADSK."); return; }
+            if (MessageBox.Show(confirmation, "SpecCalc", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             requestWriteAdsk?.Invoke(this, rows);
         }
 
-        private void ShowOnlyProblems()
-        {
-            onlyProblems = true;
-            RefreshFilters();
-        }
-
-        private void ResetFilters()
-        {
-            onlyProblems = false;
-            StatusFilter = "Все";
-            GroupFilter = "Все";
-            SearchText = string.Empty;
-            RefreshFilters();
-        }
+        private void ShowOnlyProblems() { onlyProblems = true; RefreshFilters(); }
+        private void ResetFilters() { onlyProblems = false; SectionFilter = "Все"; StatusFilter = "Все"; GroupFilter = "Все"; SearchText = string.Empty; RefreshFilters(); }
+        private void SaveSettings() { settings.Columns = ColumnLayouts.ToList(); settings.SelectedExcelProfile = SelectedExcelProfile; settingsService.Save(settings); StatusText = $"Настройки SpecCalc сохранены: {settingsService.SettingsPath}"; }
 
         private void RefreshFilters()
         {
-            IEnumerable<SpecItemRow> rows = VentilationRows;
-            if (onlyProblems)
-            {
-                rows = rows.Where(IsProblemRow);
-            }
-
-            if (!string.IsNullOrWhiteSpace(StatusFilter) && StatusFilter != "Все")
-            {
-                rows = rows.Where(row => row.Status == StatusFilter);
-            }
-
-            if (!string.IsNullOrWhiteSpace(GroupFilter) && GroupFilter != "Все")
-            {
-                rows = rows.Where(row => row.Group == GroupFilter);
-            }
-
+            IEnumerable<SpecGroupRow> rows = SpecRows;
+            if (onlyProblems) rows = rows.Where(IsProblemRow);
+            if (SectionFilter != "Все") rows = rows.Where(row => row.Section == SectionFilter);
+            if (StatusFilter != "Все") rows = rows.Where(row => row.Status == StatusFilter);
+            if (GroupFilter != "Все") rows = rows.Where(row => row.Group == GroupFilter);
             if (!string.IsNullOrWhiteSpace(SearchText))
             {
                 string query = SearchText.Trim();
-                rows = rows.Where(row => Contains(row.Name, query)
-                    || Contains(row.TypeMark, query)
-                    || Contains(row.Size, query)
-                    || Contains(row.System, query)
-                    || Contains(row.Level, query)
-                    || Contains(row.Note, query));
+                rows = rows.Where(row => Contains(row.Name, query) || Contains(row.TypeMark, query) || Contains(row.Size, query) || Contains(row.System, query) || Contains(row.Level, query) || Contains(row.Note, query));
             }
-
-            Replace(FilteredVentilationRows, rows.ToList());
-            Replace(ProblemRows, VentilationRows.Where(IsProblemRow).ToList());
+            Replace(FilteredSpecRows, rows.ToList());
+            Replace(ProblemRows, SpecRows.Where(IsProblemRow).ToList());
             NotifyCounts();
         }
 
-        private static bool IsProblemRow(SpecItemRow row)
-        {
-            return row.Status is "Warning" or "Error" || row.IsUnrecognized || row.MissingSize || row.MissingSystem || !row.HasAdskName;
-        }
-
-        private static bool Contains(string value, string query)
-        {
-            return value?.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static void Replace(ObservableCollection<SpecItemRow> target, IReadOnlyList<SpecItemRow> rows)
-        {
-            target.Clear();
-            foreach (SpecItemRow row in rows)
-            {
-                target.Add(row);
-            }
-        }
-
+        private static bool IsProblemRow(SpecGroupRow row) => row.Status is "Warning" or "Error" || row.SourceItems.Any(item => item.IsUnrecognized || item.MissingSize || item.MissingSystem || !item.HasAdskName);
+        private static bool Contains(string value, string query) => value?.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+        private static IEnumerable<SpecItemRow> ExpandGroups(IEnumerable<SpecGroupRow> groups) => groups.SelectMany(group => group.SourceItems).Distinct();
+        private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> rows) { target.Clear(); foreach (T row in rows) target.Add(row); }
         private void NotifyCounts()
         {
-            OnPropertyChanged(nameof(TotalCount));
-            OnPropertyChanged(nameof(OkCount));
-            OnPropertyChanged(nameof(WarningCount));
-            OnPropertyChanged(nameof(ErrorCount));
-            OnPropertyChanged(nameof(UnknownCount));
-            OnPropertyChanged(nameof(MissingAdskNameCount));
-            OnPropertyChanged(nameof(MissingSizeCount));
-            OnPropertyChanged(nameof(MissingSystemCount));
+            OnPropertyChanged(nameof(TotalCount)); OnPropertyChanged(nameof(GroupCount)); OnPropertyChanged(nameof(OkCount)); OnPropertyChanged(nameof(WarningCount)); OnPropertyChanged(nameof(ErrorCount)); OnPropertyChanged(nameof(UnknownCount)); OnPropertyChanged(nameof(MissingAdskNameCount)); OnPropertyChanged(nameof(MissingSizeCount)); OnPropertyChanged(nameof(MissingSystemCount));
         }
     }
 }

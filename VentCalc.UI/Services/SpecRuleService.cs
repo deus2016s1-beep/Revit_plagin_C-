@@ -55,9 +55,12 @@ namespace VentCalc.UI.Services
                     TypeName = key.Scope == "Family" ? string.Empty : row.TypeName,
                     UniqueId = key.Scope == "Element" ? row.UniqueId : string.Empty,
                     ElementId = key.Scope == "Element" ? row.ElementId : 0,
+                    GroupName = key.Scope == "Group" ? row.Group : string.Empty,
+                    Section = row.Section,
                     Group = row.Group,
                     Name = row.Name,
                     TypeMark = row.TypeMark,
+                    Size = row.Size,
                     Unit = row.Unit,
                     Note = row.Note
                 };
@@ -83,13 +86,14 @@ namespace VentCalc.UI.Services
         {
             return rules.TryGetValue(row.GetRuleKey("Element").ToStorageKey(), out rule)
                 || rules.TryGetValue(row.GetRuleKey("Type").ToStorageKey(), out rule)
-                || rules.TryGetValue(row.GetRuleKey("Family").ToStorageKey(), out rule);
+                || rules.TryGetValue(row.GetRuleKey("Family").ToStorageKey(), out rule)
+                || rules.TryGetValue(row.GetRuleKey("Group").ToStorageKey(), out rule);
         }
 
         private static string GetStorageKey(SpecRule rule)
         {
             string scope = string.IsNullOrWhiteSpace(rule.Scope) ? "Type" : rule.Scope;
-            return SpecRuleKey.Create(scope, rule.Category, rule.FamilyName, rule.TypeName, rule.UniqueId, rule.ElementId).ToStorageKey();
+            return SpecRuleKey.Create(scope, rule.Category, rule.FamilyName, rule.TypeName, rule.UniqueId, rule.ElementId, rule.GroupName).ToStorageKey();
         }
 
         private void Save(IEnumerable<SpecRule> rules)

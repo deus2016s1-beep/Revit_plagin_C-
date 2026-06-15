@@ -31,7 +31,12 @@ namespace VentCalc.UI.Services
 
         public static SpecExcelExportResult Export(IEnumerable<SpecItemRow> sourceRows, string? exportDirectory = null)
         {
-            List<SpecItemRow> rows = sourceRows.ToList();
+            return Export(SpecGroupingService.Group(sourceRows), "Проектная спецификация", SpecCalcSettingsService.CreateDefaultColumns(), exportDirectory);
+        }
+
+        public static SpecExcelExportResult Export(IEnumerable<SpecGroupRow> sourceRows, string profile, IEnumerable<SpecColumnLayout> columnLayouts, string? exportDirectory = null)
+        {
+            List<SpecGroupRow> rows = sourceRows.ToList();
             if (rows.Count == 0)
             {
                 throw new InvalidOperationException("Сначала соберите вентиляцию.");
@@ -42,7 +47,7 @@ namespace VentCalc.UI.Services
             string path = Path.Combine(directory, $"spec_ventilation_{createdAt:yyyyMMdd_HHmmss}.xlsx");
             List<SheetData> sheets = new List<SheetData>
             {
-                new SheetData("Спецификация", BuildSpecificationRows(rows, createdAt))
+                new SheetData(GetSheetName(profile), BuildSpecificationRows(rows, profile, columnLayouts, createdAt))
             };
 
             using (FileStream stream = File.Create(path))
@@ -78,69 +83,72 @@ namespace VentCalc.UI.Services
             }
         }
 
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildSpecificationRows(IReadOnlyList<SpecItemRow> rows, DateTime createdAt)
+        private static IReadOnlyList<IReadOnlyList<object?>> BuildSpecificationRows(IReadOnlyList<SpecGroupRow> rows, string profile, IEnumerable<SpecColumnLayout> columnLayouts, DateTime createdAt)
         {
+            List<SpecColumnLayout> columns = ResolveColumns(profile, columnLayouts);
             var result = new List<IReadOnlyList<object?>>
             {
-                Row("Спецификация вентиляции"),
+                Row(profile),
                 Row($"Дата экспорта: {createdAt:yyyy-MM-dd HH:mm:ss}"),
-                Row("№", "Раздел", "Наименование", "Тип / марка", "Размер", "Ед. изм.", "Кол-во", "Длина, м", "Площадь, м²", "Примечание")
+                Row(new[] { "№" }.Concat(columns.Select(column => column.Header)).ToArray())
             };
 
-            var groups = rows
-                .GroupBy(CreateGroupKey)
-                .OrderBy(group => group.Key.Section)
-                .ThenBy(group => group.Key.Name)
-                .ThenBy(group => group.Key.Size)
-                .ThenBy(group => group.Key.TypeMark)
-                .ToList();
-
             int number = 1;
-            foreach (var group in groups)
+            foreach (SpecGroupRow row in rows.OrderBy(row => row.Section).ThenBy(row => row.Group).ThenBy(row => row.Name).ThenBy(row => row.Size))
             {
-                bool byArea = string.Equals(group.Key.Unit, "м²", StringComparison.OrdinalIgnoreCase);
-                bool byLength = string.Equals(group.Key.Unit, "м", StringComparison.OrdinalIgnoreCase);
-                double quantity = Math.Round(group.Sum(row => row.Quantity), byArea || byLength ? 2 : 0);
-                double length = Math.Round(group.Sum(row => row.LengthM), 2);
-                double area = Math.Round(group.Sum(row => row.AreaM2), 2);
-                result.Add(Row(
-                    number++,
-                    group.Key.Section,
-                    group.Key.Name,
-                    group.Key.TypeMark,
-                    group.Key.Size,
-                    group.Key.Unit,
-                    quantity,
-                    byArea || byLength ? (object?)length : null,
-                    byArea ? (object?)area : null,
-                    group.Key.Note));
+                var values = new List<object?> { number++ };
+                foreach (SpecColumnLayout column in columns)
+                {
+                    values.Add(GetValue(row, column.FieldName, profile));
+                }
+                result.Add(values);
             }
 
             return result;
         }
 
-        private static SpecGroupKey CreateGroupKey(SpecItemRow row)
+        private static List<SpecColumnLayout> ResolveColumns(string profile, IEnumerable<SpecColumnLayout> columnLayouts)
         {
-            bool duct = row.Group == "Воздуховоды" || row.Group == "Гибкие воздуховоды";
-            return new SpecGroupKey(
-                row.Group,
-                row.Name,
-                duct ? string.Empty : CleanExportText(row.TypeMark),
-                row.Size,
-                row.Unit,
-                row.Note);
+            string[] fields = profile switch
+            {
+                "Визуальная спецификация" => new[] { "Section", "Name", "Size", "ImagePath", "Unit", "Quantity", "Note" },
+                "Монтажная ведомость" => new[] { "Group", "Name", "Size", "System", "Level", "Unit", "Quantity" },
+                "Закупка" => new[] { "Name", "TypeMark", "Size", "Unit", "Quantity", "Note" },
+                _ => new[] { "Section", "Name", "TypeMark", "Size", "Unit", "Quantity", "Note" }
+            };
+            Dictionary<string, SpecColumnLayout> configured = columnLayouts.ToDictionary(column => column.FieldName, StringComparer.OrdinalIgnoreCase);
+            return fields.Select((field, index) => configured.TryGetValue(field, out SpecColumnLayout? column)
+                    ? new SpecColumnLayout { FieldName = column.FieldName, Header = field == "ImagePath" ? "Изображение" : column.Header, Order = index, VisibleInExcel = true, Format = column.Format, IsNumeric = column.IsNumeric }
+                    : new SpecColumnLayout { FieldName = field, Header = field, Order = index, VisibleInExcel = true })
+                .Where(column => column.VisibleInExcel)
+                .ToList();
         }
 
-        private readonly record struct SpecGroupKey(string Section, string Name, string TypeMark, string Size, string Unit, string Note);
-
-        private static string CleanExportText(string value)
+        private static string GetSheetName(string profile)
         {
-            if (string.IsNullOrWhiteSpace(value) || value == "—") return string.Empty;
-            return value.Contains("ADSK_Оцинковка", StringComparison.OrdinalIgnoreCase)
-                || value.Contains("Оцинковка_", StringComparison.OrdinalIgnoreCase)
-                || value.Contains("ГОСТ 14918", StringComparison.OrdinalIgnoreCase)
-                ? string.Empty
-                : value.Trim();
+            return profile == "Монтажная ведомость" ? "Монтажная ведомость" : profile == "Закупка" ? "Закупка" : "Спецификация";
+        }
+
+        private static object? GetValue(SpecGroupRow row, string field, string profile)
+        {
+            return field switch
+            {
+                "Section" => row.Section,
+                "Group" => row.Group,
+                "Name" => row.Name,
+                "TypeMark" => row.TypeMark,
+                "Size" => row.Size,
+                "Unit" => row.Unit,
+                "Quantity" => Math.Round(row.Quantity, row.Unit == "шт" ? 0 : 2),
+                "LengthM" => row.LengthM > 0 ? (object)Math.Round(row.LengthM, 2) : null,
+                "AreaM2" => row.AreaM2 > 0 ? (object)Math.Round(row.AreaM2, 2) : null,
+                "System" => row.System,
+                "Level" => row.Level,
+                "Material" => row.Material,
+                "ImagePath" => profile == "Визуальная спецификация" ? (string.IsNullOrWhiteSpace(row.ImagePath) ? "fallback" : row.ImagePath) : string.Empty,
+                "Note" => row.Note,
+                _ => string.Empty
+            };
         }
 
         private static IReadOnlyList<object?> Row(params object?[] values) => values;
