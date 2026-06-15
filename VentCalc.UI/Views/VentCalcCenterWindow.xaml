@@ -353,9 +353,6 @@
 
             <TabItem Header="Местные сопротивления">
                 <DockPanel Margin="6">
-                    <TabControl>
-                        <TabItem Header="Простой">
-                            <DockPanel Margin="6">
                                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                                     <UniformGrid Columns="4" Margin="0,0,0,4">
                                         <Border BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="4" Background="#FFF8F8F8">
@@ -379,7 +376,6 @@
                                         <Button Content="Сохранить изменения" Command="{Binding SaveZetaOverridesCommand}" />
                                         <Button Content="Вернуть к Auto" Command="{Binding ResetToAutoCommand}" />
                                         <Button Content="Показать в модели" Command="{Binding SelectElementInRevitCommand}" />
-                                        <Button Content="Каталог коэффициентов ζ" Click="OpenProjectZetaCatalog_Click" />
                                         <TextBlock Text="Показать:" FontWeight="Bold" />
                                         <ComboBox SelectedValue="{Binding LocalResistanceScopeMode, Mode=TwoWay}" SelectedValuePath="Tag" Width="150" Margin="4">
                                             <ComboBoxItem Content="Текущая трасса" Tag="CurrentPath" IsSelected="True" />
@@ -434,46 +430,6 @@
                                         <DataGridTextColumn Header="Источник" Binding="{Binding LocalizedSource}" Width="110" IsReadOnly="True" />
                                     </DataGrid.Columns>
                                 </DataGrid>
-                            </DockPanel>
-                        </TabItem>
-
-                        <TabItem Header="Инженерные данные">
-                            <DockPanel Margin="6">
-                                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                    <TextBlock Text="{Binding LocalResistanceRecognitionSummary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,4" />
-                                    <WrapPanel>
-                                        <Button Content="Очистить ручное" Command="{Binding ResetSelectedZetaCommand}" ToolTip="Удаляет только несохранённое ручное значение текущей сессии." />
-                                        <Button Content="Принять рекомендованные ζ" Command="{Binding AcceptRecommendedZetaCommand}" />
-                                        <Button Content="Пересчитать с ручными ζ" Command="{Binding RecalculateManualZetaCommand}" />
-                                        <Button Content="Вернуть весь проект к Auto" Command="{Binding ResetProjectToAutoCommand}" />
-                                        <Button Content="Обновить данные" Command="{Binding RefreshCommand}" />
-                                        <Button Content="Техническая диагностика" Command="{Binding GenerateVerificationReportCommand}" />
-                                    </WrapPanel>
-                                </StackPanel>
-                                <DataGrid x:Name="EngineeringLocalResistancesGrid" ItemsSource="{Binding SelectedPathLocalResistances}" SelectedItem="{Binding SelectedPathLocalResistance, Mode=TwoWay}" CanUserAddRows="False" SelectionMode="Extended" SelectionChanged="LocalResistancesGrid_SelectionChanged">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                                        <DataGridTextColumn Header="Вид МС" Binding="{Binding LocalKind}" Width="130" />
-                                        <DataGridTextColumn Header="PathRole" Binding="{Binding DisplayRole}" Width="120" />
-                                        <DataGridTextColumn Header="Факт. угол" Binding="{Binding ActualAngleDeg, StringFormat={}{0:0.#}}" Width="80" />
-                                        <DataGridTextColumn Header="Расч. угол" Binding="{Binding RoundedAngleDeg, StringFormat={}{0:0.#}}" Width="80" />
-                                        <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                                        <DataGridTextColumn Header="Auto ζ" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="70" IsReadOnly="True" />
-                                        <DataGridTemplateColumn Header="ManualZeta" Width="90">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate><TextBox Text="{Binding ManualZetaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" Padding="2" /></DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                        <DataGridTextColumn Header="Используемое ζ" Binding="{Binding EffectiveZeta, StringFormat={}{0:0.###}}" Width="100" IsReadOnly="True" />
-                                        <DataGridTextColumn Header="Источник" Binding="{Binding ZetaSource}" Width="140" IsReadOnly="True" />
-                                        <DataGridTextColumn Header="Потери, Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="90" />
-                                        <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="120" IsReadOnly="True" />
-                                        <DataGridTextColumn Header="Подробно" Binding="{Binding TechnicalDetails}" Width="*" IsReadOnly="True" />
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </DockPanel>
-                        </TabItem>
-                    </TabControl>
                 </DockPanel>
             </TabItem>
 
