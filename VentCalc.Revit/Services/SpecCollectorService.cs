@@ -82,8 +82,8 @@ namespace VentCalc.Revit.Services
                 item.Category = categoryName;
                 item.FamilyName = familyName;
                 item.TypeName = typeName;
-                item.TypeMark = FirstNonEmpty(ReadParameterAsString(element, "ADSK_Марка"), ReadParameterAsString(type, "ADSK_Марка"), typeName, "—");
-                item.Size = ReadSize(element, type);
+                item.TypeMark = CleanTypeMark(FirstNonEmpty(ReadParameterAsString(element, "ADSK_Марка"), ReadParameterAsString(type, "ADSK_Марка"), typeName, "—"));
+                item.Size = ReadSize(element, type, allText);
                 item.System = ReadSystemName(element);
                 item.Level = ReadLevelName(document, element);
                 item.Source = "Category";
@@ -100,7 +100,8 @@ namespace VentCalc.Revit.Services
                         item.Group = "Гибкие воздуховоды";
                         item.Name = AppendSize("Гибкий воздуховод", item.Size);
                         item.Unit = "м";
-                        item.Quantity = Math.Round(ReadLengthM(element), 3);
+                        item.LengthM = Math.Round(ReadLengthM(element), 3);
+                        item.Quantity = item.LengthM;
                     });
                     break;
                 case BuiltInCategory.OST_DuctFitting:
@@ -110,19 +111,23 @@ namespace VentCalc.Revit.Services
                     row.ApplySystemValues(item =>
                     {
                         item.Group = "Арматура / клапаны";
-                        item.Name = ContainsAny(allText, "клапан", "damper", "valve") ? AppendSize("Клапан", item.Size) : AppendSize("Арматура / клапан", item.Size);
+                        item.Name = ContainsAny(allText, "шумоглуш", "silencer") ? "Шумоглушитель"
+                            : ContainsAny(allText, "гибк", "flex") ? "Гибкая вставка"
+                            : ContainsAny(allText, "клапан", "damper", "valve") ? "Клапан"
+                            : "Арматура / клапан";
                         item.Unit = "шт";
                         item.Quantity = 1;
                     });
                     break;
                 case BuiltInCategory.OST_DuctTerminal:
-                    ClassifyTerminal(row, allText);
+                    ClassifyTerminal(element, type, row, allText);
                     break;
                 case BuiltInCategory.OST_MechanicalEquipment:
                     row.ApplySystemValues(item =>
                     {
                         item.Group = ContainsAny(allText, "зонт", "hood") ? "Зонты" : "Оборудование";
-                        item.Name = ContainsAny(allText, "зонт", "hood") ? AppendSize("Зонт вытяжной", item.Size) : ContainsAny(allText, "вентил", "fan") ? "Вентилятор" : "Оборудование вентиляционное";
+                        item.Size = ReadEquipmentSize(element, type, item.Size);
+                        item.Name = ContainsAny(allText, "зонт", "hood") ? "Зонт вытяжной" : ContainsAny(allText, "вентил", "fan") ? "Вентилятор" : "Оборудование вентиляционное";
                         item.Unit = "шт";
                         item.Quantity = 1;
                     });
@@ -151,23 +156,26 @@ namespace VentCalc.Revit.Services
             row.ApplySystemValues(item =>
             {
                 item.Group = "Воздуховоды";
+                item.Unit = "м²";
+                item.LengthM = Math.Round(lengthM, 3);
+                item.TypeMark = "Оцинкованная сталь";
                 if (diameterM > 0)
                 {
-                    item.Name = AppendSize("Воздуховод круглый", item.Size);
-                    item.Unit = "м²";
-                    item.Quantity = Math.Round(Math.PI * diameterM * lengthM, 3);
+                    item.Name = "Воздуховоды круглые из оцинкованной стали";
+                    item.AreaM2 = Math.Round(Math.PI * diameterM * lengthM, 3);
+                    item.Quantity = item.AreaM2;
                 }
                 else if (widthM > 0 && heightM > 0)
                 {
-                    item.Name = AppendSize("Воздуховод прямоугольный", item.Size);
-                    item.Unit = "м²";
-                    item.Quantity = Math.Round(2 * (widthM + heightM) * lengthM, 3);
+                    item.Name = "Воздуховоды прямоугольные из оцинкованной стали";
+                    item.AreaM2 = Math.Round(2 * (widthM + heightM) * lengthM, 3);
+                    item.Quantity = item.AreaM2;
                 }
                 else
                 {
-                    item.Name = "Воздуховод";
+                    item.Name = "Воздуховоды из оцинкованной стали";
                     item.Unit = "м";
-                    item.Quantity = Math.Round(lengthM, 3);
+                    item.Quantity = item.LengthM;
                 }
             });
         }
@@ -180,15 +188,16 @@ namespace VentCalc.Revit.Services
                 item.Unit = "шт";
                 item.Quantity = 1;
                 item.Source = ContainsAny(allText, "отвод", "elbow", "переход", "transition", "тройник", "tee", "врез", "tap") ? "FamilyName" : "Category";
-                item.Name = ContainsAny(allText, "отвод", "elbow") ? AppendSize($"Отвод {ReadAngleText(allText)}".Trim(), item.Size)
-                    : ContainsAny(allText, "переход", "transition") ? AppendSize("Переход", item.Size)
-                    : ContainsAny(allText, "тройник", "tee") ? AppendSize("Тройник", item.Size)
-                    : ContainsAny(allText, "врез", "tap") ? AppendSize("Врезка", item.Size)
-                    : "Фасонная часть";
+                item.Name = ContainsAny(allText, "заглуш", "cap", "plug") ? "Заглушка"
+                    : ContainsAny(allText, "отвод", "elbow") ? $"Отвод {ReadAngleText(allText)}".Trim()
+                    : ContainsAny(allText, "переход", "transition") ? "Переход"
+                    : ContainsAny(allText, "тройник", "tee") ? "Тройник"
+                    : ContainsAny(allText, "врез", "tap") ? "Врезка"
+                    : "Неопознанная фасонная часть";
             });
         }
 
-        private static void ClassifyTerminal(SpecItemRow row, string allText)
+        private static void ClassifyTerminal(Element element, Element? type, SpecItemRow row, string allText)
         {
             row.ApplySystemValues(item =>
             {
@@ -196,9 +205,10 @@ namespace VentCalc.Revit.Services
                 item.Unit = "шт";
                 item.Quantity = 1;
                 item.Source = "FamilyName";
-                item.Name = ContainsAny(allText, "зонт", "hood") ? AppendSize("Зонт вытяжной", item.Size)
-                    : ContainsAny(allText, "дифф", "diffuser") ? AppendSize("Диффузор", item.Size)
-                    : AppendSize("Решётка вентиляционная", item.Size);
+                item.Size = ReadTerminalSize(element, type, item.Size, allText);
+                item.Name = ContainsAny(allText, "зонт", "hood") ? "Зонт вытяжной"
+                    : ContainsAny(allText, "дифф", "diffuser") ? "Диффузор"
+                    : "Решётка вентиляционная";
             });
         }
 
@@ -214,12 +224,12 @@ namespace VentCalc.Revit.Services
             bool anyAdsk = false;
             row.ApplySystemValues(item =>
             {
-                if (!string.IsNullOrWhiteSpace(adskName)) { item.Name = adskName; anyAdsk = true; }
+                if (!string.IsNullOrWhiteSpace(adskName) && CanUseAdskName(item, adskName)) { item.Name = adskName; anyAdsk = true; }
                 item.HasAdskName = !string.IsNullOrWhiteSpace(adskName);
-                if (!string.IsNullOrWhiteSpace(adskMark)) { item.TypeMark = adskMark; anyAdsk = true; }
-                else if (!string.IsNullOrWhiteSpace(adskCode)) { item.TypeMark = adskCode; anyAdsk = true; }
-                if (!string.IsNullOrWhiteSpace(adskUnit)) { item.Unit = adskUnit; anyAdsk = true; }
-                if (TryParseDouble(adskQuantity, out double quantity) && quantity > 0) { item.Quantity = Math.Round(quantity, 3); anyAdsk = true; }
+                if (!string.IsNullOrWhiteSpace(adskMark)) { item.TypeMark = CleanTypeMark(adskMark); anyAdsk = true; }
+                else if (!string.IsNullOrWhiteSpace(adskCode)) { item.TypeMark = CleanTypeMark(adskCode); anyAdsk = true; }
+                if (!string.IsNullOrWhiteSpace(adskUnit) && item.Group != "Воздуховоды" && item.Group != "Фасонные части") { item.Unit = adskUnit; anyAdsk = true; }
+                if (TryParseDouble(adskQuantity, out double quantity) && quantity > 0 && item.Group != "Воздуховоды") { item.Quantity = Math.Round(quantity, 3); anyAdsk = true; }
                 if (!string.IsNullOrWhiteSpace(adskNote)) { item.Note = adskNote; anyAdsk = true; }
                 if (anyAdsk) item.Source = "ADSK";
             });
@@ -249,8 +259,9 @@ namespace VentCalc.Revit.Services
             var recommendations = new List<string>();
             if (string.IsNullOrWhiteSpace(row.Name) || row.Name == "Неопознанный элемент") problems.Add("не найдено нормальное наименование");
             if (string.IsNullOrWhiteSpace(row.Name) || row.Name == "Неопознанный элемент") recommendations.Add("Заполните ADSK_Наименование или задайте ручное правило");
-            row.MissingSize = row.Size == "—" && row.Group is "Воздуховоды" or "Гибкие воздуховоды" or "Фасонные части";
+            row.MissingSize = row.Size == "—" && row.Group is "Воздуховоды" or "Гибкие воздуховоды" or "Фасонные части" or "Зонты" or "Воздухораспределители";
             if (row.MissingSize) { problems.Add("не найден размер"); recommendations.Add("Проверьте семейство: не найден размер"); }
+            if (row.Group == "Воздуховоды" && row.LengthM <= 0) { problems.Add("не найдена длина воздуховода"); recommendations.Add("Проверьте параметр длины воздуховода"); }
             row.MissingSystem = row.System == "—";
             if (row.MissingSystem) { problems.Add("элемент не подключён к системе"); recommendations.Add("Элемент не подключён к системе"); }
             row.IsUnrecognized = row.Source == "Unknown" || row.Group == "Неопознано";
@@ -274,7 +285,7 @@ namespace VentCalc.Revit.Services
             });
         }
 
-        private static string ReadSize(Element element, Element? type)
+        private static string ReadSize(Element element, Element? type, string allText)
         {
             double diameterM = ReadDoubleParameterM(element, type, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM, "Диаметр", "Diameter");
             if (diameterM > 0) return $"Ø{Math.Round(diameterM * 1000):0}";
@@ -283,8 +294,96 @@ namespace VentCalc.Revit.Services
             double heightM = ReadDoubleParameterM(element, type, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM, "Высота", "Height");
             if (widthM > 0 && heightM > 0) return $"{Math.Round(widthM * 1000):0}×{Math.Round(heightM * 1000):0}";
 
-            string size = FirstNonEmpty(ReadParameterAsString(element, "Размер"), ReadParameterAsString(type, "Размер"), ReadParameterAsString(element, "Size"), ReadParameterAsString(type, "Size"));
-            return string.IsNullOrWhiteSpace(size) ? "—" : size;
+            string size = FirstNonEmpty(ReadParameterAsString(element, "Размер"), ReadParameterAsString(type, "Размер"), ReadParameterAsString(element, "ADSK_Размер"), ReadParameterAsString(type, "ADSK_Размер"), ReadParameterAsString(element, "Size"), ReadParameterAsString(type, "Size"));
+            if (!string.IsNullOrWhiteSpace(size)) return NormalizeSize(size);
+            string fromNames = TryExtractSize(allText);
+            return string.IsNullOrWhiteSpace(fromNames) ? "—" : fromNames;
+        }
+
+
+        private static string ReadEquipmentSize(Element element, Element? type, string currentSize)
+        {
+            string three = ReadThreeDimensionalSize(element, type, new[] { "ADSK_Размер_Длина", "Длина", "Length" }, new[] { "ADSK_Размер_Ширина", "Ширина", "Width" }, new[] { "ADSK_Размер_Высота", "Высота", "Height" });
+            if (!string.IsNullOrWhiteSpace(three)) return three;
+            if (!string.IsNullOrWhiteSpace(currentSize) && currentSize != "—") return NormalizeSize(currentSize);
+            string fromNames = TryExtractSize($"{type?.Name} {element.Name}");
+            return string.IsNullOrWhiteSpace(fromNames) ? "—" : fromNames;
+        }
+
+        private static string ReadTerminalSize(Element element, Element? type, string currentSize, string allText)
+        {
+            if (!string.IsNullOrWhiteSpace(currentSize) && currentSize != "—") return NormalizeSize(currentSize);
+            double width = ReadNamedLengthMm(element, type, new[] { "ADSK_Размер_Ширина", "Ширина", "A", "Width" });
+            double height = ReadNamedLengthMm(element, type, new[] { "ADSK_Размер_Высота", "Высота", "B", "Height" });
+            if (width > 0 && height > 0) return $"{Math.Round(width):0}×{Math.Round(height):0}";
+            string fromNames = TryExtractSize(allText);
+            return string.IsNullOrWhiteSpace(fromNames) ? "—" : fromNames;
+        }
+
+        private static string ReadThreeDimensionalSize(Element element, Element? type, string[] lengthNames, string[] widthNames, string[] heightNames)
+        {
+            double length = ReadNamedLengthMm(element, type, lengthNames);
+            double width = ReadNamedLengthMm(element, type, widthNames);
+            double height = ReadNamedLengthMm(element, type, heightNames);
+            return length > 0 && width > 0 && height > 0
+                ? $"{Math.Round(length):0}×{Math.Round(width):0}×{Math.Round(height):0}"
+                : string.Empty;
+        }
+
+        private static double ReadNamedLengthMm(Element element, Element? type, IEnumerable<string> names)
+        {
+            foreach (string name in names)
+            {
+                Parameter? parameter = element.LookupParameter(name) ?? type?.LookupParameter(name);
+                if (parameter == null) continue;
+                if (parameter.StorageType == StorageType.Double)
+                {
+                    return UnitUtils.ConvertFromInternalUnits(parameter.AsDouble(), UnitTypeId.Millimeters);
+                }
+
+                if (TryParseDouble(ParameterToString(parameter), out double parsed) && parsed > 0)
+                {
+                    return parsed > 20 ? parsed : parsed * 1000;
+                }
+            }
+
+            return 0;
+        }
+
+        private static bool CanUseAdskName(SpecItemRow item, string adskName)
+        {
+            if (item.Group == "Фасонные части" && ContainsAny(adskName, "оцинков", "воздуховод")) return false;
+            if (item.Group == "Воздуховоды" && ContainsAny(adskName, "ADSK_", "врезк", "тройник", "переход")) return false;
+            return true;
+        }
+
+        private static string CleanTypeMark(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value == "—") return "—";
+            if (ContainsAny(value, "ADSK_Оцинковка", "Оцинковка_", "ГОСТ 14918")) return "Оцинкованная сталь";
+            return value.Trim();
+        }
+
+        private static string NormalizeSize(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? "—"
+                : value.Trim().Replace('х', '×').Replace('Х', '×').Replace('x', '×').Replace('X', '×').Replace('*', '×');
+        }
+
+        private static string TryExtractSize(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+            var match = System.Text.RegularExpressions.Regex.Match(text, @"(?i)(?:Ø|ø|ф|d)?\s*(\d{2,4})\s*[xх×*]\s*(\d{2,4})(?:\s*[xх×*]\s*(\d{2,4}))?");
+            if (match.Success)
+            {
+                return match.Groups[3].Success
+                    ? $"{match.Groups[1].Value}×{match.Groups[2].Value}×{match.Groups[3].Value}"
+                    : $"{match.Groups[1].Value}×{match.Groups[2].Value}";
+            }
+
+            match = System.Text.RegularExpressions.Regex.Match(text, @"(?i)(?:Ø|ø|ф|d)\s*(\d{2,4})");
+            return match.Success ? $"Ø{match.Groups[1].Value}" : string.Empty;
         }
 
         private static string ReadSystemName(Element element)

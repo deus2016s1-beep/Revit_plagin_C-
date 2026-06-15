@@ -14,6 +14,8 @@ namespace VentCalc.UI.Services
         private string size = "—";
         private string unit = "шт";
         private double quantity = 1;
+        private double lengthM;
+        private double areaM2;
         private string system = "—";
         private string level = "—";
         private string source = "Unknown";
@@ -43,6 +45,8 @@ namespace VentCalc.UI.Services
         public string Size { get => size; set => SetProperty(ref size, value); }
         public string Unit { get => unit; set => SetEditableProperty(ref unit, value); }
         public double Quantity { get => quantity; set => SetProperty(ref quantity, value); }
+        public double LengthM { get => lengthM; set => SetProperty(ref lengthM, value); }
+        public double AreaM2 { get => areaM2; set => SetProperty(ref areaM2, value); }
         public string System { get => system; set => SetProperty(ref system, value); }
         public string Level { get => level; set => SetProperty(ref level, value); }
         public string Source { get => source; set => SetProperty(ref source, value); }

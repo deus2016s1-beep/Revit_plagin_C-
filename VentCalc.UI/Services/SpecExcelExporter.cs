@@ -42,9 +42,7 @@ namespace VentCalc.UI.Services
             string path = Path.Combine(directory, $"spec_ventilation_{createdAt:yyyyMMdd_HHmmss}.xlsx");
             List<SheetData> sheets = new List<SheetData>
             {
-                new SheetData("Вентиляция", BuildVentilationRows(rows)),
-                new SheetData("Проблемы", BuildProblemRows(rows)),
-                new SheetData("Сводка", BuildSummaryRows(rows, createdAt))
+                new SheetData("Спецификация", BuildSpecificationRows(rows, createdAt))
             };
 
             using (FileStream stream = File.Create(path))
@@ -80,67 +78,69 @@ namespace VentCalc.UI.Services
             }
         }
 
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildVentilationRows(IReadOnlyList<SpecItemRow> rows)
+        private static IReadOnlyList<IReadOnlyList<object?>> BuildSpecificationRows(IReadOnlyList<SpecItemRow> rows, DateTime createdAt)
         {
             var result = new List<IReadOnlyList<object?>>
             {
-                Row("№", "Наименование", "Тип / марка", "Размер", "Ед. изм.", "Кол-во", "Примечание")
+                Row("Спецификация вентиляции"),
+                Row($"Дата экспорта: {createdAt:yyyy-MM-dd HH:mm:ss}"),
+                Row("№", "Раздел", "Наименование", "Тип / марка", "Размер", "Ед. изм.", "Кол-во", "Длина, м", "Площадь, м²", "Примечание")
             };
 
             var groups = rows
-                .GroupBy(row => new { row.Name, row.TypeMark, row.Size, row.Unit, row.Note })
-                .OrderBy(group => group.Key.Name)
-                .ThenBy(group => group.Key.TypeMark)
+                .GroupBy(CreateGroupKey)
+                .OrderBy(group => group.Key.Section)
+                .ThenBy(group => group.Key.Name)
                 .ThenBy(group => group.Key.Size)
+                .ThenBy(group => group.Key.TypeMark)
                 .ToList();
 
             int number = 1;
             foreach (var group in groups)
             {
+                bool byArea = string.Equals(group.Key.Unit, "м²", StringComparison.OrdinalIgnoreCase);
+                bool byLength = string.Equals(group.Key.Unit, "м", StringComparison.OrdinalIgnoreCase);
+                double quantity = Math.Round(group.Sum(row => row.Quantity), byArea || byLength ? 2 : 0);
+                double length = Math.Round(group.Sum(row => row.LengthM), 2);
+                double area = Math.Round(group.Sum(row => row.AreaM2), 2);
                 result.Add(Row(
                     number++,
+                    group.Key.Section,
                     group.Key.Name,
                     group.Key.TypeMark,
                     group.Key.Size,
                     group.Key.Unit,
-                    Math.Round(group.Sum(row => row.Quantity), 3),
+                    quantity,
+                    byArea || byLength ? (object?)length : null,
+                    byArea ? (object?)area : null,
                     group.Key.Note));
             }
 
             return result;
         }
 
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildProblemRows(IReadOnlyList<SpecItemRow> rows)
+        private static SpecGroupKey CreateGroupKey(SpecItemRow row)
         {
-            var result = new List<IReadOnlyList<object?>>
-            {
-                Row("Статус", "Проблема", "Группа", "Наименование", "Тип / марка", "Размер", "Система", "Уровень", "Рекомендация")
-            };
-
-            foreach (SpecItemRow row in rows.Where(row => !string.Equals(row.Status, "OK", StringComparison.OrdinalIgnoreCase)))
-            {
-                result.Add(Row(row.Status, row.Problem, row.Group, row.Name, row.TypeMark, row.Size, row.System, row.Level, row.Recommendation));
-            }
-
-            return result;
+            bool duct = row.Group == "Воздуховоды" || row.Group == "Гибкие воздуховоды";
+            return new SpecGroupKey(
+                row.Group,
+                row.Name,
+                duct ? string.Empty : CleanExportText(row.TypeMark),
+                row.Size,
+                row.Unit,
+                row.Note);
         }
 
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildSummaryRows(IReadOnlyList<SpecItemRow> rows, DateTime createdAt)
+        private readonly record struct SpecGroupKey(string Section, string Name, string TypeMark, string Size, string Unit, string Note);
+
+        private static string CleanExportText(string value)
         {
-            return new List<IReadOnlyList<object?>>
-            {
-                Row("Показатель", "Значение"),
-                Row("Всего элементов", rows.Count),
-                Row("OK", rows.Count(row => row.Status == "OK")),
-                Row("Warning", rows.Count(row => row.Status == "Warning")),
-                Row("Error", rows.Count(row => row.Status == "Error")),
-                Row("Неопознано", rows.Count(row => row.IsUnrecognized || row.Group == "Неопознано")),
-                Row("Без размера", rows.Count(row => row.MissingSize)),
-                Row("Без системы", rows.Count(row => row.MissingSystem)),
-                Row("Без ADSK_Наименование", rows.Count(row => !row.HasAdskName)),
-                Row("Дата экспорта", createdAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
-                Row("Имя документа Revit", "—")
-            };
+            if (string.IsNullOrWhiteSpace(value) || value == "—") return string.Empty;
+            return value.Contains("ADSK_Оцинковка", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("Оцинковка_", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("ГОСТ 14918", StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : value.Trim();
         }
 
         private static IReadOnlyList<object?> Row(params object?[] values) => values;
@@ -193,6 +193,7 @@ namespace VentCalc.UI.Services
         {
             int maxColumns = Math.Max(1, rows.Any() ? rows.Max(row => row.Count) : 1);
             var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+            builder.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"3\" topLeftCell=\"A4\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             builder.Append(BuildColumns(maxColumns));
             builder.Append("<sheetData>");
             for (int r = 0; r < rows.Count; r++)
@@ -202,7 +203,7 @@ namespace VentCalc.UI.Services
                 {
                     object? value = rows[r][c];
                     string cell = ColumnName(c + 1) + (r + 1).ToString(CultureInfo.InvariantCulture);
-                    string style = r == 0 ? " s=\"1\"" : " s=\"2\"";
+                    string style = r == 0 || r == 2 ? " s=\"1\"" : " s=\"2\"";
                     if (value is int or long or double or float or decimal)
                     {
                         builder.Append($"<c r=\"{cell}\"{style}><v>{Convert.ToString(value, CultureInfo.InvariantCulture)}</v></c>");
@@ -218,7 +219,7 @@ namespace VentCalc.UI.Services
             builder.Append("</sheetData>");
             if (rows.Count > 0)
             {
-                builder.Append($"<autoFilter ref=\"A1:{ColumnName(maxColumns)}{rows.Count}\"/>");
+                builder.Append($"<autoFilter ref=\"A3:{ColumnName(maxColumns)}{rows.Count}\"/>");
             }
             builder.Append("</worksheet>");
             return builder.ToString();
@@ -229,7 +230,8 @@ namespace VentCalc.UI.Services
             var builder = new StringBuilder("<cols>");
             for (int c = 0; c < maxColumns; c++)
             {
-                builder.Append($"<col min=\"{c + 1}\" max=\"{c + 1}\" width=\"{(c == maxColumns - 1 ? 28 : 16)}\" customWidth=\"1\"/>");
+                double width = c switch { 0 => 6, 1 => 18, 2 => 32, 3 => 18, 4 => 14, 5 => 10, 6 => 10, 7 => 10, 8 => 12, _ => 24 };
+                builder.Append($"<col min=\"{c + 1}\" max=\"{c + 1}\" width=\"{width.ToString(CultureInfo.InvariantCulture)}\" customWidth=\"1\"/>");
             }
             builder.Append("</cols>");
             return builder.ToString();

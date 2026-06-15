@@ -17,14 +17,10 @@
                 <DockPanel Margin="6">
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                         <WrapPanel Margin="0,0,0,6">
-                            <Button Content="Собрать вентиляцию" Command="{Binding CollectVentilationCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Экспорт Excel" Command="{Binding ExportExcelCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Показать выбранный элемент" Command="{Binding ShowSelectedElementCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Показать все проблемы" Command="{Binding ShowProblemsCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Показать неопознанные" Command="{Binding ShowUnknownCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Снять подсветку SpecCalc" Command="{Binding ClearSpecHighlightCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Записать ADSK выбранные" Command="{Binding WriteSelectedAdskCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Записать ADSK фильтр" Command="{Binding WriteFilteredAdskCommand}" Padding="10,5" />
+                            <Button Content="Собрать" Command="{Binding CollectVentilationCommand}" Padding="12,5" Margin="0,0,6,0" />
+                            <Button Content="Экспорт Excel" Command="{Binding ExportExcelCommand}" Padding="12,5" Margin="0,0,6,0" />
+                            <Button Content="Показать в модели" Command="{Binding ShowSelectedElementCommand}" Padding="12,5" Margin="0,0,6,0" />
+                            <Button Content="Записать ADSK" Command="{Binding WriteFilteredAdskCommand}" Padding="12,5" />
                         </WrapPanel>
                         <WrapPanel Margin="0,0,0,6">
                             <TextBlock Text="Статус:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
@@ -36,12 +32,19 @@
                             <Button Content="Показать только проблемы" Command="{Binding ShowOnlyProblemsCommand}" Padding="10,5" Margin="0,0,6,0" />
                             <Button Content="Сбросить фильтры" Command="{Binding ResetFiltersCommand}" Padding="10,5" />
                         </WrapPanel>
-                        <WrapPanel Margin="0,0,0,6">
-                            <TextBlock Text="Область правила:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
-                            <ComboBox ItemsSource="{Binding RuleScopeOptions}" SelectedItem="{Binding SelectedRuleScope, Mode=TwoWay}" Width="120" Margin="0,0,10,0" />
-                            <Button Content="Сохранить правила" Command="{Binding SaveRulesCommand}" Padding="10,5" Margin="0,0,6,0" />
-                            <Button Content="Вернуть Auto" Command="{Binding ResetAutoCommand}" Padding="10,5" />
-                        </WrapPanel>
+                        <Expander Header="Дополнительно" Margin="0,0,0,6">
+                            <WrapPanel Margin="0,6,0,0">
+                                <Button Content="Показать все проблемы" Command="{Binding ShowProblemsCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Показать неопознанные" Command="{Binding ShowUnknownCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Снять подсветку SpecCalc" Command="{Binding ClearSpecHighlightCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <TextBlock Text="Область правила:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="10,0,4,0" />
+                                <ComboBox ItemsSource="{Binding RuleScopeOptions}" SelectedItem="{Binding SelectedRuleScope, Mode=TwoWay}" Width="120" Margin="0,0,6,0" />
+                                <Button Content="Сохранить правила" Command="{Binding SaveRulesCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Вернуть Auto" Command="{Binding ResetAutoCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Записать ADSK выбранные" Command="{Binding WriteSelectedAdskCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Записать ADSK фильтр" Command="{Binding WriteFilteredAdskCommand}" Padding="10,5" />
+                            </WrapPanel>
+                        </Expander>
                         <UniformGrid Columns="4">
                             <Border BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,6,6" Background="#FFF8F8F8"><StackPanel><TextBlock Text="Всего элементов" Foreground="#FF666666" /><TextBlock Text="{Binding TotalCount}" FontSize="18" FontWeight="SemiBold" /></StackPanel></Border>
                             <Border BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,6,6" Background="#FFF8F8F8"><StackPanel><TextBlock Text="OK" Foreground="#FF666666" /><TextBlock Text="{Binding OkCount}" FontSize="18" FontWeight="SemiBold" /></StackPanel></Border>
@@ -62,6 +65,8 @@
                             <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="120" IsReadOnly="True" />
                             <DataGridTextColumn Header="Ед. изм." Binding="{Binding Unit, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="80" />
                             <DataGridTextColumn Header="Кол-во" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="80" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.###}}" Width="90" IsReadOnly="True" />
                             <DataGridTextColumn Header="Система" Binding="{Binding System}" Width="120" IsReadOnly="True" />
                             <DataGridTextColumn Header="Уровень" Binding="{Binding Level}" Width="120" IsReadOnly="True" />
                             <DataGridTextColumn Header="Источник" Binding="{Binding Source}" Width="110" IsReadOnly="True" />
