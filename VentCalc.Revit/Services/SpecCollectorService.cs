@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Globalization;
 using System.Linq;
 using Autodesk.Revit.DB;
@@ -52,6 +53,7 @@ namespace VentCalc.Revit.Services
                     ApplyAdskOverrides(element, row);
                     ApplyRule(row, rules);
                     FinalizeStatus(row);
+                    AssignPreviewImagePath(document, element, row);
                     rows.Add(row);
                 }
             }
@@ -63,6 +65,45 @@ namespace VentCalc.Revit.Services
                 .ThenBy(row => row.Size)
                 .ThenBy(row => row.ElementId)
                 .ToList();
+        }
+
+        private static void AssignPreviewImagePath(Document document, Element element, SpecItemRow row)
+        {
+            try
+            {
+                ElementId typeId = element.GetTypeId();
+                if (typeId == ElementId.InvalidElementId) return;
+                Element? type = document.GetElement(typeId);
+                if (type == null) return;
+                Image? preview = TryGetPreviewImage(type);
+                try
+                {
+                    if (preview == null || preview.Width <= 0 || preview.Height <= 0) return;
+                    string cacheKey = $"{typeId.Value}_{row.FamilyName}_{row.TypeName}";
+                    string path = SpecImageService.SavePreviewImage(cacheKey, preview);
+                    if (!string.IsNullOrWhiteSpace(path)) row.ImagePath = path;
+                }
+                finally
+                {
+                    preview?.Dispose();
+                }
+            }
+            catch (Exception)
+            {
+                // Preview images are optional for SpecCalc. Fallback icons are used if Revit preview is unavailable.
+            }
+        }
+
+        private static Image? TryGetPreviewImage(Element type)
+        {
+            try
+            {
+                return type is ElementType elementType ? elementType.GetPreviewImage(new System.Drawing.Size(128, 128)) : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         private static SpecItemRow BuildRow(Document document, Element element, BuiltInCategory category)

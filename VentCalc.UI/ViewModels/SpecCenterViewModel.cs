@@ -203,7 +203,9 @@ namespace VentCalc.UI.ViewModels
                 if ((WarningCount > 0 || ErrorCount > 0) && MessageBox.Show($"В спецификации есть проблемы: Warning = {WarningCount}, Error = {ErrorCount}. Экспортировать?", "SpecCalc", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
                 SpecExcelExportResult result = SpecExcelExporter.Export(FilteredSpecRows.Count > 0 ? FilteredSpecRows : SpecRows, SelectedExcelProfile, ColumnLayouts);
                 LastExcelExportPath = result.Path;
-                StatusText = $"Excel спецификации создан: {result.Path}";
+                StatusText = SelectedExcelProfile == "Визуальная спецификация" && !string.IsNullOrWhiteSpace(SpecExcelExporter.LastImageDiagnostics)
+                    ? $"Excel спецификации создан: {result.Path}. Изображения: {SpecExcelExporter.LastImageDiagnostics}"
+                    : $"Excel спецификации создан: {result.Path}";
                 new ExcelExportResultWindow(result.Path).ShowDialog();
             }
             catch (Exception exception)

@@ -51,7 +51,7 @@ namespace VentCalc.UI.Services
                 Status = group.Any(item => item.Status == "Error") ? "Error" : group.Any(item => item.Status == "Warning") ? "Warning" : "OK",
                 Source = group.Any(item => item.Source == "ManualRule") ? "ManualRule" : "Auto",
                 IsManual = group.Any(item => item.Source == "ManualRule"),
-                ImagePath = SafeGetImagePath(group.Key.Group, group.Key.Name)
+                ImagePath = SafeGetImagePath(group)
             };
 
             foreach (SpecItemRow item in group)
@@ -64,11 +64,13 @@ namespace VentCalc.UI.Services
             return row;
         }
 
-        private static string SafeGetImagePath(string group, string name)
+        private static string SafeGetImagePath(IGrouping<SpecGroupingKey, SpecItemRow> group)
         {
             try
             {
-                return SpecImageService.GetFallbackImagePath(group, name);
+                string preview = group.Select(item => item.ImagePath).FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path)) ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(preview)) return preview;
+                return SpecImageService.GetFallbackImagePath(group.Key.Group, group.Key.Name, group.Key.Size, group.Key.TypeMark);
             }
             catch (Exception)
             {

@@ -17,6 +17,17 @@ namespace VentCalc.UI.Services
 
     public static class SpecExcelExporter
     {
+        private sealed class ImageExportStats
+        {
+            public int TotalRows { get; set; }
+            public bool ImageColumnEnabled { get; set; }
+            public int ImagePathCount { get; set; }
+            public int ExistingImageFileCount { get; set; }
+            public int InsertedImageCount { get; set; }
+        }
+
+        public static string LastImageDiagnostics { get; private set; } = string.Empty;
+
         private sealed class SheetData
         {
             public SheetData(string name, IReadOnlyList<IReadOnlyList<object?>> rows)
@@ -45,7 +56,8 @@ namespace VentCalc.UI.Services
             string directory = ResolveExportDirectory(exportDirectory);
             DateTime createdAt = DateTime.Now;
             string path = Path.Combine(directory, $"spec_ventilation_{createdAt:yyyyMMdd_HHmmss}.xlsx");
-            bool includeImages = profile == "Визуальная спецификация" && columnLayouts.Any(column => column.VisibleInExcel && column.FieldName == "ImagePath");
+            bool includeImages = profile == "Визуальная спецификация";
+            var imageStats = new ImageExportStats { TotalRows = rows.Count, ImageColumnEnabled = includeImages };
             List<SheetData> sheets = new List<SheetData>
             {
                 new SheetData(GetSheetName(profile), BuildSpecificationRows(rows, profile, columnLayouts, createdAt))
@@ -61,10 +73,11 @@ namespace VentCalc.UI.Services
                 AddText(archive, "xl/workbook.xml", BuildWorkbook(sheets));
                 for (int i = 0; i < sheets.Count; i++)
                 {
-                    AddText(archive, $"xl/worksheets/sheet{i + 1}.xml", BuildWorksheet(archive, i + 1, sheets[i].Rows));
+                    AddText(archive, $"xl/worksheets/sheet{i + 1}.xml", BuildWorksheet(archive, i + 1, sheets[i].Rows, imageStats));
                 }
             }
 
+            LastImageDiagnostics = $"totalRows={imageStats.TotalRows}; imageColumnEnabled={imageStats.ImageColumnEnabled}; imagePathCount={imageStats.ImagePathCount}; existingImageFileCount={imageStats.ExistingImageFileCount}; insertedImageCount={imageStats.InsertedImageCount}";
             return new SpecExcelExportResult { Path = path, SheetCount = sheets.Count, CreatedAt = createdAt };
         }
 
@@ -128,6 +141,20 @@ namespace VentCalc.UI.Services
             if (profile != "Визуальная спецификация")
             {
                 columns.RemoveAll(column => column.FieldName == "ImagePath");
+            }
+            else if (!columns.Any(column => column.FieldName == "ImagePath"))
+            {
+                SpecColumnLayout imageColumn = SpecCalcSettingsService.CreateDefaultColumns().First(column => column.FieldName == "ImagePath");
+                columns.Insert(Math.Min(4, columns.Count), new SpecColumnLayout
+                {
+                    FieldName = imageColumn.FieldName,
+                    Header = "Изображение",
+                    Order = columns.Count == 0 ? 1 : columns.Min(column => column.Order) - 1,
+                    VisibleInExcel = true,
+                    VisibleInMain = imageColumn.VisibleInMain,
+                    Format = "Изображение",
+                    IsNumeric = false
+                });
             }
 
             return columns.Count == 0
@@ -212,13 +239,17 @@ namespace VentCalc.UI.Services
             return builder.ToString();
         }
 
-        private static string BuildWorksheet(ZipArchive archive, int sheetIndex, IReadOnlyList<IReadOnlyList<object?>> rows)
+        private static string BuildWorksheet(ZipArchive archive, int sheetIndex, IReadOnlyList<IReadOnlyList<object?>> rows, ImageExportStats imageStats)
         {
             int maxColumns = Math.Max(1, rows.Any() ? rows.Max(row => row.Count) : 1);
             var images = new List<(int Row, int Column, string Path)>();
             var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
             builder.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"3\" topLeftCell=\"A4\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            builder.Append(BuildColumns(maxColumns));
+            HashSet<int> imageColumns = rows.SelectMany(row => row.Select((value, index) => new { value, index }))
+                .Where(item => Convert.ToString(item.value, CultureInfo.InvariantCulture)?.StartsWith("__IMG:", StringComparison.Ordinal) == true)
+                .Select(item => item.index + 1)
+                .ToHashSet();
+            builder.Append(BuildColumns(maxColumns, imageColumns));
             builder.Append("<sheetData>");
             for (int r = 0; r < rows.Count; r++)
             {
@@ -234,7 +265,10 @@ namespace VentCalc.UI.Services
                     string style = r == 0 || r == 2 ? " s=\"1\"" : " s=\"2\"";
                     if (textValue?.StartsWith("__IMG:", StringComparison.Ordinal) == true)
                     {
-                        images.Add((rowNumber, columnNumber, textValue.Substring("__IMG:".Length)));
+                        string imagePath = textValue.Substring("__IMG:".Length);
+                        imageStats.ImagePathCount++;
+                        if (File.Exists(imagePath)) imageStats.ExistingImageFileCount++;
+                        images.Add((rowNumber, columnNumber, imagePath));
                         builder.Append($"<c r=\"{cell}\"{style}/>");
                     }
                     else if (value is int or long or double or float or decimal)
@@ -258,7 +292,7 @@ namespace VentCalc.UI.Services
             {
                 try
                 {
-                    AddWorksheetImages(archive, sheetIndex, images);
+                    imageStats.InsertedImageCount += AddWorksheetImages(archive, sheetIndex, images);
                     builder.Append($"<drawing r:id=\"rIdDrawing{sheetIndex}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/>");
                 }
                 catch (Exception)
@@ -270,8 +304,9 @@ namespace VentCalc.UI.Services
             return builder.ToString();
         }
 
-        private static void AddWorksheetImages(ZipArchive archive, int sheetIndex, IReadOnlyList<(int Row, int Column, string Path)> images)
+        private static int AddWorksheetImages(ZipArchive archive, int sheetIndex, IReadOnlyList<(int Row, int Column, string Path)> images)
         {
+            int inserted = 0;
             var rels = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
             rels.Append($"<Relationship Id=\"rIdDrawing{sheetIndex}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing{sheetIndex}.xml\"/>");
             rels.Append("</Relationships>");
@@ -287,6 +322,7 @@ namespace VentCalc.UI.Services
                 if (bytes.Length == 0) continue;
                 ZipArchiveEntry imageEntry = archive.CreateEntry($"xl/media/{mediaName}", CompressionLevel.Optimal);
                 using (Stream stream = imageEntry.Open()) stream.Write(bytes, 0, bytes.Length);
+                inserted++;
                 drawingRels.Append($"<Relationship Id=\"rId{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{mediaName}\"/>");
                 int col = images[i].Column - 1;
                 int row = images[i].Row - 1;
@@ -296,15 +332,17 @@ namespace VentCalc.UI.Services
             drawingRels.Append("</Relationships>");
             AddText(archive, $"xl/drawings/drawing{sheetIndex}.xml", drawing.ToString());
             AddText(archive, $"xl/drawings/_rels/drawing{sheetIndex}.xml.rels", drawingRels.ToString());
+            return inserted;
         }
 
-        private static string BuildColumns(int maxColumns)
+        private static string BuildColumns(int maxColumns, ISet<int> imageColumns)
         {
             var builder = new StringBuilder("<cols>");
             for (int c = 0; c < maxColumns; c++)
             {
-                double width = c switch { 0 => 6, 1 => 18, 2 => 32, 3 => 18, 4 => 14, 5 => 10, 6 => 10, 7 => 10, 8 => 12, _ => 24 };
-                builder.Append($"<col min=\"{c + 1}\" max=\"{c + 1}\" width=\"{width.ToString(CultureInfo.InvariantCulture)}\" customWidth=\"1\"/>");
+                int oneBased = c + 1;
+                double width = imageColumns.Contains(oneBased) ? 18 : c switch { 0 => 6, 1 => 18, 2 => 32, 3 => 18, 4 => 14, 5 => 10, 6 => 10, 7 => 10, 8 => 12, _ => 24 };
+                builder.Append($"<col min=\"{oneBased}\" max=\"{oneBased}\" width=\"{width.ToString(CultureInfo.InvariantCulture)}\" customWidth=\"1\"/>");
             }
             builder.Append("</cols>");
             return builder.ToString();
