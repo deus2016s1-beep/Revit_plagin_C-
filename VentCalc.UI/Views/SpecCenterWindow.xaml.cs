@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
@@ -12,20 +13,42 @@ namespace VentCalc.UI.Views
     public partial class SpecCenterWindow : Window
     {
         private SpecCenterViewModel? viewModel;
+        private bool isAttached;
 
         public SpecCenterWindow(SpecCenterViewModel viewModel)
         {
             InitializeComponent();
             DataContext = viewModel;
             this.viewModel = viewModel;
-            Loaded += (_, _) => AttachViewModel(viewModel);
+            Loaded += (_, _) => SafeAttachViewModel(viewModel);
+            Dispatcher.UnhandledException += (_, args) =>
+            {
+                args.Handled = true;
+                viewModel.ReportUiError(args.Exception);
+                MessageBox.Show(args.Exception.Message, "SpecCalc", MessageBoxButton.OK, MessageBoxImage.Warning);
+            };
+        }
+
+        private void SafeAttachViewModel(SpecCenterViewModel model)
+        {
+            try
+            {
+                AttachViewModel(model);
+            }
+            catch (Exception exception)
+            {
+                model.ReportUiError(exception);
+                MessageBox.Show(exception.Message, "SpecCalc", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void AttachViewModel(SpecCenterViewModel model)
         {
+            if (isAttached) return;
+            isAttached = true;
             if (model.ActiveColumns is INotifyCollectionChanged collectionChanged)
             {
-                collectionChanged.CollectionChanged += (_, _) => RebuildSpecColumns();
+                collectionChanged.CollectionChanged += (_, _) => SafeRebuildSpecColumns();
             }
 
             foreach (SpecColumnLayout column in model.ColumnLayouts)
@@ -33,14 +56,27 @@ namespace VentCalc.UI.Views
                 column.PropertyChanged += Column_PropertyChanged;
             }
 
-            RebuildSpecColumns();
+            SafeRebuildSpecColumns();
         }
 
         private void Column_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName is nameof(SpecColumnLayout.VisibleInMain) or nameof(SpecColumnLayout.Header) or nameof(SpecColumnLayout.Order))
             {
+                SafeRebuildSpecColumns();
+            }
+        }
+
+        private void SafeRebuildSpecColumns()
+        {
+            try
+            {
                 RebuildSpecColumns();
+            }
+            catch (Exception exception)
+            {
+                viewModel?.ReportUiError(exception);
+                SpecRowsGrid.Columns.Clear();
             }
         }
 
@@ -48,14 +84,15 @@ namespace VentCalc.UI.Views
         {
             if (viewModel == null) return;
             SpecRowsGrid.Columns.Clear();
+            DataTemplate? selectionTemplate = TryFindResource("SelectionCheckBoxTemplate") as DataTemplate;
             SpecRowsGrid.Columns.Add(new DataGridTemplateColumn
             {
                 Header = "✓",
                 Width = new DataGridLength(36),
-                CellTemplate = (DataTemplate)FindResource("SelectionCheckBoxTemplate")
+                CellTemplate = selectionTemplate
             });
 
-            foreach (SpecColumnLayout column in viewModel.ActiveColumns.Where(column => column.VisibleInMain).OrderBy(column => column.Order))
+            foreach (SpecColumnLayout column in viewModel.ActiveColumns.Where(column => column.VisibleInMain && !string.IsNullOrWhiteSpace(column.FieldName)).OrderBy(column => column.Order))
             {
                 SpecRowsGrid.Columns.Add(new DataGridTextColumn
                 {
@@ -69,7 +106,14 @@ namespace VentCalc.UI.Views
 
         private void SpecRowsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            viewModel?.UpdateSelectedSpecRows(SpecRowsGrid.SelectedItems.OfType<SpecGroupRow>());
+            try
+            {
+                viewModel?.UpdateSelectedSpecRows(SpecRowsGrid.SelectedItems.OfType<SpecGroupRow>());
+            }
+            catch (Exception exception)
+            {
+                viewModel?.ReportUiError(exception);
+            }
         }
     }
 }

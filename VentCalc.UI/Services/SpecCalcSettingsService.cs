@@ -9,6 +9,7 @@ namespace VentCalc.UI.Services
     public sealed class SpecCalcSettingsService
     {
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { WriteIndented = true };
+        private static readonly HashSet<string> KnownFields = new HashSet<string>(CreateDefaultColumns().Select(column => column.FieldName), StringComparer.Ordinal);
         public string SettingsPath { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VentCalc", "speccalc_settings.json");
 
         public SpecCalcSettings Load()
@@ -27,6 +28,7 @@ namespace VentCalc.UI.Services
             }
             catch (Exception)
             {
+                TryMoveBadSettingsFile();
             }
 
             var defaults = new SpecCalcSettings();
@@ -45,12 +47,62 @@ namespace VentCalc.UI.Services
         public static void EnsureDefaults(SpecCalcSettings settings)
         {
             if (settings.Columns == null) settings.Columns = new List<SpecColumnLayout>();
-            foreach (SpecColumnLayout column in CreateDefaultColumns())
+            settings.Columns = settings.Columns
+                .Where(column => column != null && KnownFields.Contains(column.FieldName))
+                .GroupBy(column => column.FieldName)
+                .Select(group => group.First())
+                .ToList();
+
+            IReadOnlyList<SpecColumnLayout> defaults = CreateDefaultColumns();
+            foreach (SpecColumnLayout column in defaults)
             {
                 if (!settings.Columns.Any(existing => existing.FieldName == column.FieldName)) settings.Columns.Add(column);
             }
+
+            foreach (SpecColumnLayout column in settings.Columns)
+            {
+                SpecColumnLayout defaultColumn = defaults.First(defaultItem => defaultItem.FieldName == column.FieldName);
+                if (string.IsNullOrWhiteSpace(column.Header)) column.Header = defaultColumn.Header;
+                if (column.Order <= 0) column.Order = defaultColumn.Order;
+                if (string.IsNullOrWhiteSpace(column.Format)) column.Format = defaultColumn.Format;
+                column.IsNumeric = defaultColumn.IsNumeric;
+            }
+
+            if (!settings.Columns.Any(column => column.VisibleInMain))
+            {
+                foreach (SpecColumnLayout column in defaults.Where(column => column.VisibleInMain))
+                {
+                    SpecColumnLayout target = settings.Columns.First(existing => existing.FieldName == column.FieldName);
+                    target.VisibleInMain = true;
+                }
+            }
+
+            if (!settings.Columns.Any(column => column.VisibleInExcel))
+            {
+                foreach (SpecColumnLayout column in defaults.Where(column => column.VisibleInExcel))
+                {
+                    SpecColumnLayout target = settings.Columns.First(existing => existing.FieldName == column.FieldName);
+                    target.VisibleInExcel = true;
+                }
+            }
+
             settings.Columns = settings.Columns.OrderBy(column => column.Order).ToList();
             if (string.IsNullOrWhiteSpace(settings.SelectedExcelProfile)) settings.SelectedExcelProfile = "Проектная спецификация";
+        }
+
+        private void TryMoveBadSettingsFile()
+        {
+            try
+            {
+                if (!File.Exists(SettingsPath)) return;
+                string badPath = Path.Combine(Path.GetDirectoryName(SettingsPath) ?? string.Empty, "speccalc_settings.bad.json");
+                if (File.Exists(badPath)) File.Delete(badPath);
+                File.Move(SettingsPath, badPath);
+            }
+            catch (Exception)
+            {
+                // Ignore settings recovery failures and continue with defaults.
+            }
         }
 
         public static IReadOnlyList<SpecColumnLayout> CreateDefaultColumns()

@@ -9,11 +9,20 @@ namespace VentCalc.UI.Services
 
         public static string GetFallbackImagePath(string group, string name)
         {
-            Directory.CreateDirectory(ImageDirectory);
-            string key = NormalizeKey($"{group}_{name}");
-            string path = Path.Combine(ImageDirectory, key + ".png");
-            if (!File.Exists(path)) File.WriteAllBytes(path, BuildPng());
-            return path;
+            try
+            {
+                Directory.CreateDirectory(ImageDirectory);
+                string key = NormalizeKey($"{group}_{name}");
+                string path = Path.Combine(ImageDirectory, key + ".png");
+                if (!File.Exists(path)) File.WriteAllBytes(path, BuildPng());
+                return path;
+            }
+            catch (Exception)
+            {
+                string fallbackPath = Path.Combine(Path.GetTempPath(), "VentCalc_spec_placeholder.png");
+                if (!File.Exists(fallbackPath)) File.WriteAllBytes(fallbackPath, BuildPng());
+                return fallbackPath;
+            }
         }
 
         private static string NormalizeKey(string value)

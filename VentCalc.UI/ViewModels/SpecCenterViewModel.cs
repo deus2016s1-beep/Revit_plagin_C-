@@ -44,24 +44,24 @@ namespace VentCalc.UI.ViewModels
             foreach (SpecColumnLayout column in settings.Columns) ColumnLayouts.Add(column);
             RefreshColumnLists();
 
-            CollectVentilationCommand = new RelayCommand(_ => CollectVentilation());
-            BulkEditCommand = new RelayCommand(_ => BulkEdit(), _ => SelectedSpecRows.Count > 0 || FilteredSpecRows.Count > 0);
-            ExportExcelCommand = new RelayCommand(_ => ExportExcel(), _ => SpecRows.Count > 0);
-            ShowSelectedElementCommand = new RelayCommand(_ => ShowSelectedElement(), _ => SelectedSpecRows.Count > 0 || SelectedSpecRow?.ElementIds.Count > 0 || SelectedRawRow?.ElementId > 0);
-            ShowProblemsCommand = new RelayCommand(_ => ShowProblems(), _ => ProblemRows.Any(row => row.ElementIds.Count > 0));
-            ShowUnknownCommand = new RelayCommand(_ => ShowUnknown(), _ => RawRows.Any(row => row.IsUnrecognized && row.ElementId > 0));
-            ClearSpecHighlightCommand = new RelayCommand(_ => ClearSpecHighlight());
-            SaveRulesCommand = new RelayCommand(_ => SaveRules(), _ => RawRows.Count > 0);
-            ResetAutoCommand = new RelayCommand(_ => ResetAuto(), _ => SelectedSpecRow != null || SelectedRawRow != null);
-            ResetFiltersCommand = new RelayCommand(_ => ResetFilters());
-            ShowOnlyProblemsCommand = new RelayCommand(_ => ShowOnlyProblems());
-            WriteSelectedAdskCommand = new RelayCommand(_ => WriteSelectedAdsk(), _ => SelectedSpecRow != null || SelectedRawRow != null);
-            WriteFilteredAdskCommand = new RelayCommand(_ => WriteFilteredAdsk(), _ => FilteredSpecRows.Count > 0);
-            SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
-            AddColumnCommand = new RelayCommand(_ => AddColumn(), _ => SelectedAvailableColumn != null);
-            RemoveColumnCommand = new RelayCommand(_ => RemoveColumn(), _ => SelectedActiveColumn != null);
-            MoveColumnUpCommand = new RelayCommand(_ => MoveColumn(-1), _ => SelectedActiveColumn != null);
-            MoveColumnDownCommand = new RelayCommand(_ => MoveColumn(1), _ => SelectedActiveColumn != null);
+            CollectVentilationCommand = new RelayCommand(_ => SafeExecute(CollectVentilation));
+            BulkEditCommand = new RelayCommand(_ => SafeExecute(BulkEdit), _ => SelectedSpecRows.Count > 0 || FilteredSpecRows.Count > 0);
+            ExportExcelCommand = new RelayCommand(_ => SafeExecute(ExportExcel), _ => SpecRows.Count > 0);
+            ShowSelectedElementCommand = new RelayCommand(_ => SafeExecute(ShowSelectedElement), _ => SelectedSpecRows.Count > 0 || SelectedSpecRow?.ElementIds.Count > 0 || SelectedRawRow?.ElementId > 0);
+            ShowProblemsCommand = new RelayCommand(_ => SafeExecute(ShowProblems), _ => ProblemRows.Any(row => row.ElementIds.Count > 0));
+            ShowUnknownCommand = new RelayCommand(_ => SafeExecute(ShowUnknown), _ => RawRows.Any(row => row.IsUnrecognized && row.ElementId > 0));
+            ClearSpecHighlightCommand = new RelayCommand(_ => SafeExecute(ClearSpecHighlight));
+            SaveRulesCommand = new RelayCommand(_ => SafeExecute(SaveRules), _ => RawRows.Count > 0);
+            ResetAutoCommand = new RelayCommand(_ => SafeExecute(ResetAuto), _ => SelectedSpecRow != null || SelectedRawRow != null);
+            ResetFiltersCommand = new RelayCommand(_ => SafeExecute(ResetFilters));
+            ShowOnlyProblemsCommand = new RelayCommand(_ => SafeExecute(ShowOnlyProblems));
+            WriteSelectedAdskCommand = new RelayCommand(_ => SafeExecute(WriteSelectedAdsk), _ => SelectedSpecRow != null || SelectedRawRow != null);
+            WriteFilteredAdskCommand = new RelayCommand(_ => SafeExecute(WriteFilteredAdsk), _ => FilteredSpecRows.Count > 0);
+            SaveSettingsCommand = new RelayCommand(_ => SafeExecute(SaveSettings));
+            AddColumnCommand = new RelayCommand(_ => SafeExecute(AddColumn), _ => SelectedAvailableColumn != null);
+            RemoveColumnCommand = new RelayCommand(_ => SafeExecute(RemoveColumn), _ => SelectedActiveColumn != null);
+            MoveColumnUpCommand = new RelayCommand(_ => SafeExecute(() => MoveColumn(-1)), _ => SelectedActiveColumn != null);
+            MoveColumnDownCommand = new RelayCommand(_ => SafeExecute(() => MoveColumn(1)), _ => SelectedActiveColumn != null);
         }
 
         public ObservableCollection<SpecItemRow> RawRows { get; } = new ObservableCollection<SpecItemRow>();
@@ -93,7 +93,7 @@ namespace VentCalc.UI.ViewModels
         public string SectionFilter { get => sectionFilter; set { if (SetProperty(ref sectionFilter, value)) RefreshFilters(); } }
         public string SearchText { get => searchText; set { if (SetProperty(ref searchText, value)) RefreshFilters(); } }
         public string SelectedRuleScope { get => selectedRuleScope; set => SetProperty(ref selectedRuleScope, string.IsNullOrWhiteSpace(value) ? "Type" : value); }
-        public string SelectedExcelProfile { get => selectedExcelProfile; set { if (SetProperty(ref selectedExcelProfile, value)) { settings.SelectedExcelProfile = value; SaveSettings(); } } }
+        public string SelectedExcelProfile { get => selectedExcelProfile; set { if (SetProperty(ref selectedExcelProfile, value)) { settings.SelectedExcelProfile = value; SafeExecute(SaveSettings); } } }
 
         public int TotalCount => RawRows.Count;
         public int GroupCount => SpecRows.Count;
@@ -144,6 +144,24 @@ namespace VentCalc.UI.ViewModels
         {
             StatusText = message;
             showMessage?.Invoke(message);
+        }
+
+        public void ReportUiError(Exception exception)
+        {
+            StatusText = $"SpecCalc: {exception.Message}";
+        }
+
+        private void SafeExecute(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception exception)
+            {
+                ReportUiError(exception);
+                showMessage?.Invoke(exception.Message);
+            }
         }
 
         private void CollectVentilation()
@@ -251,7 +269,22 @@ namespace VentCalc.UI.ViewModels
 
         private void ShowOnlyProblems() { onlyProblems = true; RefreshFilters(); }
         private void ResetFilters() { onlyProblems = false; SectionFilter = "Все"; StatusFilter = "Все"; GroupFilter = "Все"; SearchText = string.Empty; RefreshFilters(); }
-        private void SaveSettings() { settings.Columns = ColumnLayouts.OrderBy(column => column.Order).ToList(); settings.SelectedExcelProfile = SelectedExcelProfile; settingsService.Save(settings); RefreshColumnLists(); StatusText = $"Настройки SpecCalc сохранены: {settingsService.SettingsPath}"; }
+        private void SaveSettings()
+        {
+            try
+            {
+                settings.Columns = ColumnLayouts.OrderBy(column => column.Order).ToList();
+                settings.SelectedExcelProfile = SelectedExcelProfile;
+                settingsService.Save(settings);
+                RefreshColumnLists();
+                StatusText = $"Настройки SpecCalc сохранены: {settingsService.SettingsPath}";
+            }
+            catch (Exception exception)
+            {
+                ReportUiError(exception);
+                showMessage?.Invoke($"Не удалось сохранить настройки SpecCalc. Используются текущие значения. {exception.Message}");
+            }
+        }
 
         public void UpdateSelectedSpecRows(IEnumerable<SpecGroupRow> rows)
         {

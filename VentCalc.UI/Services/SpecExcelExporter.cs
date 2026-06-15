@@ -256,8 +256,15 @@ namespace VentCalc.UI.Services
             }
             if (images.Count > 0)
             {
-                builder.Append($"<drawing r:id=\"rIdDrawing{sheetIndex}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/>");
-                AddWorksheetImages(archive, sheetIndex, images);
+                try
+                {
+                    AddWorksheetImages(archive, sheetIndex, images);
+                    builder.Append($"<drawing r:id=\"rIdDrawing{sheetIndex}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/>");
+                }
+                catch (Exception)
+                {
+                    // Image insertion is optional: keep the workbook exportable even if a PNG/drawing part fails.
+                }
             }
             builder.Append("</worksheet>");
             return builder.ToString();

@@ -49,6 +49,11 @@ namespace VentCalc.Revit.Commands
                     (vm, rows) => writeAdskHandler.Request(vm, rows));
 
                 var window = new SpecCenterWindow(viewModel);
+                window.Dispatcher.UnhandledException += (_, args) =>
+                {
+                    args.Handled = true;
+                    TaskDialog.Show("SpecCalc", $"Ошибка интерфейса SpecCalc:\n{args.Exception.Message}");
+                };
                 AssignRevitOwner(window, uiApplication);
                 window.Closed += (_, _) =>
                 {
@@ -64,8 +69,8 @@ namespace VentCalc.Revit.Commands
             catch (Exception exception)
             {
                 message = exception.Message;
-                TaskDialog.Show("SpecCalc", exception.Message);
-                return Result.Failed;
+                TaskDialog.Show("SpecCalc", $"SpecCalc не удалось открыть, Revit продолжит работу.\n\n{exception.Message}");
+                return Result.Succeeded;
             }
         }
 
