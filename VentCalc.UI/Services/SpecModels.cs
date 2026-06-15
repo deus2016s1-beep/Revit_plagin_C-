@@ -18,6 +18,7 @@ namespace VentCalc.UI.Services
         private string level = "—";
         private string source = "Unknown";
         private string note = string.Empty;
+        private string recommendation = string.Empty;
         private bool suppressManualTracking;
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -29,6 +30,10 @@ namespace VentCalc.UI.Services
         public string FamilyName { get; set; } = string.Empty;
         public string TypeName { get; set; } = string.Empty;
         public bool IsManualEdited { get; private set; }
+        public bool HasAdskName { get; set; }
+        public bool MissingSize { get; set; }
+        public bool MissingSystem { get; set; }
+        public bool IsUnrecognized { get; set; }
         public string Problem => Note;
 
         public string Status { get => status; set => SetProperty(ref status, value); }
@@ -42,8 +47,9 @@ namespace VentCalc.UI.Services
         public string Level { get => level; set => SetProperty(ref level, value); }
         public string Source { get => source; set => SetProperty(ref source, value); }
         public string Note { get => note; set { if (SetEditableProperty(ref note, value)) OnPropertyChanged(nameof(Problem)); } }
+        public string Recommendation { get => recommendation; set => SetProperty(ref recommendation, value); }
 
-        public SpecRuleKey RuleKey => new SpecRuleKey(Category, FamilyName, TypeName);
+        public SpecRuleKey GetRuleKey(string scope) => SpecRuleKey.Create(scope, Category, FamilyName, TypeName, UniqueId, ElementId);
 
         public void ApplySystemValues(Action<SpecItemRow> apply)
         {
@@ -89,16 +95,35 @@ namespace VentCalc.UI.Services
         }
     }
 
-    public readonly record struct SpecRuleKey(string Category, string FamilyName, string TypeName)
+    public readonly record struct SpecRuleKey(string Scope, string Category, string FamilyName, string TypeName, string UniqueId, long ElementId)
     {
-        public string ToStorageKey() => $"{Category}|{FamilyName}|{TypeName}";
+        public static SpecRuleKey Create(string scope, string category, string familyName, string typeName, string uniqueId, long elementId)
+        {
+            string normalizedScope = string.IsNullOrWhiteSpace(scope) ? "Type" : scope;
+            return normalizedScope switch
+            {
+                "Element" => new SpecRuleKey("Element", category, familyName, typeName, uniqueId, elementId),
+                "Family" => new SpecRuleKey("Family", category, familyName, string.Empty, string.Empty, 0),
+                _ => new SpecRuleKey("Type", category, familyName, typeName, string.Empty, 0)
+            };
+        }
+
+        public string ToStorageKey() => Scope == "Element"
+            ? $"Element|{UniqueId}|{ElementId}"
+            : Scope == "Family"
+                ? $"Family|{Category}|{FamilyName}"
+                : $"Type|{Category}|{FamilyName}|{TypeName}";
     }
 
     public sealed class SpecRule
     {
+        public int SchemaVersion { get; set; } = 2;
+        public string Scope { get; set; } = "Type";
         public string Category { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
         public string TypeName { get; set; } = string.Empty;
+        public string UniqueId { get; set; } = string.Empty;
+        public long ElementId { get; set; }
         public string Group { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string TypeMark { get; set; } = string.Empty;

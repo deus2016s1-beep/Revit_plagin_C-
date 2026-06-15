@@ -43,7 +43,8 @@ namespace VentCalc.UI.Services
             List<SheetData> sheets = new List<SheetData>
             {
                 new SheetData("Вентиляция", BuildVentilationRows(rows)),
-                new SheetData("Проблемы", BuildProblemRows(rows))
+                new SheetData("Проблемы", BuildProblemRows(rows)),
+                new SheetData("Сводка", BuildSummaryRows(rows, createdAt))
             };
 
             using (FileStream stream = File.Create(path))
@@ -113,15 +114,33 @@ namespace VentCalc.UI.Services
         {
             var result = new List<IReadOnlyList<object?>>
             {
-                Row("Статус", "Группа", "Наименование", "Тип / марка", "Размер", "Система", "Уровень", "Проблема")
+                Row("Статус", "Проблема", "Группа", "Наименование", "Тип / марка", "Размер", "Система", "Уровень", "Рекомендация")
             };
 
             foreach (SpecItemRow row in rows.Where(row => !string.Equals(row.Status, "OK", StringComparison.OrdinalIgnoreCase)))
             {
-                result.Add(Row(row.Status, row.Group, row.Name, row.TypeMark, row.Size, row.System, row.Level, row.Problem));
+                result.Add(Row(row.Status, row.Problem, row.Group, row.Name, row.TypeMark, row.Size, row.System, row.Level, row.Recommendation));
             }
 
             return result;
+        }
+
+        private static IReadOnlyList<IReadOnlyList<object?>> BuildSummaryRows(IReadOnlyList<SpecItemRow> rows, DateTime createdAt)
+        {
+            return new List<IReadOnlyList<object?>>
+            {
+                Row("Показатель", "Значение"),
+                Row("Всего элементов", rows.Count),
+                Row("OK", rows.Count(row => row.Status == "OK")),
+                Row("Warning", rows.Count(row => row.Status == "Warning")),
+                Row("Error", rows.Count(row => row.Status == "Error")),
+                Row("Неопознано", rows.Count(row => row.IsUnrecognized || row.Group == "Неопознано")),
+                Row("Без размера", rows.Count(row => row.MissingSize)),
+                Row("Без системы", rows.Count(row => row.MissingSystem)),
+                Row("Без ADSK_Наименование", rows.Count(row => !row.HasAdskName)),
+                Row("Дата экспорта", createdAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
+                Row("Имя документа Revit", "—")
+            };
         }
 
         private static IReadOnlyList<object?> Row(params object?[] values) => values;

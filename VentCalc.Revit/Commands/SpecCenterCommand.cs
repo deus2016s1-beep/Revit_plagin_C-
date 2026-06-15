@@ -33,15 +33,20 @@ namespace VentCalc.Revit.Commands
                 ExternalEvent collectExternalEvent = ExternalEvent.Create(collectHandler);
                 collectHandler.Initialize(collectExternalEvent);
 
-                var selectHandler = new SelectElementExternalEventHandler(ErrorReporter.CreateLaunchLog(), () => ActivateWindow(activeWindow));
-                ExternalEvent selectExternalEvent = ExternalEvent.Create(selectHandler);
-                selectHandler.Initialize(selectExternalEvent);
+                var highlightHandler = new SpecHighlightExternalEventHandler(() => ActivateWindow(activeWindow));
+                ExternalEvent highlightExternalEvent = ExternalEvent.Create(highlightHandler);
+                highlightHandler.Initialize(highlightExternalEvent);
+
+                var writeAdskHandler = new SpecWriteAdskExternalEventHandler(() => ActivateWindow(activeWindow));
+                ExternalEvent writeAdskExternalEvent = ExternalEvent.Create(writeAdskHandler);
+                writeAdskHandler.Initialize(writeAdskExternalEvent);
 
                 SpecCenterViewModel viewModel = new SpecCenterViewModel(
                     vm => collectHandler.Request(vm),
-                    ids => selectHandler.Request(ids),
+                    ids => highlightHandler.Request(ids),
                     text => TaskDialog.Show("SpecCalc", text),
-                    new SpecRuleService());
+                    new SpecRuleService(),
+                    (vm, rows) => writeAdskHandler.Request(vm, rows));
 
                 var window = new SpecCenterWindow(viewModel);
                 AssignRevitOwner(window, uiApplication);
@@ -49,7 +54,8 @@ namespace VentCalc.Revit.Commands
                 {
                     activeWindow = null;
                     collectExternalEvent.Dispose();
-                    selectExternalEvent.Dispose();
+                    highlightExternalEvent.Dispose();
+                    writeAdskExternalEvent.Dispose();
                 };
                 activeWindow = window;
                 window.Show();
