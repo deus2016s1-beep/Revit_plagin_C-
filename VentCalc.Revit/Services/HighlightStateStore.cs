@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using VentCalc.UI.Services;
 
 namespace VentCalc.Revit.Services
 {
@@ -27,6 +28,7 @@ namespace VentCalc.Revit.Services
     internal static class HighlightStateStore
     {
         private static readonly Dictionary<string, HighlightSnapshot> Snapshots = new Dictionary<string, HighlightSnapshot>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, HighlightMode> ActiveModes = new Dictionary<string, HighlightMode>(StringComparer.Ordinal);
 
         public static int SnapshotCount => Snapshots.Count;
 
@@ -34,6 +36,23 @@ namespace VentCalc.Revit.Services
         {
             string path = string.IsNullOrWhiteSpace(document.PathName) ? document.Title : document.PathName;
             return $"{document.GetHashCode():X8}|{path}";
+        }
+
+        public static HighlightMode GetActiveMode(Document document)
+        {
+            return ActiveModes.TryGetValue(GetDocumentKey(document), out HighlightMode mode) ? mode : HighlightMode.None;
+        }
+
+        public static void SetActiveMode(Document document, HighlightMode mode)
+        {
+            string documentKey = GetDocumentKey(document);
+            if (mode == HighlightMode.None)
+            {
+                ActiveModes.Remove(documentKey);
+                return;
+            }
+
+            ActiveModes[documentKey] = mode;
         }
 
         public static bool SaveIfMissing(Document document, View view, ElementId elementId)

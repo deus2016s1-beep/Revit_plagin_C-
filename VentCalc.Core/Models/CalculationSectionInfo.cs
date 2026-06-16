@@ -65,6 +65,26 @@ namespace VentCalc.Core.Models
             ? string.Empty
             : string.Join(", ", ElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)));
 
+        public string StartEndDisplay => $"{StartElementId.ToString(CultureInfo.InvariantCulture)}–{EndElementId.ToString(CultureInfo.InvariantCulture)}";
+
+        public string SectionDisplayName
+        {
+            get
+            {
+                int index = SectionIndex > 0 ? SectionIndex : 1;
+                return $"{(index - 1).ToString(CultureInfo.InvariantCulture)}–{index.ToString(CultureInfo.InvariantCulture)}";
+            }
+        }
+
         public string WarningText => string.Join("; ", Warnings);
+
+        public string WarningShortText
+        {
+            get
+            {
+                string text = WarningText;
+                return text.Length <= 80 ? text : text.Substring(0, 77) + "...";
+            }
+        }
     }
 }

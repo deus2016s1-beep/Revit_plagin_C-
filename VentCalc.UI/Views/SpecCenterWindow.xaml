@@ -1,0 +1,205 @@
+<Window x:Class="VentCalc.UI.Views.SpecCenterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SpecCalc — Спецификация инженерных систем"
+        Width="1280" Height="780" MinWidth="1040" MinHeight="640" WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <DataTemplate x:Key="SelectionCheckBoxTemplate">
+            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center" Focusable="False" />
+        </DataTemplate>
+        <DataTemplate x:Key="ColumnCardTemplate">
+            <Border BorderBrush="#9CC7F0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6" Background="#E8F3FF">
+                <StackPanel>
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                    <WrapPanel Margin="0,4,0,0">
+                        <TextBlock Text="Таблица" FontSize="10" Background="#E7F0FF" Padding="4,1" Margin="0,0,4,0" />
+                        <TextBlock Text="Excel" FontSize="10" Background="#E8F5E9" Padding="4,1" Margin="0,0,4,0" />
+                        <TextBlock Text="Групп." FontSize="10" Background="#FFF4D6" Padding="4,1" Margin="0,0,4,0" />
+                        <TextBlock Text="{Binding Format}" FontSize="10" Foreground="#666" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="AvailableColumnCardTemplate">
+            <Border BorderBrush="#D1D5DB" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6" Background="#F3F4F6">
+                <StackPanel>
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Format}" FontSize="10" Foreground="#777" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" Text="SpecCalc — Конструктор спецификаций вентиляции" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem Content="{Binding StatusText}" />
+            <Separator />
+            <StatusBarItem><TextBlock Text="{Binding RulesPath, StringFormat=Правила: {0}}" /></StatusBarItem>
+            <Separator />
+            <StatusBarItem><TextBlock Text="{Binding SettingsPath, StringFormat=Настройки: {0}}" /></StatusBarItem>
+        </StatusBar>
+        <TabControl>
+            <TabItem Header="Спецификация">
+                <DockPanel Margin="6">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <WrapPanel Margin="0,0,0,6">
+                            <Button Content="Обновить" Command="{Binding CollectVentilationCommand}" Padding="12,5" Margin="0,0,6,0" />
+                            <Button Content="Изменить выбранные" Command="{Binding BulkEditCommand}" Padding="12,5" Margin="0,0,6,0" />
+                            <Button Content="Экспорт Excel" Command="{Binding ExportExcelCommand}" Padding="12,5" Margin="0,0,6,0" />
+                            <Button Content="Показать в модели" Command="{Binding ShowSelectedElementCommand}" Padding="12,5" Margin="0,0,10,0" />
+                            <TextBlock Text="Тип выгрузки:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                            <ComboBox ItemsSource="{Binding ExcelProfiles}" SelectedItem="{Binding SelectedExcelProfile, Mode=TwoWay}" Width="210" />
+                        </WrapPanel>
+                        <WrapPanel Margin="0,0,0,6">
+                            <TextBlock Text="Группа:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                            <ComboBox ItemsSource="{Binding GroupFilterOptions}" SelectedItem="{Binding GroupFilter, Mode=TwoWay}" Width="190" Margin="0,0,12,0" />
+                            <TextBlock Text="Статус:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                            <ComboBox ItemsSource="{Binding StatusFilterOptions}" SelectedItem="{Binding StatusFilter, Mode=TwoWay}" Width="110" />
+                        </WrapPanel>
+                        <Expander Header="Дополнительно" Margin="0,0,0,6">
+                            <WrapPanel Margin="0,6,0,0">
+                                <Button Content="Показать все проблемы" Command="{Binding ShowProblemsCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Показать неопознанные" Command="{Binding ShowUnknownCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Снять подсветку SpecCalc" Command="{Binding ClearSpecHighlightCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Записать ADSK выбранные" Command="{Binding WriteSelectedAdskCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Записать ADSK фильтр" Command="{Binding WriteFilteredAdskCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <TextBlock Text="Область правила:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="10,0,4,0" />
+                                <ComboBox ItemsSource="{Binding RuleScopeOptions}" SelectedItem="{Binding SelectedRuleScope, Mode=TwoWay}" Width="110" Margin="0,0,6,0" />
+                                <Button Content="Сохранить правила" Command="{Binding SaveRulesCommand}" Padding="10,5" Margin="0,0,6,0" />
+                                <Button Content="Вернуть Auto" Command="{Binding ResetAutoCommand}" Padding="10,5" />
+                            </WrapPanel>
+                        </Expander>
+                    </StackPanel>
+                    <DataGrid x:Name="SpecRowsGrid" ItemsSource="{Binding FilteredSpecRows}" SelectedItem="{Binding SelectedSpecRow, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True" SelectionChanged="SpecRowsGrid_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Конструктор">
+                <DockPanel Margin="6">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <WrapPanel Margin="0,0,0,6">
+                            <TextBlock Text="Настраиваем выгрузку:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding ExcelProfiles}" SelectedItem="{Binding SelectedExcelProfile, Mode=TwoWay}" Width="210" Margin="0,0,12,0" />
+                            <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" Padding="12,5" Margin="0,0,8,0" />
+                            <Button Content="Сбросить профиль" Command="{Binding ResetColumnProfileCommand}" Padding="12,5" />
+                        </WrapPanel>
+                        <Expander Header="Правила групп" IsExpanded="False">
+                            <WrapPanel Margin="0,6,0,0">
+                                <TextBlock Text="Воздуховоды считать как:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0" />
+                                <ComboBox ItemsSource="{Binding DuctQuantityModeOptions}" SelectedItem="{Binding DuctQuantityMode, Mode=TwoWay}" Width="170" />
+                            </WrapPanel>
+                        </Expander>
+                        <Expander Header="Правила наименований" IsExpanded="False" Margin="0,6,0,0">
+                            <StackPanel Margin="0,6,0,0">
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="Группа:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                                    <ComboBox ItemsSource="{Binding TextRuleGroupOptions}" SelectedItem="{Binding SelectedTextRuleGroup, Mode=TwoWay}" Width="155" Margin="0,0,8,0" />
+                                    <TextBlock Text="Поле:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                                    <ComboBox ItemsSource="{Binding TextRuleFieldOptions}" SelectedItem="{Binding SelectedTextRuleField, Mode=TwoWay}" Width="130" Margin="0,0,8,0" />
+                                    <TextBlock Text="Действие:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                                    <ComboBox ItemsSource="{Binding TextRuleActionOptions}" SelectedItem="{Binding SelectedTextRuleAction, Mode=TwoWay}" Width="190" />
+                                </WrapPanel>
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="Что найти:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <TextBox Text="{Binding TextRuleFindText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" Margin="0,0,8,0" />
+                                    <TextBlock Text="На что заменить:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <TextBox Text="{Binding TextRuleReplaceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" Margin="0,0,8,0" />
+                                    <TextBlock Text="Текст:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <TextBox Text="{Binding TextRuleAddText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" Margin="0,0,8,0" />
+                                    <Button Content="Предпросмотр правила" Command="{Binding PreviewTextRuleCommand}" Padding="8,4" Margin="0,0,6,0" />
+                                    <Button Content="Применить правило" Command="{Binding ApplyTextRuleCommand}" Padding="8,4" Margin="0,0,6,0" />
+                                    <Button Content="Сохранить правило" Command="{Binding SaveTextRuleCommand}" Padding="8,4" />
+                                </WrapPanel>
+                                <DataGrid ItemsSource="{Binding TextRulePreviewRows}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" MaxHeight="120">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Было" Binding="{Binding Before}" Width="*" />
+                                        <DataGridTextColumn Header="Стало" Binding="{Binding After}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.1*" />
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="1.3*" />
+                                <ColumnDefinition Width="300" />
+                            </Grid.ColumnDefinitions>
+                            <DockPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock DockPanel.Dock="Top" Text="Доступные поля" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <ListBox x:Name="AvailableColumnsList" ItemsSource="{Binding AvailableColumns}" SelectedItem="{Binding SelectedAvailableColumn, Mode=TwoWay}" ItemTemplate="{StaticResource AvailableColumnCardTemplate}" AllowDrop="True" PreviewMouseMove="ColumnList_PreviewMouseMove" Drop="AvailableColumnsList_Drop" DragOver="ColumnList_DragOver" />
+                            </DockPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <Button Content="Добавить →" Command="{Binding AddColumnCommand}" Margin="0,0,0,6" />
+                                <Button Content="← Убрать" Command="{Binding RemoveColumnCommand}" Margin="0,0,0,18" />
+                                <Button Content="↑ Выше" Command="{Binding MoveColumnUpCommand}" IsEnabled="{Binding CanMoveSelectedColumnUp}" Margin="0,0,0,6" />
+                                <Button Content="↓ Ниже" Command="{Binding MoveColumnDownCommand}" IsEnabled="{Binding CanMoveSelectedColumnDown}" />
+                            </StackPanel>
+                            <DockPanel Grid.Column="2" Margin="0,0,8,0">
+                                <TextBlock DockPanel.Dock="Top" Text="Колонки этой выгрузки" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <ListBox x:Name="ActiveColumnsList" ItemsSource="{Binding ActiveColumns}" SelectedItem="{Binding SelectedActiveColumn, Mode=TwoWay}" ItemTemplate="{StaticResource ColumnCardTemplate}" AllowDrop="True" PreviewMouseMove="ColumnList_PreviewMouseMove" Drop="ActiveColumnsList_Drop" DragOver="ColumnList_DragOver" />
+                            </DockPanel>
+                            <Border Grid.Column="3" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="4" Padding="10" DataContext="{Binding SelectedActiveColumn}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="Настройки колонки" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                    <TextBox Grid.Row="1" Text="{Binding Header, Mode=TwoWay}" Margin="0,0,0,6" ToolTip="Заголовок" />
+                                    <ComboBox Grid.Row="2" Text="{Binding Format, Mode=TwoWay}" IsEditable="True" Margin="0,0,0,8">
+                                        <ComboBoxItem Content="Текст"/><ComboBoxItem Content="Целое число"/><ComboBoxItem Content="0.00"/><ComboBoxItem Content="0.000"/><ComboBoxItem Content="м"/><ComboBoxItem Content="м²"/><ComboBoxItem Content="шт"/><ComboBoxItem Content="Изображение"/>
+                                    </ComboBox>
+                                    <CheckBox Grid.Row="3" Content="Показывать в таблице" IsChecked="{Binding VisibleInMain, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <CheckBox Grid.Row="4" Content="Выводить в Excel" IsChecked="{Binding VisibleInExcel, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <CheckBox Grid.Row="5" Content="Участвует в группировке" IsChecked="{Binding GroupBy, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <CheckBox Grid.Row="6" Content="Суммировать" IsChecked="{Binding Sum, Mode=TwoWay}" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <TextBlock Grid.Row="1" Text="Предпросмотр" FontWeight="SemiBold" Margin="0,10,0,6" />
+                        <DataGrid Grid.Row="2" x:Name="PreviewGrid" ItemsSource="{Binding PreviewRows}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column" />
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Сырые данные">
+                <DataGrid ItemsSource="{Binding RawRows}" SelectedItem="{Binding SelectedRawRow, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" Margin="6">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140" IsReadOnly="True" />
+                        <DataGridTextColumn Header="FamilyName" Binding="{Binding FamilyName}" Width="160" IsReadOnly="True" />
+                        <DataGridTextColumn Header="TypeName" Binding="{Binding TypeName}" Width="160" IsReadOnly="True" />
+                        <DataGridTextColumn Header="ADSK_Наименование" Binding="{Binding AdskName}" Width="180" IsReadOnly="True" />
+                        <DataGridTextColumn Header="ADSK_Марка" Binding="{Binding AdskMark}" Width="140" IsReadOnly="True" />
+                        <DataGridTextColumn Header="ADSK_Размер" Binding="{Binding AdskSize}" Width="120" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="120" IsReadOnly="True" />
+                        <DataGridTextColumn Header="System" Binding="{Binding System}" Width="120" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="120" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Problems" Binding="{Binding Problem}" Width="*" IsReadOnly="True" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="Диагностика">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Диагностика SpecCalc" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TextBlock Text="{Binding TotalCount, StringFormat=Всего элементов: {0}}" />
+                    <TextBlock Text="{Binding GroupCount, StringFormat=Строк спецификации: {0}}" />
+                    <TextBlock Text="{Binding OkCount, StringFormat=OK: {0}}" />
+                    <TextBlock Text="{Binding WarningCount, StringFormat=Warning: {0}}" />
+                    <TextBlock Text="{Binding ErrorCount, StringFormat=Error: {0}}" />
+                    <TextBlock Text="{Binding UnknownCount, StringFormat=Неопознано: {0}}" />
+                    <TextBlock Text="{Binding MissingSizeCount, StringFormat=Без размера: {0}}" />
+                    <TextBlock Text="{Binding MissingSystemCount, StringFormat=Без системы: {0}}" />
+                    <TextBlock Text="{Binding MissingAdskNameCount, StringFormat=Пустой ADSK_Наименование: {0}}" />
+                    <Button Content="Показать все проблемы" Command="{Binding ShowProblemsCommand}" Padding="10,5" HorizontalAlignment="Left" Margin="0,10,0,0" />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

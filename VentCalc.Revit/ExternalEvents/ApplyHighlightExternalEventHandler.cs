@@ -44,6 +44,11 @@ namespace VentCalc.Revit.ExternalEvents
                 return;
             }
 
+            ApplyNow(app, request);
+        }
+
+        public HighlightResult ApplyNow(UIApplication app, HighlightRequest request)
+        {
             HighlightResult result;
             try
             {
@@ -52,7 +57,7 @@ namespace VentCalc.Revit.ExternalEvents
                 {
                     result = Failed(request, "Откройте документ Revit перед подсветкой.");
                     Complete(result);
-                    return;
+                    return result;
                 }
 
                 result = request.Action == HighlightAction.Clear
@@ -66,6 +71,7 @@ namespace VentCalc.Revit.ExternalEvents
             }
 
             Complete(result);
+            return result;
         }
 
         private HighlightResult ApplyHighlight(UIDocument uiDocument, HighlightRequest request)
@@ -89,7 +95,10 @@ namespace VentCalc.Revit.ExternalEvents
                 DimmedSystemElementCount = request.DimmedSystemElementCount,
                 StartElementId = request.StartElementId,
                 EndElementId = request.EndElementId,
-                Message = request.StatusMessage
+                Message = request.StatusMessage,
+                VelocityGroups = request.VelocityGroups,
+                PressureLossGroups = request.PressureLossGroups,
+                MaxElementPressureLossPa = request.MaxElementPressureLossPa
             };
 
             var highlightedIds = new List<ElementId>();
@@ -131,6 +140,7 @@ namespace VentCalc.Revit.ExternalEvents
                 transaction.Commit();
             }
 
+            HighlightStateStore.SetActiveMode(document, result.ApplySucceeded ? request.Mode : HighlightMode.None);
             result.SnapshotCount = HighlightStateStore.SnapshotCount;
             result.LastApplySucceeded = result.ApplySucceeded;
             result.LastClearSucceeded = true;
@@ -166,7 +176,10 @@ namespace VentCalc.Revit.ExternalEvents
                 DimmedSystemElementCount = request.DimmedSystemElementCount,
                 StartElementId = request.StartElementId,
                 EndElementId = request.EndElementId,
-                Message = request.StatusMessage
+                Message = request.StatusMessage,
+                VelocityGroups = request.VelocityGroups,
+                PressureLossGroups = request.PressureLossGroups,
+                MaxElementPressureLossPa = request.MaxElementPressureLossPa
             };
 
             using (var transaction = new Transaction(document, "VentCalc: очистить подсветку"))
@@ -176,6 +189,7 @@ namespace VentCalc.Revit.ExternalEvents
                 transaction.Commit();
             }
 
+            HighlightStateStore.SetActiveMode(document, HighlightMode.None);
             result.SelectionElementCountAfter = uiDocument.Selection.GetElementIds().Count;
             result.FailedElementCount = result.Errors.Count;
             result.SnapshotCount = HighlightStateStore.SnapshotCount;

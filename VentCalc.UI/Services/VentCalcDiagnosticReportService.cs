@@ -244,6 +244,29 @@ namespace VentCalc.UI.Services
             }
             builder.AppendLine();
 
+
+            builder.AppendLine("7б. Проверка длины критической трассы");
+            builder.AppendLine($"Сумма длин воздуховодов: {viewModel.CriticalPathDuctLengthSumM:0.###} м");
+            builder.AppendLine($"Сумма длин расчётных участков: {viewModel.CriticalPathSectionLengthSumM:0.###} м");
+            builder.AppendLine($"Разница: {viewModel.CriticalPathLengthDifferenceM:0.###} м");
+            builder.AppendLine($"Воздуховодов: {viewModel.CriticalPathDuctCount}; участков: {viewModel.CriticalPathSectionCount}; фитингов: {viewModel.CriticalPathFittingCount}; местных сопротивлений: {viewModel.CriticalPathLocalResistanceCount}; элементов: {viewModel.CriticalPathElementCount}");
+            builder.AppendLine("Расчётная длина включает длины прямых воздуховодов. Фитинги учитываются отдельными местными сопротивлениями ζ и не добавляются как длина воздуховода.");
+            if (!string.IsNullOrWhiteSpace(viewModel.CriticalPathLengthWarning))
+            {
+                builder.AppendLine("Предупреждение: " + viewModel.CriticalPathLengthWarning);
+            }
+            builder.AppendLine("Воздуховоды критической трассы с длинами:");
+            foreach (CriticalPathDuctLengthAuditRow row in viewModel.CriticalPathDuctLengthRows)
+            {
+                builder.AppendLine($"  ElementId={row.ElementId}; размер={row.Size}; Q={row.FlowM3h:0.###}; L={row.LengthM:0.###} м; участок={row.SectionIndex?.ToString(CultureInfo.InvariantCulture) ?? "—"}; included={row.IncludedInSection}; source={row.Source}");
+            }
+            builder.AppendLine("Расчётные участки с длинами:");
+            foreach (CalculationSectionInfo section in criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>())
+            {
+                builder.AppendLine($"  Участок {section.SectionDisplayName}; elements={section.ElementIdsText}; размер={section.Size}; Q={section.FlowM3h:0.###}; L={section.TotalLengthM:0.###} м; split={section.SplitReason}; warnings={section.WarningText}");
+            }
+            builder.AppendLine();
+
             builder.AppendLine("8. Местные сопротивления критической трассы");
             foreach (LocalResistanceCalculationInfo local in criticalPath?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>())
             {
@@ -407,11 +430,24 @@ namespace VentCalc.UI.Services
                     criticalVelocityColorHex = viewModel.Settings.CriticalVelocityColorHex,
                     selectedPathColorHex = viewModel.Settings.SelectedPathColorHex,
                     criticalPathColorHex = viewModel.Settings.CriticalPathColorHex,
-                    issueColorHex = viewModel.Settings.IssueColorHex
+                    issueColorHex = viewModel.Settings.IssueColorHex,
+                    lowPressureLossColorHex = viewModel.Settings.LowPressureLossColorHex,
+                    mediumPressureLossColorHex = viewModel.Settings.MediumPressureLossColorHex,
+                    highPressureLossColorHex = viewModel.Settings.HighPressureLossColorHex,
+                    maxPressureLossColorHex = viewModel.Settings.MaxPressureLossColorHex,
+                    settingsSchemaVersion = viewModel.Settings.SettingsSchemaVersion,
+                    selectedSettingsSection = viewModel.SelectedSettingsSection,
+                    uiDefaultTabAfterLoad = viewModel.Settings.UiDefaultTabAfterLoad,
+                    rememberWindowPlacement = viewModel.Settings.RememberWindowPlacement,
+                    zoomToElementOnShow = viewModel.Settings.ZoomToElementOnShow,
+                    confirmBulkZetaChanges = viewModel.Settings.ConfirmBulkZetaChanges,
+                    exportFolderPath = viewModel.Settings.ExportFolderPath
                 },
                 highlighting = new
                 {
-                    activeMode = viewModel.HighlightState.ActiveMode.ToString(),
+                    lastRibbonCommand = viewModel.HighlightState.WindowSource,
+                    activeMode = viewModel.HighlightState.ActiveMode == HighlightMode.Velocity ? "VelocityMap" : viewModel.HighlightState.ActiveMode.ToString(),
+                    velocityScope = string.IsNullOrWhiteSpace(viewModel.HighlightState.VelocityGroups.Scope) ? null : viewModel.HighlightState.VelocityGroups.Scope,
                     windowSource = viewModel.HighlightState.WindowSource,
                     activeDisplayMode = viewModel.HighlightState.ActiveDisplayMode.ToString(),
                     systemNameAtApply = viewModel.HighlightState.SystemNameAtApply,
@@ -441,10 +477,38 @@ namespace VentCalc.UI.Services
                         normal = viewModel.HighlightState.VelocityGroups.Normal,
                         aboveMax = viewModel.HighlightState.VelocityGroups.AboveMax,
                         critical = viewModel.HighlightState.VelocityGroups.Critical,
-                        notCalculated = viewModel.HighlightState.VelocityGroups.NotCalculated
+                        notCalculated = viewModel.HighlightState.VelocityGroups.NotCalculated,
+                        velocityScope = string.IsNullOrWhiteSpace(viewModel.HighlightState.VelocityGroups.Scope) ? null : viewModel.HighlightState.VelocityGroups.Scope,
+                        coloredDuctCount = viewModel.HighlightState.VelocityGroups.ColoredDuctCount,
+                        notCalculatedDuctCount = viewModel.HighlightState.VelocityGroups.NotCalculatedDuctCount,
+                        coloredFittingCount = viewModel.HighlightState.VelocityGroups.ColoredFittingCount,
+                        notCalculatedFittingCount = viewModel.HighlightState.VelocityGroups.NotCalculatedFittingCount
                     },
+                    pressureLossGroups = new
+                    {
+                        low = viewModel.HighlightState.PressureLossGroups.Low,
+                        medium = viewModel.HighlightState.PressureLossGroups.Medium,
+                        high = viewModel.HighlightState.PressureLossGroups.High,
+                        maximum = viewModel.HighlightState.PressureLossGroups.Maximum,
+                        zeroOrSkipped = viewModel.HighlightState.PressureLossGroups.ZeroOrSkipped
+                    },
+                    maxElementPressureLossPa = viewModel.HighlightState.MaxElementPressureLossPa,
                     issueElementCount = viewModel.HighlightState.IssueElementCount,
                     errors = viewModel.HighlightState.Errors
+                },
+                export = new
+                {
+                    lastExcelExportPath = viewModel.LastExcelExportPath,
+                    lastExcelExportSucceeded = viewModel.LastExcelExportSucceeded,
+                    lastExcelExportSheetCount = viewModel.LastExcelExportSheetCount,
+                    sheetCount = viewModel.LastExcelExportSheetCount,
+                    lastExcelExportError = viewModel.LastExcelExportError,
+                    lastExcelExportCreatedAt = viewModel.LastExcelExportCreatedAt?.ToString("O", CultureInfo.InvariantCulture),
+                    exportFolderPath = viewModel.Settings.ExportFolderPath,
+                    aeroSectionRowCount = viewModel.LastExcelExportAeroSectionRowCount,
+                    aeroLocalResistanceDistributedPa = viewModel.LastExcelExportAeroLocalResistanceDistributedPa,
+                    aeroLocalResistanceTotalPa = viewModel.LastExcelExportAeroLocalResistanceTotalPa,
+                    aeroTotalPressureLossPa = viewModel.LastExcelExportAeroTotalPressureLossPa
                 },
                 uiState = new
                 {
@@ -540,6 +604,8 @@ namespace VentCalc.UI.Services
                     roundedAngleDeg = item.Local.RoundedAngleDeg,
                     angleWasRounded = item.Local.AngleWasRounded,
                     angleRoundingWarning = item.Local.AngleRoundingWarning,
+                    angleSource = item.Local.AngleSource,
+                    angleReason = item.Local.AngleReason,
                     storageType = item.Local.OverrideStorageType,
                     overrideKey = item.Local.OverrideKey,
                     pathDependent = item.Local.PathDependent,
@@ -551,6 +617,25 @@ namespace VentCalc.UI.Services
                     sourceAfterReload = item.Local.ZetaSource,
                     validationMessage = item.Local.ValidationMessage
                 }),
+                localResistanceAngleDiagnostics = GetLocalApplications(viewModel)
+                    .Where(item => item.Local.PathRole.StartsWith("Elbow", StringComparison.OrdinalIgnoreCase)
+                                   || item.Local.ActualAngleDeg.HasValue
+                                   || !string.IsNullOrWhiteSpace(item.Local.AngleSource))
+                    .Select(item => new
+                    {
+                        elementId = item.Local.ElementId,
+                        familyName = item.Local.FamilyName,
+                        typeName = item.Local.TypeName,
+                        calculatedAngleDeg = item.Local.ActualAngleDeg,
+                        acceptedAngleDeg = item.Local.RoundedAngleDeg,
+                        angleSource = item.Local.AngleSource,
+                        pathRole = item.Local.PathRole,
+                        autoZeta = item.Local.AutoZeta,
+                        effectiveZeta = item.Local.EffectiveZeta,
+                        reason = string.IsNullOrWhiteSpace(item.Local.AngleReason)
+                            ? item.Local.RoleReason
+                            : item.Local.AngleReason
+                    }),
                 stateConsistencyErrors = GetStateConsistencyErrors(GetAllLocalResistances(viewModel).ToList()),
                 issues = viewModel.Issues.Select(issue => new
                 {
@@ -608,6 +693,44 @@ namespace VentCalc.UI.Services
                     totalPressureLossPa = criticalPath.TotalPressureLossPa,
                     totalPressureLossWithReservePa = criticalPath.TotalPressureLossPa * (1.0 + viewModel.Settings.PressureReservePercent / 100.0),
                     elementIds = criticalPath.ElementIds
+                },
+
+                criticalPathLengthAudit = new
+                {
+                    pathIndex = criticalPath?.PathIndex,
+                    ductLengthSumM = viewModel.CriticalPathDuctLengthSumM,
+                    sectionLengthSumM = viewModel.CriticalPathSectionLengthSumM,
+                    differenceDuctVsSectionM = viewModel.CriticalPathLengthDifferenceM,
+                    ductCountInCriticalPath = viewModel.CriticalPathDuctCount,
+                    sectionCountInCriticalPath = viewModel.CriticalPathSectionCount,
+                    fittingCountInCriticalPath = viewModel.CriticalPathFittingCount,
+                    localResistanceCountInCriticalPath = viewModel.CriticalPathLocalResistanceCount,
+                    shortDuctAttachedCount = viewModel.CriticalPathShortDuctAttachedCount,
+                    shortDuctStandaloneCount = viewModel.CriticalPathShortDuctStandaloneCount,
+                    criticalPathElementCount = viewModel.CriticalPathElementCount,
+                    warningIfSuspicious = viewModel.CriticalPathLengthWarning,
+                    explanation = "Расчётная длина включает длины прямых воздуховодов. Фитинги учитываются отдельными местными сопротивлениями ζ и не добавляются как длина воздуховода.",
+                    ductLengthBreakdown = viewModel.CriticalPathDuctLengthRows.Select(row => new
+                    {
+                        row.ElementId,
+                        row.Size,
+                        row.FlowM3h,
+                        row.LengthM,
+                        row.Source,
+                        row.IncludedInSection,
+                        row.SectionIndex
+                    }),
+                    sectionLengthBreakdown = (criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>()).Select(section => new
+                    {
+                        section.SectionIndex,
+                        sectionDisplayName = section.SectionDisplayName,
+                        section.ElementIds,
+                        section.Size,
+                        section.FlowM3h,
+                        section.TotalLengthM,
+                        section.SplitReason,
+                        section.WarningText
+                    })
                 },
                 criticalPathSections = criticalPath?.Sections ?? Enumerable.Empty<CalculationSectionInfo>(),
                 sectionSplitReasons = GetAllSections(viewModel).Select(section => new { section.PathIndex, section.SectionIndex, section.SplitReason }).ToList(),

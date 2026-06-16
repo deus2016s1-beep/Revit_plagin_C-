@@ -40,16 +40,48 @@
     <DockPanel Margin="10">
         <Border DockPanel.Dock="Top" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8" Background="#FFF8F8F8">
             <DockPanel>
-                <WrapPanel DockPanel.Dock="Top">
-                    <Button Content="Загрузить по выбранному элементу" Command="{Binding LoadSelectedSystemCommand}" />
-                    <Button Content="Загрузить выбранную систему из списка" Command="{Binding LoadCatalogSystemCommand}" />
-                    <Button Content="Обновить" Command="{Binding RefreshCommand}" />
-                    <Button Content="Выбрать стартовый элемент в Revit" Command="{Binding SelectStartElementInRevitCommand}" />
-                    <Button Content="Выбрать критическую трассу в Revit" Command="{Binding SelectCriticalPathInRevitCommand}" />
-                    <TextBlock Text="Система:" FontWeight="Bold" />
-                    <ComboBox ItemsSource="{Binding SystemCatalog}" SelectedItem="{Binding SelectedCatalogSystem, Mode=TwoWay}" Width="320" DisplayMemberPath="DisplayName" Margin="4" />
-                    <TextBlock Text="{Binding SelectedElementDisplay}" FontWeight="Bold" MinWidth="140" />
-                </WrapPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <WrapPanel>
+                        <Border BorderBrush="#FFD9D9D9" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,6,4" Background="#FFFFFFFF">
+                            <StackPanel>
+                                <TextBlock Text="Расчёт" FontWeight="SemiBold" Foreground="#FF555555" Margin="4,0,4,2" />
+                                <WrapPanel>
+                                    <Button Content="Рассчитать по выбранному элементу"
+                                            Command="{Binding LoadSelectedSystemCommand}"
+                                            ToolTip="Выберите воздуховод, фитинг, решётку или оборудование в Revit и рассчитайте связанную вентиляционную систему." />
+                                    <Button Content="Пересчитать"
+                                            Command="{Binding RefreshCommand}"
+                                            ToolTip="Повторить расчёт текущей загруженной системы с текущими настройками." />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border BorderBrush="#FFD9D9D9" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,6,4" Background="#FFFFFFFF">
+                            <StackPanel>
+                                <TextBlock Text="Система" FontWeight="SemiBold" Foreground="#FF555555" Margin="4,0,4,2" />
+                                <WrapPanel>
+                                    <ComboBox ItemsSource="{Binding SystemCatalog}" SelectedItem="{Binding SelectedCatalogSystem, Mode=TwoWay}" Width="320" DisplayMemberPath="DisplayName" Margin="4" />
+                                    <Button Content="Рассчитать из списка"
+                                            Command="{Binding LoadCatalogSystemCommand}"
+                                            ToolTip="Рассчитать систему, выбранную в списке, без выбора элемента в модели." />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border BorderBrush="#FFD9D9D9" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,6,4" Background="#FFFFFFFF">
+                            <StackPanel>
+                                <TextBlock Text="Показать в модели" FontWeight="SemiBold" Foreground="#FF555555" Margin="4,0,4,2" />
+                                <WrapPanel>
+                                    <Button Content="Показать старт"
+                                            Command="{Binding SelectStartElementInRevitCommand}"
+                                            ToolTip="Показать в модели стартовый элемент текущей трассировки." />
+                                    <Button Content="Показать критическую трассу"
+                                            Command="{Binding SelectCriticalPathInRevitCommand}"
+                                            ToolTip="Показать в модели трассу с максимальными потерями давления." />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding SelectedElementDisplay}" Foreground="#FF777777" FontSize="11" Margin="4,0,4,2" />
+                </StackPanel>
                 <UniformGrid DockPanel.Dock="Top" Columns="7" Margin="0,8,0,4">
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Тип" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemType}" /></StackPanel>
@@ -60,14 +92,14 @@
                     <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итоговые потери" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
                 </UniformGrid>
                 <StackPanel DockPanel.Dock="Bottom">
-                    <TextBlock Text="{Binding LastActionDisplay}" FontWeight="SemiBold" Foreground="#FF333333" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding LastActionDisplay}" Foreground="#FF777777" FontSize="11" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding StatusText}" Foreground="#FF555555" TextWrapping="Wrap" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <TabControl>
-            <TabItem Header="Система">
+        <TabControl x:Name="MainTabs">
+            <TabItem Header="Система" Visibility="Collapsed">
                 <DockPanel Margin="6">
                     <UniformGrid DockPanel.Dock="Top" Columns="6" Margin="0,0,0,8">
                         <TextBlock Text="Загруженная система" FontWeight="Bold" /><TextBlock Text="{Binding LoadedSystemDisplay}" />
@@ -105,24 +137,62 @@
 
             <TabItem Header="Проверки">
                 <DockPanel Margin="6">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <UniformGrid Columns="3" Margin="0,0,0,6">
+                            <Border BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="4" Background="#FFF8F8F8">
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Ошибки" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding ErrorIssueCount}" FontSize="18" /></StackPanel>
+                            </Border>
+                            <Border BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="4" Background="#FFF8F8F8">
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Предупреждения" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding WarningIssueCount}" FontSize="18" /></StackPanel>
+                            </Border>
+                            <Border BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="4" Background="#FFF8F8F8">
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Сведения" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding InfoIssueCount}" FontSize="18" /></StackPanel>
+                            </Border>
+                        </UniformGrid>
+                        <WrapPanel>
+                            <TextBlock Text="Фильтр:" FontWeight="Bold" />
+                            <ComboBox SelectedValue="{Binding IssuesFilter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Content" Width="180" Margin="4">
+                                <ComboBoxItem Content="Требуют внимания" IsSelected="True" />
+                                <ComboBoxItem Content="Все" />
+                                <ComboBoxItem Content="Ошибки" />
+                                <ComboBoxItem Content="Предупреждения" />
+                                <ComboBoxItem Content="Сведения" />
+                            </ComboBox>
+                        </WrapPanel>
+                        <Expander Header="Состав системы и технические данные" IsExpanded="False" Margin="0,8,0,0">
+                            <DataGrid ItemsSource="{Binding NetworkElements}" SelectedItem="{Binding SelectedNetworkElement, Mode=TwoWay}" MaxHeight="220">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
+                                    <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="170" />
+                                    <DataGridTextColumn Header="Роль" Binding="{Binding Role}" Width="130" />
+                                    <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
+                                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h}" Width="110" />
+                                    <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
+                                    <DataGridTextColumn Header="Система" Binding="{Binding SystemName}" Width="100" />
+                                    <DataGridTextColumn Header="Подключения" Binding="{Binding ConnectedElementIds}" Width="180" />
+                                    <DataGridTextColumn Header="Предупреждения" Binding="{Binding Warnings}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Expander>
+                    </StackPanel>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
                         <Button Content="Подсветить ошибки" Command="{Binding HighlightIssuesCommand}" />
                         <Button Content="Очистить подсветку" Command="{Binding ClearHighlightCommand}" />
-                        <Button Content="Показать выбранный элемент в Revit" Command="{Binding SelectElementInRevitCommand}" />
+                        <Button Content="Показать в модели" Command="{Binding SelectElementInRevitCommand}" />
                     </WrapPanel>
-                    <DataGrid ItemsSource="{Binding Issues}" SelectedItem="{Binding SelectedIssue, Mode=TwoWay}">
+                    <DataGrid ItemsSource="{Binding FilteredIssues}" SelectedItem="{Binding SelectedIssue, Mode=TwoWay}">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="90" />
+                            <DataGridTextColumn Header="Уровень" Binding="{Binding DisplaySeverity}" Width="130" />
                             <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                            <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="180" />
-                            <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*" />
+                            <DataGridTextColumn Header="Раздел" Binding="{Binding DisplaySection}" Width="160" />
+                            <DataGridTextColumn Header="Проблема" Binding="{Binding DisplayMessage}" Width="*" />
                             <DataGridTextColumn Header="Рекомендация" Binding="{Binding Recommendation}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="Трассы">
+            <TabItem Header="Трассы" Visibility="Collapsed">
                 <DockPanel Margin="6">
                     <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
                         <StackPanel>
@@ -203,78 +273,86 @@
 
             <TabItem Header="Расчёт">
                 <DockPanel Margin="6">
-                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                        <WrapPanel Margin="0,0,0,6">
-                            <Button Content="Подсветить скорости" Command="{Binding ApplyVelocityHighlightCommand}" />
-                            <Button Content="Очистить подсветку" Command="{Binding ClearHighlightCommand}" />
-                            <TextBlock Text="{Binding HighlightStatusText}" Margin="12,6,0,0" Foreground="#FF555555" />
-                        </WrapPanel>
-                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding HighlightStatusText}" Margin="4,0,0,8" Foreground="#FF777777" FontSize="11" />
                     <Border DockPanel.Dock="Top" Background="#FFF7F7F7" BorderBrush="#FFD0D0D0" BorderThickness="1" Padding="8" Margin="0,0,0,8">
-                        <UniformGrid Columns="4">
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Направление" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding Direction}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Выбранная трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPath.PathIndex}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDisplay}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Трение" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathFrictionPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Местные" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathLocalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итого" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
-                            <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итого с запасом" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalWithReservePa, StringFormat={}{0:0.###} Па}" /></StackPanel>
-                        </UniformGrid>
+                        <StackPanel>
+                            <UniformGrid Columns="6" Margin="0,0,0,6">
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Система" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SystemName}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Критическая трасса" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDisplay}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Трение" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathFrictionPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Местные" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathLocalPressureLossPa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Запас" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding Settings.PressureReservePercent, StringFormat={}{0:0.###} %}" /></StackPanel>
+                                <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Итоговые потери" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding SelectedPathTotalWithReservePa, StringFormat={}{0:0.###} Па}" /></StackPanel>
+                            </UniformGrid>
+                        </StackPanel>
                     </Border>
-                    <Button DockPanel.Dock="Bottom" Content="Показать выбранный элемент расчёта в Revit" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
-                    <TabControl>
-                        <TabItem Header="Расчётные участки">
-                            <DataGrid ItemsSource="{Binding SelectedPathSections}" SelectedItem="{Binding SelectedPathSection, Mode=TwoWay}">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="№ участка" Binding="{Binding SectionIndex}" Width="80" />
-                                    <DataGridTextColumn Header="ElementIds" Binding="{Binding ElementIdsText}" Width="160" />
-                                    <DataGridTextColumn Header="Start" Binding="{Binding StartElementId}" Width="90" />
-                                    <DataGridTextColumn Header="End" Binding="{Binding EndElementId}" Width="90" />
-                                    <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
-                                    <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalLengthM, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
-                                    <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
-                                    <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
-                                    <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
-                                    <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
-                                    <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="Причина" Binding="{Binding SplitReasonShort}" Width="140" />
-                                    <DataGridTextColumn Header="Подробно" Binding="{Binding SplitReason}" Width="220" />
-                                    <DataGridTextColumn Header="Предупреждения" Binding="{Binding WarningText}" Width="*" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </TabItem>
-                        <TabItem Header="Воздуховоды">
-                            <DataGrid ItemsSource="{Binding SelectedPathDucts}" SelectedItem="{Binding SelectedPathDuct, Mode=TwoWay}">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                                    <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                                    <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
-                                    <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
-                                    <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
-                                    <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
-                                    <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
-                                    <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
-                                    <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
-                                    <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </TabItem>
-                    </TabControl>
+                    <Button DockPanel.Dock="Bottom" Content="Показать выбранный участок в модели" HorizontalAlignment="Left" Command="{Binding SelectElementInRevitCommand}" />
+                    <StackPanel>
+                        <DockPanel Margin="4,0,4,6">
+                            <Button DockPanel.Dock="Right" Content="Создать Excel" Command="{Binding ExportExcelCommand}" Padding="10,4" ToolTip="Создать Excel аэродинамического расчёта" />
+                            <TextBlock Text="Расчётная таблица критической трассы" FontWeight="Bold" FontSize="15" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <DataGrid ItemsSource="{Binding SelectedPathSections}" SelectedItem="{Binding SelectedPathSection, Mode=TwoWay}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Участок" Binding="{Binding SectionDisplayName}" Width="70" />
+                                <DataGridTextColumn Header="ElementIds" Binding="{Binding ElementIdsText}" Width="160" />
+                                <DataGridTextColumn Header="Start" Binding="{Binding StartElementId}" Width="90" />
+                                <DataGridTextColumn Header="End" Binding="{Binding EndElementId}" Width="90" />
+                                <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
+                                <DataGridTextColumn Header="Расход, м³/ч" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="110" />
+                                <DataGridTextColumn Header="Длина, м" Binding="{Binding TotalLengthM, StringFormat={}{0:0.###}}" Width="80" />
+                                <DataGridTextColumn Header="Площадь, м²" Binding="{Binding AreaM2, StringFormat={}{0:0.####}}" Width="90" />
+                                <DataGridTextColumn Header="Dэкв, м" Binding="{Binding EquivalentDiameterM, StringFormat={}{0:0.####}}" Width="80" />
+                                <DataGridTextColumn Header="Скорость, м/с" Binding="{Binding VelocityMs, StringFormat={}{0:0.###}}" Width="105" />
+                                <DataGridTextColumn Header="Re" Binding="{Binding Reynolds, StringFormat={}{0:0.#}}" Width="90" />
+                                <DataGridTextColumn Header="λ" Binding="{Binding Lambda, StringFormat={}{0:0.####}}" Width="70" />
+                                <DataGridTextColumn Header="Pv, Па" Binding="{Binding DynamicPressurePa, StringFormat={}{0:0.###}}" Width="80" />
+                                <DataGridTextColumn Header="R, Па/м" Binding="{Binding SpecificPressureLossPaPerM, StringFormat={}{0:0.###}}" Width="80" />
+                                <DataGridTextColumn Header="R·l, Па" Binding="{Binding FrictionPressureLossPa, StringFormat={}{0:0.###}}" Width="80" />
+                                <DataGridTextColumn Header="Причина" Binding="{Binding SplitReasonShort}" Width="140">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip" Value="{Binding SplitReason}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Предупреждение" Binding="{Binding WarningShortText}" Width="*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip" Value="{Binding WarningText}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <Expander Header="Проверка длины трассы" IsExpanded="False" Margin="0,8,0,0">
+                            <StackPanel>
+                                <UniformGrid Columns="4" Margin="0,0,0,6">
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Сумма длин воздуховодов" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathDuctLengthSumM, StringFormat={}{0:0.###} м}" /></StackPanel>
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Сумма длин участков" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathSectionLengthSumM, StringFormat={}{0:0.###} м}" /></StackPanel>
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Разница" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathLengthDifferenceM, StringFormat={}{0:0.###} м}" /></StackPanel>
+                                    <StackPanel><TextBlock Style="{StaticResource MetricCaption}" Text="Коротких присоединённых" /><TextBlock Style="{StaticResource MetricValue}" Text="{Binding CriticalPathShortDuctAttachedCount}" /></StackPanel>
+                                </UniformGrid>
+                                <TextBlock Text="{Binding CriticalPathLengthWarning}" Foreground="#FFD84315" TextWrapping="Wrap" />
+                                <DataGrid ItemsSource="{Binding CriticalPathDuctLengthRows}" MaxHeight="180">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
+                                        <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="110" />
+                                        <DataGridTextColumn Header="Расход" Binding="{Binding FlowM3h, StringFormat={}{0:0.###}}" Width="90" />
+                                        <DataGridTextColumn Header="Длина, м" Binding="{Binding LengthM, StringFormat={}{0:0.###}}" Width="90" />
+                                        <DataGridTextColumn Header="Участок" Binding="{Binding SectionIndex}" Width="80" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
                 </DockPanel>
             </TabItem>
 
             <TabItem Header="Местные сопротивления">
                 <DockPanel Margin="6">
-                    <TabControl>
-                        <TabItem Header="Простой">
-                            <DockPanel Margin="6">
                                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                                     <UniformGrid Columns="4" Margin="0,0,0,4">
                                         <Border BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="4" Background="#FFF8F8F8">
@@ -297,8 +375,7 @@
                                     <WrapPanel>
                                         <Button Content="Сохранить изменения" Command="{Binding SaveZetaOverridesCommand}" />
                                         <Button Content="Вернуть к Auto" Command="{Binding ResetToAutoCommand}" />
-                                        <Button Content="Показать в Revit" Command="{Binding SelectElementInRevitCommand}" />
-                                        <Button Content="Каталог ζ" Click="OpenProjectZetaCatalog_Click" />
+                                        <Button Content="Показать в модели" Command="{Binding SelectElementInRevitCommand}" />
                                         <TextBlock Text="Показать:" FontWeight="Bold" />
                                         <ComboBox SelectedValue="{Binding LocalResistanceScopeMode, Mode=TwoWay}" SelectedValuePath="Tag" Width="150" Margin="4">
                                             <ComboBoxItem Content="Текущая трасса" Tag="CurrentPath" IsSelected="True" />
@@ -353,46 +430,6 @@
                                         <DataGridTextColumn Header="Источник" Binding="{Binding LocalizedSource}" Width="110" IsReadOnly="True" />
                                     </DataGrid.Columns>
                                 </DataGrid>
-                            </DockPanel>
-                        </TabItem>
-
-                        <TabItem Header="Инженерные данные">
-                            <DockPanel Margin="6">
-                                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                    <TextBlock Text="{Binding LocalResistanceRecognitionSummary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,4" />
-                                    <WrapPanel>
-                                        <Button Content="Очистить ручное" Command="{Binding ResetSelectedZetaCommand}" ToolTip="Удаляет только несохранённое ручное значение текущей сессии." />
-                                        <Button Content="Принять рекомендованные ζ" Command="{Binding AcceptRecommendedZetaCommand}" />
-                                        <Button Content="Пересчитать с ручными ζ" Command="{Binding RecalculateManualZetaCommand}" />
-                                        <Button Content="Вернуть весь проект к Auto" Command="{Binding ResetProjectToAutoCommand}" />
-                                        <Button Content="Обновить данные" Command="{Binding RefreshCommand}" />
-                                        <Button Content="Техническая диагностика" Command="{Binding GenerateVerificationReportCommand}" />
-                                    </WrapPanel>
-                                </StackPanel>
-                                <DataGrid x:Name="EngineeringLocalResistancesGrid" ItemsSource="{Binding SelectedPathLocalResistances}" SelectedItem="{Binding SelectedPathLocalResistance, Mode=TwoWay}" CanUserAddRows="False" SelectionMode="Extended" SelectionChanged="LocalResistancesGrid_SelectionChanged">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="ElementId" Binding="{Binding ElementId}" Width="90" />
-                                        <DataGridTextColumn Header="Вид МС" Binding="{Binding LocalKind}" Width="130" />
-                                        <DataGridTextColumn Header="PathRole" Binding="{Binding DisplayRole}" Width="120" />
-                                        <DataGridTextColumn Header="Факт. угол" Binding="{Binding ActualAngleDeg, StringFormat={}{0:0.#}}" Width="80" />
-                                        <DataGridTextColumn Header="Расч. угол" Binding="{Binding RoundedAngleDeg, StringFormat={}{0:0.#}}" Width="80" />
-                                        <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100" />
-                                        <DataGridTextColumn Header="Auto ζ" Binding="{Binding AutoZeta, StringFormat={}{0:0.###}}" Width="70" IsReadOnly="True" />
-                                        <DataGridTemplateColumn Header="ManualZeta" Width="90">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate><TextBox Text="{Binding ManualZetaText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" Padding="2" /></DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                        <DataGridTextColumn Header="Используемое ζ" Binding="{Binding EffectiveZeta, StringFormat={}{0:0.###}}" Width="100" IsReadOnly="True" />
-                                        <DataGridTextColumn Header="Источник" Binding="{Binding ZetaSource}" Width="140" IsReadOnly="True" />
-                                        <DataGridTextColumn Header="Потери, Па" Binding="{Binding LocalPressureLossPa, StringFormat={}{0:0.###}}" Width="90" />
-                                        <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="120" IsReadOnly="True" />
-                                        <DataGridTextColumn Header="Подробно" Binding="{Binding TechnicalDetails}" Width="*" IsReadOnly="True" />
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </DockPanel>
-                        </TabItem>
-                    </TabControl>
                 </DockPanel>
             </TabItem>
 
@@ -403,7 +440,7 @@
                             <WrapPanel>
                                 <Button Content="Сформировать отчёт для проверки" Command="{Binding GenerateVerificationReportCommand}" />
                                 <Button Content="Открыть папку отчётов" Command="{Binding OpenReportsFolderCommand}" />
-                                <Button Content="Экспорт Excel" IsEnabled="False" ToolTip="Excel будет добавлен отдельным этапом" />
+                                <Button Content="Экспорт Excel" Command="{Binding ExportExcelCommand}" ToolTip="Сохранить аэродинамический расчёт в .xlsx" />
                             </WrapPanel>
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
@@ -413,11 +450,14 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Последний TXT:" FontWeight="Bold" />
                                 <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LastReportTxtPath, Mode=OneWay}" IsReadOnly="True" />
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Последний JSON:" FontWeight="Bold" />
                                 <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LastReportJsonPath, Mode=OneWay}" IsReadOnly="True" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Последний Excel:" FontWeight="Bold" />
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LastExcelExportPath, Mode=OneWay}" IsReadOnly="True" />
                             </Grid>
                             <TextBlock Text="Отчёт сохраняется в %APPDATA%\VentCalc\reports. Путь к TXT копируется в буфер обмена, если это доступно." Foreground="#FF555555" TextWrapping="Wrap" />
                         </StackPanel>
@@ -438,22 +478,72 @@
             </TabItem>
 
             <TabItem Header="Настройки">
-                <StackPanel Margin="16" MaxWidth="460" HorizontalAlignment="Left">
-                    <TextBlock Text="Расчётные настройки" FontWeight="Bold" FontSize="16" />
-                    <TextBlock Text="Плотность воздуха, кг/м³" /><TextBox Text="{Binding Settings.AirDensityKgM3, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Динамическая вязкость воздуха, Па·с" /><TextBox Text="{Binding Settings.AirDynamicViscosityText, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Обычно для воздуха при 20°C: 1.81e-5 Па·с" Foreground="#FF666666" FontSize="11" />
-                    <TextBlock Text="Шероховатость воздуховода, мм" /><TextBox Text="{Binding Settings.RoughnessMm, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Запас давления, %" /><TextBox Text="{Binding Settings.PressureReservePercent, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Минимальная скорость, м/с" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Максимальная скорость, м/с" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="Критическая скорость, м/с" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Text="VentCalc v2.0 — инженерный расчёт вентиляции" Foreground="#FF555555" Margin="0,12,0,0" />
-                    <WrapPanel Margin="0,12,0,0">
-                        <Button Content="Сохранить" Command="{Binding SaveSettingsCommand}" />
-                        <Button Content="Сбросить по умолчанию" Command="{Binding ResetSettingsCommand}" />
+                <DockPanel Margin="16">
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                        <Button Content="Сохранить настройки" Command="{Binding SaveSettingsCommand}" />
+                        <Button Content="Восстановить все настройки" Command="{Binding ResetSettingsCommand}" />
+                        <TextBlock Text="VentCalc v2.0 — инженерный расчёт вентиляции" Foreground="#FF555555" Margin="12,8,0,0" />
                     </WrapPanel>
-                </StackPanel>
+                    <TabControl SelectedValue="{Binding SelectedSettingsSection, Mode=TwoWay}" SelectedValuePath="Header">
+                        <TabItem Header="Воздух и расчёт">
+                            <StackPanel Margin="12" MaxWidth="520" HorizontalAlignment="Left">
+                                <TextBlock Text="Плотность воздуха, кг/м³" FontWeight="Bold" /><TextBox Text="{Binding Settings.AirDensityKgM3, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Обычно 1.2 кг/м³ при нормальных условиях." Foreground="#FF666666" FontSize="11" />
+                                <TextBlock Text="Динамическая вязкость воздуха, Па·с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.AirDynamicViscosityText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Обычно 1.81E-5 Па·с при 20 °C." Foreground="#FF666666" FontSize="11" />
+                                <TextBlock Text="Шероховатость воздуховода, мм" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.RoughnessMm, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Для оцинкованной стали часто принимают около 0.1 мм." Foreground="#FF666666" FontSize="11" />
+                                <TextBlock Text="Запас давления, %" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.PressureReservePercent, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Добавляется к итоговым потерям трассы." Foreground="#FF666666" FontSize="11" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Воздух и расчёт" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Пороги скоростей">
+                            <StackPanel Margin="12" MaxWidth="520" HorizontalAlignment="Left">
+                                <TextBlock Text="Минимальная скорость, м/с" FontWeight="Bold" /><TextBox Text="{Binding Settings.MinVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Максимальная скорость, м/с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.MaxVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Критическая скорость, м/с" FontWeight="Bold" Margin="4,10,4,4" /><TextBox Text="{Binding Settings.CriticalVelocityMs, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Перед сохранением проверяется: минимальная меньше максимальной, максимальная меньше критической." Foreground="#FF666666" TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Скорости" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Подсветка">
+                            <StackPanel Margin="12" MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Цвета карты скоростей" FontWeight="Bold" FontSize="14" />
+                                <TextBlock Text="Ниже минимальной, HEX" /><TextBox Text="{Binding Settings.LowVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Нормальная, HEX" /><TextBox Text="{Binding Settings.NormalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Выше максимальной, HEX" /><TextBox Text="{Binding Settings.HighVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Критическая, HEX" /><TextBox Text="{Binding Settings.CriticalVelocityColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Цвета трасс и ошибок" FontWeight="Bold" FontSize="14" Margin="4,12,4,4" />
+                                <TextBlock Text="Критическая трасса, HEX" /><TextBox Text="{Binding Settings.CriticalPathColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Ошибки / предупреждения, HEX" /><TextBox Text="{Binding Settings.IssueColorHex, UpdateSourceTrigger=PropertyChanged}" />
+                                <CheckBox Content="Приближать модель после подсветки" IsChecked="{Binding Settings.ZoomToElementOnShow, Mode=TwoWay}" Margin="4,8,4,4" />
+                                <TextBlock Text="Введите цвет в формате #RRGGBB. Настройки сохраняются в settings.json." Foreground="#FF666666" TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Подсветка" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Трассировка">
+                            <StackPanel Margin="12" MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Расширенные настройки трассировки будут добавлены позже. Сейчас используется стабильная автоматическая логика VentCalc." TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Трассировка" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem Header="Интерфейс">
+                            <StackPanel Margin="12" MaxWidth="560" HorizontalAlignment="Left">
+                                <TextBlock Text="Вкладка после загрузки системы" FontWeight="Bold" />
+                                <ComboBox SelectedValue="{Binding Settings.UiDefaultTabAfterLoad, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Content" Width="220" Margin="4">
+                                    <ComboBoxItem Content="Расчёт" IsSelected="True" />
+                                    <ComboBoxItem Content="Местные сопротивления" />
+                                    <ComboBoxItem Content="Проверки" />
+                                </ComboBox>
+                                <CheckBox Content="Запоминать размер и положение окон" IsChecked="{Binding Settings.RememberWindowPlacement, Mode=TwoWay}" Margin="4,8,4,4" />
+                                <CheckBox Content="Подтверждать массовые изменения ζ" IsChecked="{Binding Settings.ConfirmBulkZetaChanges, Mode=TwoWay}" Margin="4" />
+                                <TextBlock Text="Настройки интерфейса сохраняются в settings.json. Сейчас к логике подключена только вкладка после загрузки системы." Foreground="#FF666666" TextWrapping="Wrap" />
+                                <Button Content="Сбросить раздел" Command="{Binding ResetSettingsSectionCommand}" CommandParameter="Интерфейс" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </TabItem>
+                    </TabControl>
+                </DockPanel>
             </TabItem>
         </TabControl>
     </DockPanel>

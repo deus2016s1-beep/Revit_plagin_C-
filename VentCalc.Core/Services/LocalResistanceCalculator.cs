@@ -68,6 +68,8 @@ namespace VentCalc.Core.Services
                 ActualAngleDeg = role?.ActualAngleDeg,
                 RoundedAngleDeg = role?.RoundedAngleDeg,
                 AngleWasRounded = role?.AngleWasRounded ?? false,
+                AngleSource = role?.AngleSource ?? string.Empty,
+                AngleReason = role?.AngleReason ?? string.Empty,
                 AngleRoundingWarning = role?.AngleRoundingWarning ?? string.Empty
             };
             result.Warnings.AddRange(data.Warnings);

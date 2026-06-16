@@ -32,6 +32,10 @@ namespace VentCalc.Core.Models
 
         public bool AngleWasRounded { get; set; }
 
+        public string AngleSource { get; set; } = string.Empty;
+
+        public string AngleReason { get; set; } = string.Empty;
+
         public string AngleRoundingWarning { get; set; } = string.Empty;
 
         public List<string> Warnings { get; set; } = new List<string>();

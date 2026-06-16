@@ -35,6 +35,9 @@ namespace VentCalc.UI.ViewModels
         private ProjectZetaCatalogRow? selectedProjectZetaCatalogRow;
         private bool isSynchronizingManualZeta;
         private string localResistanceScopeMode = "CurrentPath";
+        private string selectedSettingsSection = "Воздух и расчёт";
+        private string calculationViewMode = "Основные данные";
+        private string issuesFilter = "Требуют внимания";
         private bool showAllProjectZetaCatalogRoles;
         private string selectedElementId = "—";
         private string systemName = "—";
@@ -44,6 +47,15 @@ namespace VentCalc.UI.ViewModels
         private string statusText = "Выберите элемент вентиляционной системы в Revit и нажмите «Загрузить выбранную систему».";
         private string lastReportTxtPath = "—";
         private string lastReportJsonPath = "—";
+        private string lastExcelExportPath = "—";
+        private string lastExcelExportError = string.Empty;
+        private DateTime? lastExcelExportCreatedAt;
+        private bool lastExcelExportSucceeded;
+        private int lastExcelExportSheetCount;
+        private int lastExcelExportAeroSectionRowCount;
+        private double lastExcelExportAeroLocalResistanceDistributedPa;
+        private double lastExcelExportAeroLocalResistanceTotalPa;
+        private double lastExcelExportAeroTotalPressureLossPa;
         private string reportPreviewText = "Отчёт для проверки ещё не сформирован.";
         private string lastActionMessage = "Действий пока не было.";
         private string revitVersion = "—";
@@ -79,6 +91,7 @@ namespace VentCalc.UI.ViewModels
                     Message = settingsService.LastWarning,
                     Recommendation = "Проверьте файл %APPDATA%\\VentCalc\\settings.json; повреждённый файл переименован."
                 });
+                RefreshFilteredIssues();
             }
 
             LoadSelectedSystemCommand = new RelayCommand(_ => RequestLoadSelectedSystem(VentCalcLoadRequestMode.SelectedElement));
@@ -90,8 +103,9 @@ namespace VentCalc.UI.ViewModels
             SelectCriticalPathInRevitCommand = new RelayCommand(_ => SelectCriticalPathInRevit(), _ => CriticalPath != null);
             SelectAllPathsThroughElementInRevitCommand = new RelayCommand(_ => SelectAllPathsThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
             SelectLoadedPathThroughElementInRevitCommand = new RelayCommand(_ => SelectLoadedPathThroughElementInRevit(), _ => PathsThroughSelectedElement.Count > 0);
-            SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
+            SaveSettingsCommand = new RelayCommand(_ => { SaveSettings(); });
             ResetSettingsCommand = new RelayCommand(_ => ResetSettings());
+            ResetSettingsSectionCommand = new RelayCommand(parameter => ResetSettingsSection(parameter?.ToString() ?? SelectedSettingsSection));
             ApplyVelocityHighlightCommand = new RelayCommand(_ => ApplyVelocityHighlight(), _ => AerodynamicSummary != null);
             ResetVelocityHighlightCommand = new RelayCommand(_ => ClearHighlight());
             PickLowVelocityColorCommand = new RelayCommand(_ => PickColor(Settings.LowVelocityColorHex, value => Settings.LowVelocityColorHex = value));
@@ -121,6 +135,10 @@ namespace VentCalc.UI.ViewModels
             AcceptRecommendedZetaCommand = new RelayCommand(_ => AcceptRecommendedZeta(), _ => SelectedLocalResistanceRows.Count > 0 || SelectedPathLocalResistance != null);
             WriteZetaToCommentsCommand = new RelayCommand(_ => SaveManualZetaOverrides(), _ => GetChangedLocalResistanceRows().Count > 0);
             OpenReportsFolderCommand = new RelayCommand(_ => OpenReportsFolder());
+            SelectExcelExportFolderCommand = new RelayCommand(_ => SelectExcelExportFolder());
+            OpenExcelExportFolderCommand = new RelayCommand(_ => OpenExcelExportFolder());
+            ExportExcelCommand = new RelayCommand(_ => ExportExcel());
+            OpenSettingsFolderCommand = new RelayCommand(_ => OpenSettingsFolder());
             StubCommand = new RelayCommand(parameter => ShowStub(parameter?.ToString() ?? "Функция будет добавлена позже."));
             if (VentCalcSessionState.CurrentData != null)
             {
@@ -236,6 +254,8 @@ namespace VentCalc.UI.ViewModels
 
         public ObservableCollection<VentIssueInfo> Issues { get; } = new ObservableCollection<VentIssueInfo>();
 
+        public ObservableCollection<VentIssueInfo> FilteredIssues { get; } = new ObservableCollection<VentIssueInfo>();
+
         public HighlightStateInfo HighlightState { get; } = new HighlightStateInfo();
 
         public int VelocityBelowMinCount => HighlightState.VelocityGroups.BelowMin;
@@ -247,6 +267,57 @@ namespace VentCalc.UI.ViewModels
         public int VelocityCriticalCount => HighlightState.VelocityGroups.Critical;
 
         public int VelocityNotCalculatedCount => HighlightState.VelocityGroups.NotCalculated;
+
+        public int VelocityColoredDuctCount => HighlightState.VelocityGroups.ColoredDuctCount;
+
+        public int VelocityColoredFittingCount => HighlightState.VelocityGroups.ColoredFittingCount;
+
+        public int VelocityNotCalculatedFittingCount => HighlightState.VelocityGroups.NotCalculatedFittingCount;
+
+        public string SelectedSettingsSection
+        {
+            get => selectedSettingsSection;
+            set => SetProperty(ref selectedSettingsSection, string.IsNullOrWhiteSpace(value) ? "Воздух и расчёт" : value);
+        }
+
+        public string CalculationViewMode
+        {
+            get => calculationViewMode;
+            set
+            {
+                if (SetProperty(ref calculationViewMode, string.IsNullOrWhiteSpace(value) ? "Основные данные" : value))
+                {
+                    OnPropertyChanged(nameof(IsCalculationMainView));
+                    OnPropertyChanged(nameof(IsCalculationEngineeringView));
+                }
+            }
+        }
+
+        public bool IsCalculationMainView => string.Equals(CalculationViewMode, "Основные данные", StringComparison.Ordinal);
+
+        public bool IsCalculationEngineeringView => string.Equals(CalculationViewMode, "Инженерные данные", StringComparison.Ordinal);
+
+        public string IssuesFilter
+        {
+            get => issuesFilter;
+            set
+            {
+                if (SetProperty(ref issuesFilter, string.IsNullOrWhiteSpace(value) ? "Требуют внимания" : value))
+                {
+                    RefreshFilteredIssues();
+                }
+            }
+        }
+
+        public int ErrorIssueCount => Issues.Count(issue => IsSeverity(issue, "Error"));
+
+        public int WarningIssueCount => Issues.Count(issue => IsSeverity(issue, "Warning"));
+
+        public int InfoIssueCount => Issues.Count(issue => !IsSeverity(issue, "Error") && !IsSeverity(issue, "Warning"));
+
+        public double SelectedPathFlowM3h => SelectedPath?.FlowM3hNumeric ?? 0;
+
+        public int SelectedPathSectionCount => SelectedPathSections.Count;
 
         public string HighlightStatusText => HighlightState.ActiveMode == HighlightMode.None
             ? "Подсветка не активна."
@@ -388,6 +459,32 @@ namespace VentCalc.UI.ViewModels
 
         public double SelectedPathTotalWithReservePa => SelectedPathTotalPressureLossPa * (1.0 + Settings.PressureReservePercent / 100.0);
 
+        public double CriticalPathDuctLengthSumM => CriticalPath?.Ducts.Sum(duct => duct.LengthM) ?? 0;
+
+        public double CriticalPathSectionLengthSumM => CriticalPath?.Sections.Sum(section => section.TotalLengthM) ?? 0;
+
+        public double CriticalPathLengthDifferenceM => CriticalPathSectionLengthSumM - CriticalPathDuctLengthSumM;
+
+        public int CriticalPathDuctCount => CriticalPath?.Ducts.Count ?? 0;
+
+        public int CriticalPathSectionCount => CriticalPath?.Sections.Count ?? 0;
+
+        public int CriticalPathFittingCount => CountCriticalPathElementsByCategory("Fitting", "Фитинг");
+
+        public int CriticalPathLocalResistanceCount => CriticalPath?.LocalResistances.Count ?? 0;
+
+        public int CriticalPathElementCount => CriticalPath?.ElementIds.Count ?? 0;
+
+        public int CriticalPathShortDuctAttachedCount => CriticalPath?.Sections.Count(section => section.ContainsShortDucts) ?? 0;
+
+        public int CriticalPathShortDuctStandaloneCount => CriticalPath?.Ducts.Count(duct => duct.LengthM > 0 && duct.LengthM < 0.02) ?? 0;
+
+        public string CriticalPathLengthWarning => Math.Abs(CriticalPathLengthDifferenceM) > 0.05
+            ? "Сумма длин расчётных участков отличается от суммы длин воздуховодов. Проверьте объединение коротких участков."
+            : string.Empty;
+
+        public IEnumerable<CriticalPathDuctLengthAuditRow> CriticalPathDuctLengthRows => BuildCriticalPathDuctLengthRows();
+
         public string LoadModeDisplay { get; private set; } = "—";
 
         public int SystemComponentCount { get; private set; }
@@ -525,6 +622,60 @@ namespace VentCalc.UI.ViewModels
             private set => SetProperty(ref reportPreviewText, value);
         }
 
+        public string LastExcelExportPath
+        {
+            get => lastExcelExportPath;
+            private set => SetProperty(ref lastExcelExportPath, value);
+        }
+
+        public bool LastExcelExportSucceeded
+        {
+            get => lastExcelExportSucceeded;
+            private set => SetProperty(ref lastExcelExportSucceeded, value);
+        }
+
+        public int LastExcelExportSheetCount
+        {
+            get => lastExcelExportSheetCount;
+            private set => SetProperty(ref lastExcelExportSheetCount, value);
+        }
+
+        public string LastExcelExportError
+        {
+            get => lastExcelExportError;
+            private set => SetProperty(ref lastExcelExportError, value);
+        }
+
+        public DateTime? LastExcelExportCreatedAt
+        {
+            get => lastExcelExportCreatedAt;
+            private set => SetProperty(ref lastExcelExportCreatedAt, value);
+        }
+
+        public int LastExcelExportAeroSectionRowCount
+        {
+            get => lastExcelExportAeroSectionRowCount;
+            private set => SetProperty(ref lastExcelExportAeroSectionRowCount, value);
+        }
+
+        public double LastExcelExportAeroLocalResistanceDistributedPa
+        {
+            get => lastExcelExportAeroLocalResistanceDistributedPa;
+            private set => SetProperty(ref lastExcelExportAeroLocalResistanceDistributedPa, value);
+        }
+
+        public double LastExcelExportAeroLocalResistanceTotalPa
+        {
+            get => lastExcelExportAeroLocalResistanceTotalPa;
+            private set => SetProperty(ref lastExcelExportAeroLocalResistanceTotalPa, value);
+        }
+
+        public double LastExcelExportAeroTotalPressureLossPa
+        {
+            get => lastExcelExportAeroTotalPressureLossPa;
+            private set => SetProperty(ref lastExcelExportAeroTotalPressureLossPa, value);
+        }
+
         public string LastActionMessage
         {
             get => lastActionMessage;
@@ -560,6 +711,8 @@ namespace VentCalc.UI.ViewModels
         public ICommand SaveSettingsCommand { get; }
 
         public ICommand ResetSettingsCommand { get; }
+
+        public ICommand ResetSettingsSectionCommand { get; }
 
         public ICommand ApplyVelocityHighlightCommand { get; }
 
@@ -618,6 +771,14 @@ namespace VentCalc.UI.ViewModels
         public ICommand WriteZetaToCommentsCommand { get; }
 
         public ICommand OpenReportsFolderCommand { get; }
+
+        public ICommand SelectExcelExportFolderCommand { get; }
+
+        public ICommand OpenExcelExportFolderCommand { get; }
+
+        public ICommand ExportExcelCommand { get; }
+
+        public ICommand OpenSettingsFolderCommand { get; }
 
         public ICommand StubCommand { get; }
 
@@ -693,6 +854,7 @@ namespace VentCalc.UI.ViewModels
             Replace(SystemCatalog, data.SystemCatalog);
             SynchronizeSelectedCatalogSystem(data);
             Replace(Issues, SortIssues(BuildIssues(data)));
+            RefreshFilteredIssues();
             if (!string.IsNullOrWhiteSpace(settingsWarning))
             {
                 Issues.Insert(0, new VentIssueInfo
@@ -702,6 +864,7 @@ namespace VentCalc.UI.ViewModels
                     Message = settingsWarning,
                     Recommendation = "Проверьте файл %APPDATA%\\VentCalc\\settings.json; повреждённый файл переименован."
                 });
+                RefreshFilteredIssues();
             }
             Replace(StartCandidateDetails, data.PathSummary?.StartCandidateDetails ?? Array.Empty<string>());
             Replace(EndCandidateDetails, data.PathSummary?.EndCandidateDetails ?? Array.Empty<string>());
@@ -726,14 +889,18 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(LoadedSystemDisplay));
             OnPropertyChanged(nameof(CriticalPathIndex));
             OnPropertyChanged(nameof(CriticalPathDisplay));
+            RefreshFilteredIssues();
             OnPropertyChanged(nameof(CriticalPathTotalPressureLossPa));
             OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
+            NotifyCriticalPathLengthAuditChanged();
             OnPropertyChanged(nameof(LastLoadedElementId));
             OnPropertyChanged(nameof(SelectedElementDisplay));
             OnPropertyChanged(nameof(SelectedPathFrictionPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            OnPropertyChanged(nameof(SelectedPathFlowM3h));
+            OnPropertyChanged(nameof(SelectedPathSectionCount));
             OnPropertyChanged(nameof(ReportText));
             BuildProjectZetaCatalogRows();
             RefreshDisplayedLocalResistances();
@@ -747,6 +914,59 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(TraceWarningsSummary));
             VentCalcSessionState.StoreData(data);
             CommandManager.InvalidateRequerySuggested();
+        }
+
+
+        private IEnumerable<CriticalPathDuctLengthAuditRow> BuildCriticalPathDuctLengthRows()
+        {
+            if (CriticalPath == null)
+            {
+                return Enumerable.Empty<CriticalPathDuctLengthAuditRow>();
+            }
+
+            return CriticalPath.Ducts.Select(duct =>
+            {
+                CalculationSectionInfo? section = CriticalPath.Sections.FirstOrDefault(item => item.ElementIds.Contains(duct.ElementId));
+                return new CriticalPathDuctLengthAuditRow
+                {
+                    ElementId = duct.ElementId,
+                    Size = duct.Size,
+                    FlowM3h = duct.FlowM3h,
+                    LengthM = duct.LengthM,
+                    Source = "Revit duct length",
+                    IncludedInSection = section != null,
+                    SectionIndex = section?.SectionIndex
+                };
+            }).ToList();
+        }
+
+        private void NotifyCriticalPathLengthAuditChanged()
+        {
+            OnPropertyChanged(nameof(CriticalPathDuctLengthSumM));
+            OnPropertyChanged(nameof(CriticalPathSectionLengthSumM));
+            OnPropertyChanged(nameof(CriticalPathLengthDifferenceM));
+            OnPropertyChanged(nameof(CriticalPathDuctCount));
+            OnPropertyChanged(nameof(CriticalPathSectionCount));
+            OnPropertyChanged(nameof(CriticalPathFittingCount));
+            OnPropertyChanged(nameof(CriticalPathLocalResistanceCount));
+            OnPropertyChanged(nameof(CriticalPathElementCount));
+            OnPropertyChanged(nameof(CriticalPathShortDuctAttachedCount));
+            OnPropertyChanged(nameof(CriticalPathShortDuctStandaloneCount));
+            OnPropertyChanged(nameof(CriticalPathLengthWarning));
+            OnPropertyChanged(nameof(CriticalPathDuctLengthRows));
+        }
+
+        private int CountCriticalPathElementsByCategory(params string[] categoryTokens)
+        {
+            if (CriticalPath == null || categoryTokens.Length == 0)
+            {
+                return 0;
+            }
+
+            HashSet<string> criticalIds = new HashSet<string>(CriticalPath.ElementIds.Select(id => id.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
+            return NetworkElements.Count(row =>
+                criticalIds.Contains(row.ElementId)
+                && categoryTokens.Any(token => row.Category.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0));
         }
 
         private static IReadOnlyList<VentSystemSummary> BuildSystemSummaries(VentCalcCenterData data)
@@ -1035,6 +1255,28 @@ namespace VentCalc.UI.ViewModels
                 .ToList();
         }
 
+        private void RefreshFilteredIssues()
+        {
+            IEnumerable<VentIssueInfo> filtered = IssuesFilter switch
+            {
+                "Все" => Issues,
+                "Ошибки" => Issues.Where(issue => IsSeverity(issue, "Error")),
+                "Предупреждения" => Issues.Where(issue => IsSeverity(issue, "Warning")),
+                "Сведения" => Issues.Where(issue => !IsSeverity(issue, "Error") && !IsSeverity(issue, "Warning")),
+                _ => Issues.Where(issue => IsSeverity(issue, "Error") || IsSeverity(issue, "Warning"))
+            };
+
+            Replace(FilteredIssues, filtered);
+            OnPropertyChanged(nameof(ErrorIssueCount));
+            OnPropertyChanged(nameof(WarningIssueCount));
+            OnPropertyChanged(nameof(InfoIssueCount));
+        }
+
+        private static bool IsSeverity(VentIssueInfo issue, string severity)
+        {
+            return string.Equals(issue.Severity, severity, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void AddDuctIssue(List<VentIssueInfo> issues, long elementId, string category, string message, string recommendation, string severity = "Warning")
         {
             issues.Add(new VentIssueInfo
@@ -1060,6 +1302,7 @@ namespace VentCalc.UI.ViewModels
             NotifySelectionChanged();
             Replace(SelectedPathDucts, SelectedPath?.Calculation?.Ducts ?? Enumerable.Empty<DuctCalculationInfo>());
             Replace(SelectedPathSections, SelectedPath?.Calculation?.Sections ?? Enumerable.Empty<CalculationSectionInfo>());
+            OnPropertyChanged(nameof(SelectedPathSectionCount));
             Replace(SelectedPathLocalResistances, SelectedPath?.Calculation?.LocalResistances ?? Enumerable.Empty<LocalResistanceCalculationInfo>());
             SubscribeLocalResistanceRows();
             RefreshDisplayedLocalResistances();
@@ -1070,6 +1313,7 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(SelectedPathLocalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalPressureLossPa));
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
+            OnPropertyChanged(nameof(SelectedPathFlowM3h));
         }
 
         private void SubscribeLocalResistanceRows()
@@ -1459,8 +1703,7 @@ namespace VentCalc.UI.ViewModels
                 if (dialog.ShowDialog() == Forms.DialogResult.OK)
                 {
                     setColor($"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}");
-                    settingsService.Save(Settings);
-                    StatusText = "Цвет подсветки сохранён.";
+                    StatusText = "Цвет выбран. Нажмите «Применить» или «Сохранить», чтобы записать settings.json.";
                 }
             }
             catch (Exception exception)
@@ -1509,6 +1752,22 @@ namespace VentCalc.UI.ViewModels
             HighlightState.HighlightApplySucceeded = result.ActiveMode == HighlightMode.None || result.ApplySucceeded;
             HighlightState.HighlightClearSucceeded = result.ClearSucceeded;
             HighlightState.OriginalOverridesRestored = result.OriginalOverridesRestored;
+            HighlightState.VelocityGroups.BelowMin = result.VelocityGroups.BelowMin;
+            HighlightState.VelocityGroups.Normal = result.VelocityGroups.Normal;
+            HighlightState.VelocityGroups.AboveMax = result.VelocityGroups.AboveMax;
+            HighlightState.VelocityGroups.Critical = result.VelocityGroups.Critical;
+            HighlightState.VelocityGroups.NotCalculated = result.VelocityGroups.NotCalculated;
+            HighlightState.VelocityGroups.ColoredDuctCount = result.VelocityGroups.ColoredDuctCount;
+            HighlightState.VelocityGroups.NotCalculatedDuctCount = result.VelocityGroups.NotCalculatedDuctCount;
+            HighlightState.VelocityGroups.Scope = result.VelocityGroups.Scope;
+            HighlightState.VelocityGroups.ColoredFittingCount = result.VelocityGroups.ColoredFittingCount;
+            HighlightState.VelocityGroups.NotCalculatedFittingCount = result.VelocityGroups.NotCalculatedFittingCount;
+            HighlightState.PressureLossGroups.Low = result.PressureLossGroups.Low;
+            HighlightState.PressureLossGroups.Medium = result.PressureLossGroups.Medium;
+            HighlightState.PressureLossGroups.High = result.PressureLossGroups.High;
+            HighlightState.PressureLossGroups.Maximum = result.PressureLossGroups.Maximum;
+            HighlightState.PressureLossGroups.ZeroOrSkipped = result.PressureLossGroups.ZeroOrSkipped;
+            HighlightState.MaxElementPressureLossPa = result.MaxElementPressureLossPa;
             HighlightState.Errors = result.Errors.ToList();
             VentCalcSessionState.StoreHighlight(HighlightState);
             NotifyHighlightStateChanged();
@@ -1542,7 +1801,7 @@ namespace VentCalc.UI.ViewModels
             RequestHighlight(BuildPathHighlightRequest(SelectedPath, false, "PathHighlightWindow"));
         }
 
-        private void HighlightCriticalPath()
+        private void HighlightCriticalPath(string windowSource = "PathHighlightWindow")
         {
             if (CriticalPath == null)
             {
@@ -1557,7 +1816,7 @@ namespace VentCalc.UI.ViewModels
                 return;
             }
 
-            RequestHighlight(BuildPathHighlightRequest(CriticalPath, true, "PathHighlightWindow"));
+            RequestHighlight(BuildPathHighlightRequest(CriticalPath, true, windowSource));
         }
 
         private HighlightRequest BuildPathHighlightRequest(PathRow path, bool isCritical, string windowSource)
@@ -1618,7 +1877,7 @@ namespace VentCalc.UI.ViewModels
                 Action = HighlightAction.Apply,
                 Mode = isCritical ? HighlightMode.CriticalPath : HighlightMode.SelectedPath,
                 SelectElements = false,
-                ShowElements = true,
+                ShowElements = Settings.ZoomToElementOnShow,
                 WindowSource = windowSource,
                 DisplayMode = HighlightDisplayMode,
                 SystemName = SystemName,
@@ -1629,7 +1888,7 @@ namespace VentCalc.UI.ViewModels
                 StartElementId = startId,
                 EndElementId = endId,
                 StatusMessage = isCritical
-                    ? $"Подсвечена критическая трасса №{pathIndex}: элементов {pathIds.Count}, потери {totalPressureLossPa:0.###} Па, {startEnd}."
+                    ? $"Показана критическая трасса №{pathIndex}, потери {totalPressureLossPa:0.###} Па."
                     : $"Подсвечена трасса №{pathIndex}: элементов {pathIds.Count}.",
                 Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
             };
@@ -1685,11 +1944,27 @@ namespace VentCalc.UI.ViewModels
             HighlightState.HighlightApplySucceeded = state.HighlightApplySucceeded;
             HighlightState.HighlightClearSucceeded = state.HighlightClearSucceeded;
             HighlightState.OriginalOverridesRestored = state.OriginalOverridesRestored;
+            HighlightState.VelocityGroups.BelowMin = state.VelocityGroups.BelowMin;
+            HighlightState.VelocityGroups.Normal = state.VelocityGroups.Normal;
+            HighlightState.VelocityGroups.AboveMax = state.VelocityGroups.AboveMax;
+            HighlightState.VelocityGroups.Critical = state.VelocityGroups.Critical;
+            HighlightState.VelocityGroups.NotCalculated = state.VelocityGroups.NotCalculated;
+            HighlightState.VelocityGroups.ColoredDuctCount = state.VelocityGroups.ColoredDuctCount;
+            HighlightState.VelocityGroups.NotCalculatedDuctCount = state.VelocityGroups.NotCalculatedDuctCount;
+            HighlightState.VelocityGroups.Scope = state.VelocityGroups.Scope;
+            HighlightState.VelocityGroups.ColoredFittingCount = state.VelocityGroups.ColoredFittingCount;
+            HighlightState.VelocityGroups.NotCalculatedFittingCount = state.VelocityGroups.NotCalculatedFittingCount;
+            HighlightState.PressureLossGroups.Low = state.PressureLossGroups.Low;
+            HighlightState.PressureLossGroups.Medium = state.PressureLossGroups.Medium;
+            HighlightState.PressureLossGroups.High = state.PressureLossGroups.High;
+            HighlightState.PressureLossGroups.Maximum = state.PressureLossGroups.Maximum;
+            HighlightState.PressureLossGroups.ZeroOrSkipped = state.PressureLossGroups.ZeroOrSkipped;
+            HighlightState.MaxElementPressureLossPa = state.MaxElementPressureLossPa;
             HighlightState.Errors = state.Errors.ToList();
             NotifyHighlightStateChanged();
         }
 
-        private void ApplyVelocityHighlight()
+        private void ApplyVelocityHighlight(string windowSource = "VelocityHighlightWindow")
         {
             if (AerodynamicSummary == null)
             {
@@ -1703,11 +1978,14 @@ namespace VentCalc.UI.ViewModels
                 .GroupBy(duct => duct.ElementId)
                 .ToDictionary(group => group.Key, group => group.OrderByDescending(duct => duct.VelocityMs).First());
 
+            Dictionary<long, double> fittingVelocities = BuildFittingVelocityMap(ducts);
+
             var belowMin = new List<long>();
             var normal = new List<long>();
             var aboveMax = new List<long>();
             var critical = new List<long>();
             int notCalculated = 0;
+            int notCalculatedFittings = 0;
             foreach (DuctCalculationInfo duct in ducts.Values)
             {
                 if (duct.FlowM3h <= 0 || duct.AreaM2 <= 0 || duct.VelocityMs <= 0 || double.IsNaN(duct.VelocityMs) || double.IsInfinity(duct.VelocityMs))
@@ -1734,11 +2012,64 @@ namespace VentCalc.UI.ViewModels
                 }
             }
 
+            foreach (KeyValuePair<long, double> fitting in fittingVelocities)
+            {
+                if (!IsValidVelocity(fitting.Value))
+                {
+                    notCalculated++;
+                    notCalculatedFittings++;
+                    continue;
+                }
+
+                if (fitting.Value < Settings.MinVelocityMs)
+                {
+                    belowMin.Add(fitting.Key);
+                }
+                else if (fitting.Value <= Settings.MaxVelocityMs)
+                {
+                    normal.Add(fitting.Key);
+                }
+                else if (fitting.Value < Settings.CriticalVelocityMs)
+                {
+                    aboveMax.Add(fitting.Key);
+                }
+                else
+                {
+                    critical.Add(fitting.Key);
+                }
+            }
+
+            foreach (long fittingId in GetLoadedDuctFittingElementIds().Where(id => !fittingVelocities.ContainsKey(id)))
+            {
+                notCalculated++;
+                notCalculatedFittings++;
+            }
+
+            int coloredDuctCount = belowMin.Concat(normal).Concat(aboveMax).Concat(critical).Count(id => ducts.ContainsKey(id));
+            int coloredFittingCount = belowMin.Concat(normal).Concat(aboveMax).Concat(critical).Count(id => fittingVelocities.ContainsKey(id));
+            var velocityGroups = new HighlightVelocityGroupsInfo
+            {
+                BelowMin = belowMin.Count,
+                Normal = normal.Count,
+                AboveMax = aboveMax.Count,
+                Critical = critical.Count,
+                NotCalculated = notCalculated,
+                ColoredDuctCount = coloredDuctCount,
+                NotCalculatedDuctCount = notCalculated - notCalculatedFittings,
+                Scope = "System",
+                ColoredFittingCount = coloredFittingCount,
+                NotCalculatedFittingCount = notCalculatedFittings
+            };
             HighlightState.VelocityGroups.BelowMin = belowMin.Count;
             HighlightState.VelocityGroups.Normal = normal.Count;
             HighlightState.VelocityGroups.AboveMax = aboveMax.Count;
             HighlightState.VelocityGroups.Critical = critical.Count;
             HighlightState.VelocityGroups.NotCalculated = notCalculated;
+            HighlightState.VelocityGroups.ColoredDuctCount = coloredDuctCount;
+            HighlightState.VelocityGroups.NotCalculatedDuctCount = notCalculated - notCalculatedFittings;
+            HighlightState.VelocityGroups.Scope = "System";
+            HighlightState.VelocityGroups.ColoredFittingCount = coloredFittingCount;
+            HighlightState.VelocityGroups.NotCalculatedFittingCount = notCalculatedFittings;
             NotifyHighlightStateChanged();
 
             var groups = new List<HighlightElementGroup>
@@ -1755,10 +2086,211 @@ namespace VentCalc.UI.ViewModels
                 Mode = HighlightMode.Velocity,
                 SelectElements = false,
                 ShowElements = false,
-                WindowSource = "VelocityHighlightWindow",
+                WindowSource = windowSource,
                 DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
                 SystemName = SystemName,
-                StatusMessage = $"Подсветка скоростей применена: воздуховодов {belowMin.Count + normal.Count + aboveMax.Count + critical.Count}; без расчёта {notCalculated}.",
+                VelocityGroups = velocityGroups,
+                StatusMessage = $"Карта скоростей применена: воздуховодов {coloredDuctCount}, фитингов {coloredFittingCount}.",
+                Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
+            });
+        }
+
+        private Dictionary<long, double> BuildFittingVelocityMap(Dictionary<long, DuctCalculationInfo> ducts)
+        {
+            var fittingVelocities = new Dictionary<long, double>();
+            if (AerodynamicSummary == null)
+            {
+                return fittingVelocities;
+            }
+
+            var fittingNodeIds = new HashSet<long>();
+            foreach (VentNetworkNode node in NetworkInfo?.Elements ?? Enumerable.Empty<VentNetworkNode>())
+            {
+                if (IsDuctFittingNode(node) && !node.IsIgnoredForPathSearch && TryParseElementId(node.ElementId, out long fittingId))
+                {
+                    fittingNodeIds.Add(fittingId);
+                }
+            }
+
+            foreach (LocalResistanceCalculationInfo local in AerodynamicSummary.Paths.SelectMany(path => path.LocalResistances).Where(local => local.ElementId > 0))
+            {
+                if (fittingNodeIds.Contains(local.ElementId) || IsDuctFittingCategory(local.CategoryName))
+                {
+                    AddMaxVelocity(fittingVelocities, local.ElementId, local.VelocityMs);
+                }
+            }
+
+            foreach (VentNetworkNode node in NetworkInfo?.Elements ?? Enumerable.Empty<VentNetworkNode>())
+            {
+                if (!IsDuctFittingNode(node) || node.IsIgnoredForPathSearch || !TryParseElementId(node.ElementId, out long fittingId))
+                {
+                    continue;
+                }
+
+                if (fittingVelocities.ContainsKey(fittingId))
+                {
+                    continue;
+                }
+
+                foreach (string connectedIdText in node.ConnectedElementIds)
+                {
+                    if (TryParseElementId(connectedIdText, out long connectedId) && ducts.TryGetValue(connectedId, out DuctCalculationInfo? duct))
+                    {
+                        AddMaxVelocity(fittingVelocities, fittingId, duct.VelocityMs);
+                    }
+                }
+            }
+
+            return fittingVelocities;
+        }
+
+        private IEnumerable<long> GetLoadedDuctFittingElementIds()
+        {
+            foreach (VentNetworkNode node in NetworkInfo?.Elements ?? Enumerable.Empty<VentNetworkNode>())
+            {
+                if (IsDuctFittingNode(node) && !node.IsIgnoredForPathSearch && TryParseElementId(node.ElementId, out long fittingId))
+                {
+                    yield return fittingId;
+                }
+            }
+        }
+
+        private static bool IsDuctFittingNode(VentNetworkNode node)
+        {
+            return string.Equals(node.CategoryKey, "OST_DuctFitting", StringComparison.OrdinalIgnoreCase)
+                || IsDuctFittingCategory(node.CategoryName);
+        }
+
+        private static bool IsDuctFittingCategory(string categoryName)
+        {
+            return categoryName.IndexOf("Fitting", StringComparison.OrdinalIgnoreCase) >= 0
+                || categoryName.IndexOf("Фитинг", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void AddMaxVelocity(Dictionary<long, double> target, long elementId, double velocityMs)
+        {
+            if (!IsValidVelocity(velocityMs))
+            {
+                if (!target.ContainsKey(elementId))
+                {
+                    target[elementId] = 0;
+                }
+
+                return;
+            }
+
+            target[elementId] = target.TryGetValue(elementId, out double current) && current > velocityMs
+                ? current
+                : velocityMs;
+        }
+
+        private static bool IsValidVelocity(double velocityMs)
+        {
+            return velocityMs > 0 && !double.IsNaN(velocityMs) && !double.IsInfinity(velocityMs);
+        }
+
+
+        private void ApplyPressureLossMap(string windowSource = "Ribbon: Карта потерь")
+        {
+            if (CriticalPath == null)
+            {
+                StatusText = "Критическая трасса не найдена. Проверьте трассировку системы.";
+                return;
+            }
+
+            var lossesByElement = new Dictionary<long, double>();
+            foreach (DuctCalculationInfo duct in CriticalPath.Ducts.Where(duct => duct.ElementId > 0))
+            {
+                lossesByElement[duct.ElementId] = lossesByElement.TryGetValue(duct.ElementId, out double current)
+                    ? current + duct.FrictionPressureLossPa
+                    : duct.FrictionPressureLossPa;
+            }
+
+            foreach (LocalResistanceCalculationInfo local in CriticalPath.LocalResistances.Where(local => local.ElementId > 0))
+            {
+                lossesByElement[local.ElementId] = lossesByElement.TryGetValue(local.ElementId, out double current)
+                    ? current + local.LocalPressureLossPa
+                    : local.LocalPressureLossPa;
+            }
+
+            double maxLoss = lossesByElement.Count == 0 ? 0 : lossesByElement.Values.Max();
+            if (maxLoss <= 0)
+            {
+                StatusText = "Карта потерь не применена: нет положительных потерь по элементам критической трассы.";
+                return;
+            }
+
+            var low = new List<long>();
+            var medium = new List<long>();
+            var high = new List<long>();
+            var maximum = new List<long>();
+            int zeroOrSkipped = 0;
+            foreach (KeyValuePair<long, double> pair in lossesByElement)
+            {
+                if (pair.Value <= 0)
+                {
+                    zeroOrSkipped++;
+                    continue;
+                }
+
+                double ratio = pair.Value / maxLoss;
+                if (ratio <= 0.25)
+                {
+                    low.Add(pair.Key);
+                }
+                else if (ratio <= 0.50)
+                {
+                    medium.Add(pair.Key);
+                }
+                else if (ratio <= 0.75)
+                {
+                    high.Add(pair.Key);
+                }
+                else
+                {
+                    maximum.Add(pair.Key);
+                }
+            }
+
+            var pressureLossGroups = new HighlightPressureLossGroupsInfo
+            {
+                Low = low.Count,
+                Medium = medium.Count,
+                High = high.Count,
+                Maximum = maximum.Count,
+                ZeroOrSkipped = zeroOrSkipped
+            };
+            HighlightState.PressureLossGroups.Low = pressureLossGroups.Low;
+            HighlightState.PressureLossGroups.Medium = pressureLossGroups.Medium;
+            HighlightState.PressureLossGroups.High = pressureLossGroups.High;
+            HighlightState.PressureLossGroups.Maximum = pressureLossGroups.Maximum;
+            HighlightState.PressureLossGroups.ZeroOrSkipped = pressureLossGroups.ZeroOrSkipped;
+            HighlightState.MaxElementPressureLossPa = maxLoss;
+            NotifyHighlightStateChanged();
+
+            var groups = new List<HighlightElementGroup>
+            {
+                CreateHighlightGroup("Низкие потери", Settings.LowPressureLossColorHex, low, 5, 20),
+                CreateHighlightGroup("Средние потери", Settings.MediumPressureLossColorHex, medium, 6, 15),
+                CreateHighlightGroup("Высокие потери", Settings.HighPressureLossColorHex, high, 7, 10),
+                CreateHighlightGroup("Максимальные потери", Settings.MaxPressureLossColorHex, maximum, 7, 0)
+            };
+
+            RequestHighlight(new HighlightRequest
+            {
+                Action = HighlightAction.Apply,
+                Mode = HighlightMode.PressureLoss,
+                SelectElements = false,
+                ShowElements = Settings.ZoomToElementOnShow,
+                WindowSource = windowSource,
+                DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
+                SystemName = SystemName,
+                PathIndex = CriticalPath.PathIndex,
+                IsCriticalPath = true,
+                HighlightedPathElementCount = lossesByElement.Count,
+                PressureLossGroups = pressureLossGroups,
+                MaxElementPressureLossPa = maxLoss,
+                StatusMessage = $"Карта потерь применена: элементов {low.Count + medium.Count + high.Count + maximum.Count}. Максимальный вклад {maxLoss:0.###} Па. Низкие: {low.Count}; средние: {medium.Count}; высокие: {high.Count}; максимальные: {maximum.Count}.",
                 Groups = groups.Where(group => group.ElementIds.Count > 0).ToList()
             });
         }
@@ -1779,7 +2311,7 @@ namespace VentCalc.UI.ViewModels
                 Action = HighlightAction.Apply,
                 Mode = HighlightMode.Issues,
                 SelectElements = false,
-                ShowElements = true,
+                ShowElements = Settings.ZoomToElementOnShow,
                 WindowSource = "VentCalcCenter",
                 DisplayMode = VentCalc.UI.Services.HighlightDisplayMode.Normal,
                 SystemName = SystemName,
@@ -1798,7 +2330,7 @@ namespace VentCalc.UI.ViewModels
             });
         }
 
-        private void ClearHighlight()
+        private void ClearHighlight(string windowSource = "VentCalc")
         {
             RequestHighlight(new HighlightRequest
             {
@@ -1806,7 +2338,7 @@ namespace VentCalc.UI.ViewModels
                 Mode = HighlightMode.None,
                 SelectElements = false,
                 ShowElements = false,
-                WindowSource = "VentCalc",
+                WindowSource = windowSource,
                 DisplayMode = HighlightDisplayMode,
                 SystemName = SystemName,
                 StatusMessage = "Подсветка VentCalc очищена."
@@ -1817,8 +2349,8 @@ namespace VentCalc.UI.ViewModels
         {
             Settings.LowVelocityColorHex = "#2196F3";
             Settings.NormalVelocityColorHex = "#4CAF50";
-            Settings.HighVelocityColorHex = "#FF9800";
-            Settings.CriticalVelocityColorHex = "#F44336";
+            Settings.HighVelocityColorHex = "#F44336";
+            Settings.CriticalVelocityColorHex = "#B71C1C";
             Settings.SelectedPathColorHex = "#00BCD4";
             Settings.CriticalPathColorHex = "#E91E63";
             Settings.IssueColorHex = "#D50000";
@@ -1919,6 +2451,9 @@ namespace VentCalc.UI.ViewModels
             OnPropertyChanged(nameof(VelocityAboveMaxCount));
             OnPropertyChanged(nameof(VelocityCriticalCount));
             OnPropertyChanged(nameof(VelocityNotCalculatedCount));
+            OnPropertyChanged(nameof(VelocityColoredDuctCount));
+            OnPropertyChanged(nameof(VelocityColoredFittingCount));
+            OnPropertyChanged(nameof(VelocityNotCalculatedFittingCount));
             OnPropertyChanged(nameof(HighlightStatusText));
         }
 
@@ -1997,6 +2532,7 @@ namespace VentCalc.UI.ViewModels
                 PathSummary = PathSummary,
                 AerodynamicSummary = AerodynamicSummary
             })));
+            RefreshFilteredIssues();
 
             OnPropertyChanged(nameof(CriticalPathText));
             OnPropertyChanged(nameof(NearCriticalPathIndexes));
@@ -2229,22 +2765,205 @@ namespace VentCalc.UI.ViewModels
             LogAction(message);
         }
 
-        private void SaveSettings()
+        public bool SaveSettingsFromWindow() => SaveSettings();
+
+        private bool SaveSettings()
         {
+            if (!ValidateVelocitySettings() || !ValidateHighlightColorSettings())
+            {
+                return false;
+            }
+
             settingsService.Save(Settings);
-            OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
-            OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
+            NotifySettingsChanged();
             StatusText = string.IsNullOrWhiteSpace(settingsService.LastWarning) ? "Настройки сохранены." : settingsService.LastWarning;
+            return string.IsNullOrWhiteSpace(settingsService.LastWarning);
         }
 
         private void ResetSettings()
         {
+            Forms.DialogResult result = Forms.MessageBox.Show(
+                "Будут восстановлены стандартные настройки VentCalc. Расчёт текущей системы будет обновлён. Продолжить?",
+                "VentCalc",
+                Forms.MessageBoxButtons.YesNo,
+                Forms.MessageBoxIcon.Question);
+
+            if (result != Forms.DialogResult.Yes)
+            {
+                return;
+            }
+
             Settings = VentCalcSettings.CreateDefault();
             settingsService.Save(Settings);
             OnPropertyChanged(nameof(Settings));
+            NotifySettingsChanged();
+            RecalculateLoadedSystemIfAvailable();
+            StatusText = "Настройки VentCalc восстановлены.";
+            LogAction(StatusText);
+        }
+
+        private void ResetSettingsSection(string section)
+        {
+            VentCalcSettings defaults = VentCalcSettings.CreateDefault();
+            switch (section)
+            {
+                case "Скорости":
+                    Settings.MinVelocityMs = defaults.MinVelocityMs;
+                    Settings.MaxVelocityMs = defaults.MaxVelocityMs;
+                    Settings.CriticalVelocityMs = defaults.CriticalVelocityMs;
+                    break;
+                case "Подсветка":
+                    Settings.LowVelocityColorHex = defaults.LowVelocityColorHex;
+                    Settings.NormalVelocityColorHex = defaults.NormalVelocityColorHex;
+                    Settings.HighVelocityColorHex = defaults.HighVelocityColorHex;
+                    Settings.CriticalVelocityColorHex = defaults.CriticalVelocityColorHex;
+                    Settings.CriticalPathColorHex = defaults.CriticalPathColorHex;
+                    Settings.IssueColorHex = defaults.IssueColorHex;
+                    Settings.LowPressureLossColorHex = defaults.LowPressureLossColorHex;
+                    Settings.MediumPressureLossColorHex = defaults.MediumPressureLossColorHex;
+                    Settings.HighPressureLossColorHex = defaults.HighPressureLossColorHex;
+                    Settings.MaxPressureLossColorHex = defaults.MaxPressureLossColorHex;
+                    Settings.ZoomToElementOnShow = defaults.ZoomToElementOnShow;
+                    break;
+                case "Интерфейс":
+                    Settings.UiDefaultTabAfterLoad = defaults.UiDefaultTabAfterLoad;
+                    Settings.RememberWindowPlacement = defaults.RememberWindowPlacement;
+                    Settings.ConfirmBulkZetaChanges = defaults.ConfirmBulkZetaChanges;
+                    break;
+                case "Трассировка":
+                    StatusText = "В этом разделе пока нет подключённых пользовательских настроек.";
+                    return;
+                default:
+                    Settings.AirDensityKgM3 = defaults.AirDensityKgM3;
+                    Settings.AirDynamicViscosityPaS = defaults.AirDynamicViscosityPaS;
+                    Settings.RoughnessMm = defaults.RoughnessMm;
+                    Settings.PressureReservePercent = defaults.PressureReservePercent;
+                    break;
+            }
+
+            if (!ValidateVelocitySettings() || !ValidateHighlightColorSettings())
+            {
+                return;
+            }
+
+            settingsService.Save(Settings);
+            NotifySettingsChanged();
+            RecalculateLoadedSystemIfAvailable();
+            StatusText = "Раздел настроек восстановлен.";
+            LogAction(StatusText);
+        }
+
+        private bool ValidateVelocitySettings()
+        {
+            if (Settings.MinVelocityMs < Settings.MaxVelocityMs && Settings.MaxVelocityMs < Settings.CriticalVelocityMs)
+            {
+                return true;
+            }
+
+            const string message = "Проверьте пороги скоростей: минимальная должна быть меньше максимальной, а максимальная меньше критической.";
+            StatusText = message;
+            showMessage?.Invoke(message);
+            return false;
+        }
+
+        private bool ValidateHighlightColorSettings()
+        {
+            string[] values =
+            {
+                Settings.LowVelocityColorHex,
+                Settings.NormalVelocityColorHex,
+                Settings.HighVelocityColorHex,
+                Settings.CriticalVelocityColorHex,
+                Settings.CriticalPathColorHex,
+                Settings.IssueColorHex
+            };
+
+            if (values.All(IsValidColorHex))
+            {
+                return true;
+            }
+
+            const string message = "Проверьте цвета подсветки: используйте HEX в формате #RRGGBB.";
+            StatusText = message;
+            showMessage?.Invoke(message);
+            return false;
+        }
+
+        private static bool IsValidColorHex(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string hex = value.Trim();
+            if (hex.StartsWith("#", StringComparison.Ordinal))
+            {
+                hex = hex.Substring(1);
+            }
+
+            return hex.Length == 6 && hex.All(Uri.IsHexDigit);
+        }
+
+        public void HighlightCriticalPathFromRibbon()
+        {
+            HighlightCriticalPath("Ribbon: Критическая трасса");
+        }
+
+        public void ToggleCriticalPathFromRibbon()
+        {
+            if (HighlightState.ActiveMode == HighlightMode.CriticalPath)
+            {
+                ClearHighlight("Ribbon: Критическая трасса");
+                return;
+            }
+
+            if (HighlightState.ActiveMode != HighlightMode.None)
+            {
+                ClearHighlight("Ribbon: Критическая трасса");
+            }
+
+            HighlightCriticalPath("Ribbon: Критическая трасса");
+        }
+
+        public void ApplyVelocityHighlightFromRibbon()
+        {
+            ApplyVelocityHighlight("Ribbon: Карта скоростей");
+        }
+
+        public void ToggleVelocityHighlightFromRibbon()
+        {
+            if (HighlightState.ActiveMode == HighlightMode.Velocity)
+            {
+                ClearHighlight("Ribbon: Карта скоростей");
+                return;
+            }
+
+            if (HighlightState.ActiveMode != HighlightMode.None)
+            {
+                ClearHighlight("Ribbon: Карта скоростей");
+            }
+
+            ApplyVelocityHighlight("Ribbon: Карта скоростей");
+        }
+
+        public void ApplyPressureLossMapFromRibbon()
+        {
+            ApplyPressureLossMap();
+        }
+
+        private void NotifySettingsChanged()
+        {
             OnPropertyChanged(nameof(SelectedPathTotalWithReservePa));
             OnPropertyChanged(nameof(CriticalPathTotalWithReservePa));
-            StatusText = "Настройки сброшены по умолчанию и сохранены.";
+        }
+
+        private void RecalculateLoadedSystemIfAvailable()
+        {
+            if (LastLoadedElementId.HasValue)
+            {
+                RequestLoadSelectedSystem(VentCalcLoadRequestMode.LastLoadedElement);
+            }
         }
 
 
@@ -2269,6 +2988,109 @@ namespace VentCalc.UI.ViewModels
             catch (Exception exception)
             {
                 StatusText = $"Не удалось сформировать отчёт: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
+        }
+
+
+        private void ExportExcel()
+        {
+            try
+            {
+                VentCalcExcelExportResult result = VentCalcExcelExportService.Export(this);
+                LastExcelExportPath = result.Path;
+                LastExcelExportSucceeded = true;
+                LastExcelExportSheetCount = result.SheetCount;
+                LastExcelExportError = string.Empty;
+                LastExcelExportCreatedAt = result.CreatedAt;
+                LastExcelExportAeroSectionRowCount = result.AeroSectionRowCount;
+                LastExcelExportAeroLocalResistanceDistributedPa = result.AeroLocalResistanceDistributedPa;
+                LastExcelExportAeroLocalResistanceTotalPa = result.AeroLocalResistanceTotalPa;
+                LastExcelExportAeroTotalPressureLossPa = result.AeroTotalPressureLossPa;
+                StatusText = $"Excel аэродинамического расчёта создан: {result.Path}";
+                LogAction(StatusText);
+                new VentCalc.UI.Views.ExcelExportResultWindow(result.Path).ShowDialog();
+            }
+            catch (Exception exception)
+            {
+                LastExcelExportSucceeded = false;
+                LastExcelExportError = exception.Message;
+                LastExcelExportSheetCount = 0;
+                LastExcelExportCreatedAt = DateTime.Now;
+                LastExcelExportAeroSectionRowCount = 0;
+                LastExcelExportAeroLocalResistanceDistributedPa = 0;
+                LastExcelExportAeroLocalResistanceTotalPa = 0;
+                LastExcelExportAeroTotalPressureLossPa = 0;
+                StatusText = exception.Message;
+                showMessage?.Invoke(exception.Message);
+                reportException?.Invoke(exception);
+            }
+        }
+
+        private void OpenSettingsFolder()
+        {
+            try
+            {
+                string? settingsDirectory = Path.GetDirectoryName(settingsService.SettingsPath);
+                if (string.IsNullOrWhiteSpace(settingsDirectory))
+                {
+                    StatusText = "Папка настроек не определена.";
+                    return;
+                }
+
+                Directory.CreateDirectory(settingsDirectory);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = settingsDirectory,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось открыть папку настроек: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
+        }
+
+        private void SelectExcelExportFolder()
+        {
+            try
+            {
+                using var dialog = new Forms.FolderBrowserDialog
+                {
+                    Description = "Выберите папку экспорта Excel VentCalc",
+                    SelectedPath = VentCalcExcelExportService.ResolveExportDirectory(Settings.ExportFolderPath),
+                    ShowNewFolderButton = true
+                };
+
+                if (dialog.ShowDialog() == Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                {
+                    Settings.ExportFolderPath = dialog.SelectedPath;
+                    StatusText = "Папка экспорта Excel выбрана. Нажмите «Применить» или «Сохранить».";
+                }
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось выбрать папку экспорта Excel: {exception.Message}";
+                reportException?.Invoke(exception);
+            }
+        }
+
+        private void OpenExcelExportFolder()
+        {
+            try
+            {
+                string exportDirectory = VentCalcExcelExportService.ResolveExportDirectory(Settings.ExportFolderPath);
+                Settings.ExportFolderPath = exportDirectory;
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = exportDirectory,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                StatusText = $"Не удалось открыть папку экспорта Excel: {exception.Message}";
                 reportException?.Invoke(exception);
             }
         }
@@ -2399,6 +3221,24 @@ namespace VentCalc.UI.ViewModels
         public string ConnectedElementIds { get; set; } = string.Empty;
 
         public string Warnings { get; set; } = string.Empty;
+    }
+
+
+    public sealed class CriticalPathDuctLengthAuditRow
+    {
+        public long ElementId { get; set; }
+
+        public string Size { get; set; } = string.Empty;
+
+        public double FlowM3h { get; set; }
+
+        public double LengthM { get; set; }
+
+        public string Source { get; set; } = string.Empty;
+
+        public bool IncludedInSection { get; set; }
+
+        public int? SectionIndex { get; set; }
     }
 
     public sealed class PathRow
@@ -2636,11 +3476,21 @@ namespace VentCalc.UI.ViewModels
         private double criticalVelocityMs = 12;
         private string lowVelocityColorHex = "#2196F3";
         private string normalVelocityColorHex = "#4CAF50";
-        private string highVelocityColorHex = "#FF9800";
-        private string criticalVelocityColorHex = "#F44336";
+        private string highVelocityColorHex = "#F44336";
+        private string criticalVelocityColorHex = "#B71C1C";
         private string selectedPathColorHex = "#00BCD4";
         private string criticalPathColorHex = "#E91E63";
         private string issueColorHex = "#D50000";
+        private int settingsSchemaVersion = 1;
+        private string uiDefaultTabAfterLoad = "Расчёт";
+        private bool rememberWindowPlacement;
+        private bool zoomToElementOnShow = true;
+        private bool confirmBulkZetaChanges = true;
+        private string lowPressureLossColorHex = "#4CAF50";
+        private string mediumPressureLossColorHex = "#FFEB3B";
+        private string highPressureLossColorHex = "#FF9800";
+        private string maxPressureLossColorHex = "#F44336";
+        private string exportFolderPath = VentCalcDiagnosticReportService.GetReportsDirectory();
 
         public double AirDensityKgM3
         {
@@ -2730,13 +3580,13 @@ namespace VentCalc.UI.ViewModels
         public string HighVelocityColorHex
         {
             get => highVelocityColorHex;
-            set => SetProperty(ref highVelocityColorHex, NormalizeColorHex(value, "#FF9800"));
+            set => SetProperty(ref highVelocityColorHex, NormalizeColorHex(value, "#F44336"));
         }
 
         public string CriticalVelocityColorHex
         {
             get => criticalVelocityColorHex;
-            set => SetProperty(ref criticalVelocityColorHex, NormalizeColorHex(value, "#F44336"));
+            set => SetProperty(ref criticalVelocityColorHex, NormalizeColorHex(value, "#B71C1C"));
         }
 
         public string SelectedPathColorHex
@@ -2757,6 +3607,66 @@ namespace VentCalc.UI.ViewModels
             set => SetProperty(ref issueColorHex, NormalizeColorHex(value, "#D50000"));
         }
 
+        public int SettingsSchemaVersion
+        {
+            get => settingsSchemaVersion;
+            set => SetProperty(ref settingsSchemaVersion, value <= 0 ? 1 : value);
+        }
+
+        public string UiDefaultTabAfterLoad
+        {
+            get => uiDefaultTabAfterLoad;
+            set => SetProperty(ref uiDefaultTabAfterLoad, NormalizeDefaultTab(value));
+        }
+
+        public bool RememberWindowPlacement
+        {
+            get => rememberWindowPlacement;
+            set => SetProperty(ref rememberWindowPlacement, value);
+        }
+
+        public bool ZoomToElementOnShow
+        {
+            get => zoomToElementOnShow;
+            set => SetProperty(ref zoomToElementOnShow, value);
+        }
+
+        public bool ConfirmBulkZetaChanges
+        {
+            get => confirmBulkZetaChanges;
+            set => SetProperty(ref confirmBulkZetaChanges, value);
+        }
+
+        public string ExportFolderPath
+        {
+            get => exportFolderPath;
+            set => SetProperty(ref exportFolderPath, string.IsNullOrWhiteSpace(value) ? VentCalcDiagnosticReportService.GetReportsDirectory() : value.Trim());
+        }
+
+        public string LowPressureLossColorHex
+        {
+            get => lowPressureLossColorHex;
+            set => SetProperty(ref lowPressureLossColorHex, NormalizeColorHex(value, "#4CAF50"));
+        }
+
+        public string MediumPressureLossColorHex
+        {
+            get => mediumPressureLossColorHex;
+            set => SetProperty(ref mediumPressureLossColorHex, NormalizeColorHex(value, "#FFEB3B"));
+        }
+
+        public string HighPressureLossColorHex
+        {
+            get => highPressureLossColorHex;
+            set => SetProperty(ref highPressureLossColorHex, NormalizeColorHex(value, "#FF9800"));
+        }
+
+        public string MaxPressureLossColorHex
+        {
+            get => maxPressureLossColorHex;
+            set => SetProperty(ref maxPressureLossColorHex, NormalizeColorHex(value, "#F44336"));
+        }
+
         public static VentCalcSettings CreateDefault()
         {
             return new VentCalcSettings();
@@ -2767,7 +3677,12 @@ namespace VentCalc.UI.ViewModels
             return double.TryParse(value?.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out parsed);
         }
 
-        private static string NormalizeColorHex(string value, string fallback)
+        private static string NormalizeDefaultTab(string? value)
+        {
+            return value == "Местные сопротивления" || value == "Проверки" ? value : "Расчёт";
+        }
+
+        private static string NormalizeColorHex(string? value, string fallback)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
@@ -2775,7 +3690,24 @@ namespace VentCalc.UI.ViewModels
             }
 
             string trimmed = value.Trim();
-            return trimmed.StartsWith("#", StringComparison.Ordinal) ? trimmed : $"#{trimmed}";
+            string normalized = trimmed.StartsWith("#", StringComparison.Ordinal) ? trimmed : $"#{trimmed}";
+            return IsValidSettingsColorHex(normalized) ? normalized.ToUpperInvariant() : fallback;
+        }
+
+        private static bool IsValidSettingsColorHex(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string hex = value.Trim();
+            if (hex.StartsWith("#", StringComparison.Ordinal))
+            {
+                hex = hex.Substring(1);
+            }
+
+            return hex.Length == 6 && hex.All(Uri.IsHexDigit);
         }
 
         public AerodynamicSettings ToAerodynamicSettings()

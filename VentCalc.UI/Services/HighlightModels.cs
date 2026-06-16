@@ -10,7 +10,8 @@ namespace VentCalc.UI.Services
         SelectedPath = 1,
         CriticalPath = 2,
         Velocity = 3,
-        Issues = 4
+        Issues = 4,
+        PressureLoss = 5
     }
 
     public enum HighlightAction
@@ -70,6 +71,12 @@ namespace VentCalc.UI.Services
 
         public List<HighlightElementGroup> Groups { get; set; } = new List<HighlightElementGroup>();
 
+        public HighlightPressureLossGroupsInfo PressureLossGroups { get; set; } = new HighlightPressureLossGroupsInfo();
+
+        public HighlightVelocityGroupsInfo VelocityGroups { get; set; } = new HighlightVelocityGroupsInfo();
+
+        public double MaxElementPressureLossPa { get; set; }
+
         public int RequestedElementCount => Groups.SelectMany(group => group.ElementIds).Distinct().Count();
     }
 
@@ -125,6 +132,12 @@ namespace VentCalc.UI.Services
 
         public List<string> Errors { get; set; } = new List<string>();
 
+        public HighlightPressureLossGroupsInfo PressureLossGroups { get; set; } = new HighlightPressureLossGroupsInfo();
+
+        public HighlightVelocityGroupsInfo VelocityGroups { get; set; } = new HighlightVelocityGroupsInfo();
+
+        public double MaxElementPressureLossPa { get; set; }
+
         public bool ApplySucceeded => FailedElementCount == 0 && (RequestedElementCount == 0 || HighlightedElementCount > 0 || ActiveMode == HighlightMode.None);
 
         public bool ClearSucceeded => FailedElementCount == 0;
@@ -143,6 +156,29 @@ namespace VentCalc.UI.Services
         public int Critical { get; set; }
 
         public int NotCalculated { get; set; }
+
+        public int ColoredDuctCount { get; set; }
+
+        public int NotCalculatedDuctCount { get; set; }
+
+        public string Scope { get; set; } = string.Empty;
+
+        public int ColoredFittingCount { get; set; }
+
+        public int NotCalculatedFittingCount { get; set; }
+    }
+
+    public sealed class HighlightPressureLossGroupsInfo
+    {
+        public int Low { get; set; }
+
+        public int Medium { get; set; }
+
+        public int High { get; set; }
+
+        public int Maximum { get; set; }
+
+        public int ZeroOrSkipped { get; set; }
     }
 
     public sealed class HighlightStateInfo
@@ -194,6 +230,10 @@ namespace VentCalc.UI.Services
         public bool LastClearSucceeded { get; set; } = true;
 
         public HighlightVelocityGroupsInfo VelocityGroups { get; set; } = new HighlightVelocityGroupsInfo();
+
+        public HighlightPressureLossGroupsInfo PressureLossGroups { get; set; } = new HighlightPressureLossGroupsInfo();
+
+        public double MaxElementPressureLossPa { get; set; }
 
         public int IssueElementCount { get; set; }
 

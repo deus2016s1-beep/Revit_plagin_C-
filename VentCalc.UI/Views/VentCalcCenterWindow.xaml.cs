@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using VentCalc.Core.Models;
 using VentCalc.UI.ViewModels;
 
@@ -14,8 +16,40 @@ namespace VentCalc.UI.Views
         {
             InitializeComponent();
             DataContext = viewModel;
+            viewModel.PropertyChanged += ViewModel_PropertyChanged;
         }
 
+        private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(VentCalcCenterViewModel.StatusText) ||
+                DataContext is not VentCalcCenterViewModel { StatusText: "Система загружена." })
+            {
+                return;
+            }
+
+            Dispatcher.BeginInvoke(SelectDefaultTabAfterLoad, DispatcherPriority.Background);
+        }
+
+        public void SelectMainTab(string header)
+        {
+            foreach (TabItem tab in MainTabs.Items.OfType<TabItem>())
+            {
+                if (tab.Header?.ToString() == header)
+                {
+                    MainTabs.SelectedItem = tab;
+                    return;
+                }
+            }
+        }
+
+        private void SelectDefaultTabAfterLoad()
+        {
+            string targetHeader = DataContext is VentCalcCenterViewModel viewModel
+                ? viewModel.Settings.UiDefaultTabAfterLoad
+                : "Расчёт";
+
+            SelectMainTab(targetHeader);
+        }
 
         private void LocalResistancesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
