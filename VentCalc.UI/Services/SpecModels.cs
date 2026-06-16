@@ -164,7 +164,29 @@ namespace VentCalc.UI.Services
         public string DuctQuantityMode { get; set; } = "Площадь, м²";
         public List<SpecColumnLayout> Columns { get; set; } = new List<SpecColumnLayout>();
         public Dictionary<string, List<SpecColumnLayout>> ProfileColumns { get; set; } = new Dictionary<string, List<SpecColumnLayout>>();
+        public List<SpecTextRule> TextRules { get; set; } = new List<SpecTextRule>();
+        public string SelectedTextRuleGroup { get; set; } = "Все";
         public List<SpecNameRule> NameRules { get; set; } = new List<SpecNameRule>();
+    }
+
+
+    public sealed class SpecTextRule
+    {
+        public string RuleId { get; set; } = Guid.NewGuid().ToString("N");
+        public string Group { get; set; } = "Все";
+        public string Field { get; set; } = "Наименование";
+        public string Action { get; set; } = "Заменить текст";
+        public string FindText { get; set; } = string.Empty;
+        public string ReplaceText { get; set; } = string.Empty;
+        public string AddText { get; set; } = string.Empty;
+        public bool Enabled { get; set; } = true;
+        public int Order { get; set; }
+    }
+
+    public sealed class SpecTextRulePreviewRow
+    {
+        public string Before { get; set; } = string.Empty;
+        public string After { get; set; } = string.Empty;
     }
 
     public sealed class SpecNameRule : INotifyPropertyChanged

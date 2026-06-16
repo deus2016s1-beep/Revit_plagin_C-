@@ -30,6 +30,12 @@ namespace VentCalc.UI.ViewModels
         private string searchText = string.Empty;
         private bool onlyProblems;
         private string selectedRuleScope = "Type";
+        private string selectedTextRuleGroup = "Все";
+        private string selectedTextRuleField = "Наименование";
+        private string selectedTextRuleAction = "Заменить текст";
+        private string textRuleFindText = string.Empty;
+        private string textRuleReplaceText = string.Empty;
+        private string textRuleAddText = string.Empty;
         private string selectedExcelProfile;
 
         public SpecCenterViewModel(Action<SpecCenterViewModel>? requestCollectVentilation, Action<IEnumerable<long>>? selectElementsInRevit, Action<string>? showMessage, SpecRuleService? ruleService = null, Action<SpecCenterViewModel, IReadOnlyList<SpecItemRow>>? requestWriteAdsk = null)
@@ -43,6 +49,8 @@ namespace VentCalc.UI.ViewModels
             selectedExcelProfile = settings.SelectedExcelProfile;
             foreach (SpecColumnLayout column in GetProfileColumns(selectedExcelProfile)) ColumnLayouts.Add(column);
             foreach (SpecNameRule rule in settings.NameRules) NameRules.Add(rule);
+            selectedTextRuleGroup = string.IsNullOrWhiteSpace(settings.SelectedTextRuleGroup) ? "Все" : settings.SelectedTextRuleGroup;
+            foreach (SpecTextRule rule in settings.TextRules) TextRules.Add(rule);
             RefreshColumnLists();
 
             CollectVentilationCommand = new RelayCommand(_ => SafeExecute(CollectVentilation));
@@ -61,9 +69,12 @@ namespace VentCalc.UI.ViewModels
             SaveSettingsCommand = new RelayCommand(_ => SafeExecute(SaveSettings));
             AddColumnCommand = new RelayCommand(_ => SafeExecute(AddColumn), _ => SelectedAvailableColumn != null);
             RemoveColumnCommand = new RelayCommand(_ => SafeExecute(RemoveColumn), _ => SelectedActiveColumn != null);
-            MoveColumnUpCommand = new RelayCommand(_ => SafeExecute(() => MoveColumn(-1)), _ => SelectedActiveColumn != null);
-            MoveColumnDownCommand = new RelayCommand(_ => SafeExecute(() => MoveColumn(1)), _ => SelectedActiveColumn != null);
+            MoveColumnUpCommand = new RelayCommand(_ => SafeExecute(() => MoveColumn(-1)), _ => CanMoveSelectedColumn(-1));
+            MoveColumnDownCommand = new RelayCommand(_ => SafeExecute(() => MoveColumn(1)), _ => CanMoveSelectedColumn(1));
             ResetColumnProfileCommand = new RelayCommand(_ => SafeExecute(ResetColumnProfile));
+            PreviewTextRuleCommand = new RelayCommand(_ => SafeExecute(PreviewTextRule));
+            ApplyTextRuleCommand = new RelayCommand(_ => SafeExecute(ApplyTextRule));
+            SaveTextRuleCommand = new RelayCommand(_ => SafeExecute(SaveTextRule));
         }
 
         public ObservableCollection<SpecItemRow> RawRows { get; } = new ObservableCollection<SpecItemRow>();
@@ -83,12 +94,17 @@ namespace VentCalc.UI.ViewModels
         public IReadOnlyList<string> ExcelProfiles { get; } = SpecCalcSettingsService.VisibleExportProfiles;
         public IReadOnlyList<string> DuctQuantityModeOptions { get; } = new[] { "Площадь, м²", "Длина, м", "Площадь и длина" };
         public ObservableCollection<SpecNameRule> NameRules { get; } = new ObservableCollection<SpecNameRule>();
+        public ObservableCollection<SpecTextRule> TextRules { get; } = new ObservableCollection<SpecTextRule>();
+        public ObservableCollection<SpecTextRulePreviewRow> TextRulePreviewRows { get; } = new ObservableCollection<SpecTextRulePreviewRow>();
         public IReadOnlyList<string> FormatOptions { get; } = new[] { "Текст", "Целое число", "0.00", "0.000", "м", "м²", "шт", "Изображение" };
+        public IReadOnlyList<string> TextRuleGroupOptions { get; } = new[] { "Все", "Воздуховоды", "Гибкие воздуховоды", "Фасонные части", "Врезки", "Отводы", "Переходы", "Тройники", "Заглушки", "Воздухораспределители", "Клапаны", "Зонты", "Оборудование" };
+        public IReadOnlyList<string> TextRuleFieldOptions { get; } = new[] { "Наименование", "Размер", "Тип / марка", "Примечание" };
+        public IReadOnlyList<string> TextRuleActionOptions { get; } = new[] { "Заменить текст", "Удалить текст", "Добавить в начало", "Добавить в конец", "Убрать размер из наименования", "Нормализовать Ø", "Убрать повтор размера" };
 
         public SpecGroupRow? SelectedSpecRow { get => selectedSpecRow; set => SetProperty(ref selectedSpecRow, value); }
         public SpecItemRow? SelectedRawRow { get => selectedRawRow; set => SetProperty(ref selectedRawRow, value); }
         public SpecColumnLayout? SelectedAvailableColumn { get => selectedAvailableColumn; set => SetProperty(ref selectedAvailableColumn, value); }
-        public SpecColumnLayout? SelectedActiveColumn { get => selectedActiveColumn; set => SetProperty(ref selectedActiveColumn, value); }
+        public SpecColumnLayout? SelectedActiveColumn { get => selectedActiveColumn; set { if (SetProperty(ref selectedActiveColumn, value)) { OnPropertyChanged(nameof(CanMoveSelectedColumnUp)); OnPropertyChanged(nameof(CanMoveSelectedColumnDown)); } } }
         public string StatusText { get => statusText; private set => SetProperty(ref statusText, value); }
         public string LastExcelExportPath { get => lastExcelExportPath; private set => SetProperty(ref lastExcelExportPath, value); }
         public string RulesPath => ruleService.RulesPath;
@@ -99,7 +115,15 @@ namespace VentCalc.UI.ViewModels
         public string SearchText { get => searchText; set { if (SetProperty(ref searchText, value)) RefreshFilters(); } }
         public string SelectedRuleScope { get => selectedRuleScope; set => SetProperty(ref selectedRuleScope, string.IsNullOrWhiteSpace(value) ? "Type" : value); }
         public string SelectedExcelProfile { get => selectedExcelProfile; set { if (!string.IsNullOrWhiteSpace(value) && selectedExcelProfile != value) SafeExecute(() => SwitchProfile(value)); } }
+        public bool CanMoveSelectedColumnUp => CanMoveSelectedColumn(-1);
+        public bool CanMoveSelectedColumnDown => CanMoveSelectedColumn(1);
         public string DuctQuantityMode { get => settings.DuctQuantityMode; set { if (!string.IsNullOrWhiteSpace(value) && settings.DuctQuantityMode != value) { settings.DuctQuantityMode = value; OnPropertyChanged(); RebuildSpecRows(); SafeExecute(SaveSettings); } } }
+        public string SelectedTextRuleGroup { get => selectedTextRuleGroup; set => SetProperty(ref selectedTextRuleGroup, string.IsNullOrWhiteSpace(value) ? "Все" : value); }
+        public string SelectedTextRuleField { get => selectedTextRuleField; set => SetProperty(ref selectedTextRuleField, string.IsNullOrWhiteSpace(value) ? "Наименование" : value); }
+        public string SelectedTextRuleAction { get => selectedTextRuleAction; set => SetProperty(ref selectedTextRuleAction, string.IsNullOrWhiteSpace(value) ? "Заменить текст" : value); }
+        public string TextRuleFindText { get => textRuleFindText; set => SetProperty(ref textRuleFindText, value ?? string.Empty); }
+        public string TextRuleReplaceText { get => textRuleReplaceText; set => SetProperty(ref textRuleReplaceText, value ?? string.Empty); }
+        public string TextRuleAddText { get => textRuleAddText; set => SetProperty(ref textRuleAddText, value ?? string.Empty); }
 
         public int TotalCount => RawRows.Count;
         public int GroupCount => SpecRows.Count;
@@ -130,11 +154,14 @@ namespace VentCalc.UI.ViewModels
         public ICommand MoveColumnUpCommand { get; }
         public ICommand MoveColumnDownCommand { get; }
         public ICommand ResetColumnProfileCommand { get; }
+        public ICommand PreviewTextRuleCommand { get; }
+        public ICommand ApplyTextRuleCommand { get; }
+        public ICommand SaveTextRuleCommand { get; }
 
         public void ApplyCollectedRows(IReadOnlyList<SpecItemRow> rows)
         {
             Replace(RawRows, rows.ToList());
-            Replace(SpecRows, SpecGroupingService.Group(RawRows, ColumnLayouts, settings).ToList());
+            Replace(SpecRows, BuildSpecRows());
             RefreshFilters();
             SelectedSpecRow = FilteredSpecRows.FirstOrDefault();
             StatusText = $"Собрано элементов: {RawRows.Count}. Строк спецификации: {SpecRows.Count}. OK: {OkCount}; Warning: {WarningCount}; Error: {ErrorCount}.";
@@ -198,7 +225,7 @@ namespace VentCalc.UI.ViewModels
                 });
             }
             ruleService.SaveRules(rawRows, window.RuleScope);
-            Replace(SpecRows, SpecGroupingService.Group(RawRows, ColumnLayouts, settings).ToList());
+            Replace(SpecRows, BuildSpecRows());
             RefreshFilters();
             StatusText = $"Массовое правило сохранено: {rawRows.Count} элементов. Файл: {ruleService.RulesPath}";
         }
@@ -247,7 +274,7 @@ namespace VentCalc.UI.ViewModels
             if (rowsToSave.Count == 0) rowsToSave = SelectedSpecRow != null ? SelectedSpecRow.SourceItems.ToList() : SelectedRawRow != null ? new List<SpecItemRow> { SelectedRawRow } : new List<SpecItemRow>();
             if (rowsToSave.Count == 0) { showMessage?.Invoke("Нет строк для сохранения правил."); return; }
             ruleService.SaveRules(rowsToSave, SelectedRuleScope);
-            Replace(SpecRows, SpecGroupingService.Group(RawRows, ColumnLayouts, settings).ToList());
+            Replace(SpecRows, BuildSpecRows());
             RefreshFilters();
             StatusText = $"Правила сохранены: {rowsToSave.Count}. Область: {SelectedRuleScope}. Файл: {ruleService.RulesPath}";
         }
@@ -286,6 +313,8 @@ namespace VentCalc.UI.ViewModels
                 settings.Columns = ColumnLayouts.OrderBy(column => column.Order).Select(SpecCalcSettingsService.CloneColumn).ToList();
                 settings.SelectedExcelProfile = SelectedExcelProfile;
                 settings.NameRules = NameRules.ToList();
+                settings.TextRules = TextRules.ToList();
+                settings.SelectedTextRuleGroup = SelectedTextRuleGroup;
                 settings.DuctQuantityMode = DuctQuantityMode;
                 settingsService.Save(settings);
                 RefreshColumnLists();
@@ -301,6 +330,36 @@ namespace VentCalc.UI.ViewModels
         public void UpdateSelectedSpecRows(IEnumerable<SpecGroupRow> rows)
         {
             Replace(SelectedSpecRows, rows.ToList());
+        }
+
+
+        public void ActivateColumn(SpecColumnLayout? column)
+        {
+            if (column == null) return;
+            SelectedAvailableColumn = column;
+            AddColumn();
+            SelectedActiveColumn = column;
+        }
+
+        public void DeactivateColumn(SpecColumnLayout? column)
+        {
+            if (column == null) return;
+            SelectedActiveColumn = column;
+            RemoveColumn();
+        }
+
+        public void MoveColumnBefore(SpecColumnLayout? moved, SpecColumnLayout? target)
+        {
+            if (moved == null || ReferenceEquals(moved, target)) return;
+            List<SpecColumnLayout> active = ActiveColumns.OrderBy(column => column.Order).ToList();
+            active.Remove(moved);
+            int targetIndex = target == null ? active.Count : active.IndexOf(target);
+            if (targetIndex < 0) targetIndex = active.Count;
+            active.Insert(targetIndex, moved);
+            for (int i = 0; i < active.Count; i++) active[i].Order = i + 1;
+            SaveSettings();
+            RefreshColumnLists();
+            SelectedActiveColumn = moved;
         }
 
         private void AddColumn()
@@ -330,16 +389,27 @@ namespace VentCalc.UI.ViewModels
             RebuildSpecRows();
         }
 
-        private void MoveColumn(int delta)
+        private bool CanMoveSelectedColumn(int delta)
         {
-            if (SelectedActiveColumn == null) return;
+            if (SelectedActiveColumn == null) return false;
             List<SpecColumnLayout> active = ActiveColumns.OrderBy(column => column.Order).ToList();
             int index = active.IndexOf(SelectedActiveColumn);
+            int target = index + delta;
+            return index >= 0 && target >= 0 && target < active.Count;
+        }
+
+        private void MoveColumn(int delta)
+        {
+            SpecColumnLayout? moved = SelectedActiveColumn;
+            if (moved == null) return;
+            List<SpecColumnLayout> active = ActiveColumns.OrderBy(column => column.Order).ToList();
+            int index = active.IndexOf(moved);
             int target = index + delta;
             if (index < 0 || target < 0 || target >= active.Count) return;
             (active[index].Order, active[target].Order) = (active[target].Order, active[index].Order);
             SaveSettings();
-            SelectedActiveColumn = active[target];
+            RefreshColumnLists();
+            SelectedActiveColumn = moved;
         }
 
         private void SwitchProfile(string profile)
@@ -379,8 +449,56 @@ namespace VentCalc.UI.ViewModels
 
         private void RebuildSpecRows()
         {
-            Replace(SpecRows, SpecGroupingService.Group(RawRows, ColumnLayouts, settings).ToList());
+            Replace(SpecRows, BuildSpecRows());
             RefreshFilters();
+        }
+
+
+        private List<SpecGroupRow> BuildSpecRows()
+        {
+            List<SpecGroupRow> rows = SpecGroupingService.Group(RawRows, ColumnLayouts, settings).ToList();
+            SpecTextRuleService.ApplyRules(rows, TextRules);
+            return rows;
+        }
+
+        private SpecTextRule BuildCurrentTextRule()
+        {
+            return new SpecTextRule
+            {
+                Group = SelectedTextRuleGroup,
+                Field = SelectedTextRuleField,
+                Action = SelectedTextRuleAction,
+                FindText = TextRuleFindText,
+                ReplaceText = TextRuleReplaceText,
+                AddText = TextRuleAddText,
+                Enabled = true,
+                Order = TextRules.Count + 1
+            };
+        }
+
+        private void PreviewTextRule()
+        {
+            Replace(TextRulePreviewRows, SpecTextRuleService.Preview(SpecRows, BuildCurrentTextRule()).ToList());
+        }
+
+        private void ApplyTextRule()
+        {
+            SpecTextRule rule = BuildCurrentTextRule();
+            int affected = SpecRows.Count(row => rule.Group == "Все" || row.Group == rule.Group);
+            if (affected > 0 && MessageBox.Show($"Правило затронет строк: {affected}. Применить?", "SpecCalc", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            TextRules.Add(rule);
+            SpecTextRuleService.ApplyRules(SpecRows, new[] { rule });
+            RefreshFilters();
+            SaveSettings();
+            PreviewTextRule();
+            StatusText = $"Правило наименований применено: {affected} строк.";
+        }
+
+        private void SaveTextRule()
+        {
+            TextRules.Add(BuildCurrentTextRule());
+            SaveSettings();
+            StatusText = $"Правило наименований сохранено: {settingsService.SettingsPath}";
         }
 
         private void RefreshFilters()

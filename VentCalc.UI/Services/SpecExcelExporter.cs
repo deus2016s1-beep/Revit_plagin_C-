@@ -380,7 +380,7 @@ namespace VentCalc.UI.Services
                 drawingRels.Append($"<Relationship Id=\"rId{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{mediaName}\"/>");
                 int col = images[i].Column - 1;
                 int row = images[i].Row - 1;
-                drawing.Append($"<xdr:oneCellAnchor><xdr:from><xdr:col>{col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx=\"914400\" cy=\"914400\"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"{i + 1}\" name=\"Spec image {i + 1}\"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" r:embed=\"rId{i + 1}\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>");
+                drawing.Append($"<xdr:oneCellAnchor><xdr:from><xdr:col>{col}</xdr:col><xdr:colOff>90000</xdr:colOff><xdr:row>{row}</xdr:row><xdr:rowOff>90000</xdr:rowOff></xdr:from><xdr:ext cx=\"914400\" cy=\"914400\"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"{i + 1}\" name=\"Spec image {i + 1}\"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" r:embed=\"rId{i + 1}\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>");
             }
             drawing.Append("</xdr:wsDr>");
             drawingRels.Append("</Relationships>");

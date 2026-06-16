@@ -8,7 +8,7 @@
             <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center" Focusable="False" />
         </DataTemplate>
         <DataTemplate x:Key="ColumnCardTemplate">
-            <Border BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6" Background="#FAFAFA">
+            <Border BorderBrush="#9CC7F0" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6" Background="#E8F3FF">
                 <StackPanel>
                     <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
                     <WrapPanel Margin="0,4,0,0">
@@ -17,6 +17,15 @@
                         <TextBlock Text="Групп." FontSize="10" Background="#FFF4D6" Padding="4,1" Margin="0,0,4,0" />
                         <TextBlock Text="{Binding Format}" FontSize="10" Foreground="#666" />
                     </WrapPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="AvailableColumnCardTemplate">
+            <Border BorderBrush="#D1D5DB" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6" Background="#F3F4F6">
+                <StackPanel>
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Format}" FontSize="10" Foreground="#777" Margin="0,4,0,0" />
                 </StackPanel>
             </Border>
         </DataTemplate>
@@ -62,7 +71,7 @@
                             </WrapPanel>
                         </Expander>
                     </StackPanel>
-                    <DataGrid x:Name="SpecRowsGrid" ItemsSource="{Binding FilteredSpecRows}" SelectedItem="{Binding SelectedSpecRow, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True" SelectionChanged="SpecRowsGrid_SelectionChanged" />
+                    <DataGrid x:Name="SpecRowsGrid" ItemsSource="{Binding FilteredSpecRows}" SelectedItem="{Binding SelectedSpecRow, Mode=TwoWay}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True" SelectionChanged="SpecRowsGrid_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" />
                 </DockPanel>
             </TabItem>
             <TabItem Header="Конструктор">
@@ -80,6 +89,35 @@
                                 <ComboBox ItemsSource="{Binding DuctQuantityModeOptions}" SelectedItem="{Binding DuctQuantityMode, Mode=TwoWay}" Width="170" />
                             </WrapPanel>
                         </Expander>
+                        <Expander Header="Правила наименований" IsExpanded="False" Margin="0,6,0,0">
+                            <StackPanel Margin="0,6,0,0">
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="Группа:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                                    <ComboBox ItemsSource="{Binding TextRuleGroupOptions}" SelectedItem="{Binding SelectedTextRuleGroup, Mode=TwoWay}" Width="155" Margin="0,0,8,0" />
+                                    <TextBlock Text="Поле:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                                    <ComboBox ItemsSource="{Binding TextRuleFieldOptions}" SelectedItem="{Binding SelectedTextRuleField, Mode=TwoWay}" Width="130" Margin="0,0,8,0" />
+                                    <TextBlock Text="Действие:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                                    <ComboBox ItemsSource="{Binding TextRuleActionOptions}" SelectedItem="{Binding SelectedTextRuleAction, Mode=TwoWay}" Width="190" />
+                                </WrapPanel>
+                                <WrapPanel Margin="0,0,0,6">
+                                    <TextBlock Text="Что найти:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <TextBox Text="{Binding TextRuleFindText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" Margin="0,0,8,0" />
+                                    <TextBlock Text="На что заменить:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <TextBox Text="{Binding TextRuleReplaceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" Margin="0,0,8,0" />
+                                    <TextBlock Text="Текст:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <TextBox Text="{Binding TextRuleAddText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" Margin="0,0,8,0" />
+                                    <Button Content="Предпросмотр правила" Command="{Binding PreviewTextRuleCommand}" Padding="8,4" Margin="0,0,6,0" />
+                                    <Button Content="Применить правило" Command="{Binding ApplyTextRuleCommand}" Padding="8,4" Margin="0,0,6,0" />
+                                    <Button Content="Сохранить правило" Command="{Binding SaveTextRuleCommand}" Padding="8,4" />
+                                </WrapPanel>
+                                <DataGrid ItemsSource="{Binding TextRulePreviewRows}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" MaxHeight="120">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Было" Binding="{Binding Before}" Width="*" />
+                                        <DataGridTextColumn Header="Стало" Binding="{Binding After}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                     <Grid>
                         <Grid.RowDefinitions>
@@ -96,17 +134,17 @@
                             </Grid.ColumnDefinitions>
                             <DockPanel Grid.Column="0" Margin="0,0,8,0">
                                 <TextBlock DockPanel.Dock="Top" Text="Доступные поля" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <ListBox ItemsSource="{Binding AvailableColumns}" SelectedItem="{Binding SelectedAvailableColumn, Mode=TwoWay}" DisplayMemberPath="Header" />
+                                <ListBox x:Name="AvailableColumnsList" ItemsSource="{Binding AvailableColumns}" SelectedItem="{Binding SelectedAvailableColumn, Mode=TwoWay}" ItemTemplate="{StaticResource AvailableColumnCardTemplate}" AllowDrop="True" PreviewMouseMove="ColumnList_PreviewMouseMove" Drop="AvailableColumnsList_Drop" DragOver="ColumnList_DragOver" />
                             </DockPanel>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
                                 <Button Content="Добавить →" Command="{Binding AddColumnCommand}" Margin="0,0,0,6" />
                                 <Button Content="← Убрать" Command="{Binding RemoveColumnCommand}" Margin="0,0,0,18" />
-                                <Button Content="↑ Выше" Command="{Binding MoveColumnUpCommand}" Margin="0,0,0,6" />
-                                <Button Content="↓ Ниже" Command="{Binding MoveColumnDownCommand}" />
+                                <Button Content="↑ Выше" Command="{Binding MoveColumnUpCommand}" IsEnabled="{Binding CanMoveSelectedColumnUp}" Margin="0,0,0,6" />
+                                <Button Content="↓ Ниже" Command="{Binding MoveColumnDownCommand}" IsEnabled="{Binding CanMoveSelectedColumnDown}" />
                             </StackPanel>
                             <DockPanel Grid.Column="2" Margin="0,0,8,0">
                                 <TextBlock DockPanel.Dock="Top" Text="Колонки этой выгрузки" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <ListBox ItemsSource="{Binding ActiveColumns}" SelectedItem="{Binding SelectedActiveColumn, Mode=TwoWay}" ItemTemplate="{StaticResource ColumnCardTemplate}" />
+                                <ListBox x:Name="ActiveColumnsList" ItemsSource="{Binding ActiveColumns}" SelectedItem="{Binding SelectedActiveColumn, Mode=TwoWay}" ItemTemplate="{StaticResource ColumnCardTemplate}" AllowDrop="True" PreviewMouseMove="ColumnList_PreviewMouseMove" Drop="ActiveColumnsList_Drop" DragOver="ColumnList_DragOver" />
                             </DockPanel>
                             <Border Grid.Column="3" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="4" Padding="10" DataContext="{Binding SelectedActiveColumn}">
                                 <Grid>

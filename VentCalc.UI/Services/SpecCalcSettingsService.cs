@@ -94,6 +94,7 @@ namespace VentCalc.UI.Services
             if (settings.DuctQuantityMode != "Площадь, м²" && settings.DuctQuantityMode != "Длина, м" && settings.DuctQuantityMode != "Площадь и длина") settings.DuctQuantityMode = "Площадь, м²";
             settings.ProfileColumns ??= new Dictionary<string, List<SpecColumnLayout>>();
             EnsureProfileColumns(settings, hadStoredColumns);
+            settings.TextRules ??= new List<SpecTextRule>();
             settings.NameRules ??= new List<SpecNameRule>();
             EnsureNameRules(settings);
         }
