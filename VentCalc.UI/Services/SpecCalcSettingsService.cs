@@ -88,6 +88,43 @@ namespace VentCalc.UI.Services
 
             settings.Columns = settings.Columns.OrderBy(column => column.Order).ToList();
             if (string.IsNullOrWhiteSpace(settings.SelectedExcelProfile)) settings.SelectedExcelProfile = "Проектная спецификация";
+            if (!new[] { "Рабочий Excel", "Проектная спецификация", "Визуальная спецификация", "Ведомость А3", "Монтажная ведомость", "Закупка" }.Contains(settings.SelectedExcelProfile)) settings.SelectedExcelProfile = "Проектная спецификация";
+            if (string.IsNullOrWhiteSpace(settings.DuctQuantityMode)) settings.DuctQuantityMode = "Площадь, м²";
+            if (settings.DuctQuantityMode != "Площадь, м²" && settings.DuctQuantityMode != "Длина, м" && settings.DuctQuantityMode != "Площадь и длина") settings.DuctQuantityMode = "Площадь, м²";
+            settings.NameRules ??= new List<SpecNameRule>();
+            EnsureNameRules(settings);
+        }
+
+        public static IReadOnlyList<SpecNameRule> CreateDefaultNameRules()
+        {
+            return new[]
+            {
+                Rule("Воздуховоды", "Воздуховод {форма} из оцинкованной стали", "{размер}", string.Empty),
+                Rule("Гибкие воздуховоды", "Гибкий воздуховод", "{размер}", "м"),
+                Rule("Фасонные части", "{тип}", "{размер_чистый}", "шт"),
+                Rule("Врезки", "Врезка", "{размер_чистый}", "шт"),
+                Rule("Отводы", "Отвод {угол}°", "{размер_чистый}", "шт"),
+                Rule("Переходы", "Переход", "{размер_чистый}", "шт"),
+                Rule("Тройники", "Тройник", "{размер_чистый}", "шт"),
+                Rule("Заглушки", "Заглушка", "{размер_чистый}", "шт"),
+                Rule("Воздухораспределители", "Решётка вентиляционная", "{размер}", "шт"),
+                Rule("Клапаны", "Клапан", "{размер}", "шт"),
+                Rule("Зонты", "Зонт вытяжной", "{размер}", "шт"),
+                Rule("Оборудование", "{тип}", "{размер}", "шт")
+            };
+        }
+
+        private static void EnsureNameRules(SpecCalcSettings settings)
+        {
+            foreach (SpecNameRule rule in CreateDefaultNameRules())
+            {
+                if (!settings.NameRules.Any(existing => string.Equals(existing.Group, rule.Group, StringComparison.OrdinalIgnoreCase))) settings.NameRules.Add(rule);
+            }
+        }
+
+        private static SpecNameRule Rule(string group, string nameTemplate, string sizeTemplate, string unit)
+        {
+            return new SpecNameRule { Group = group, NameTemplate = nameTemplate, SizeTemplate = sizeTemplate, Unit = unit, Enabled = true };
         }
 
         private void TryMoveBadSettingsFile()

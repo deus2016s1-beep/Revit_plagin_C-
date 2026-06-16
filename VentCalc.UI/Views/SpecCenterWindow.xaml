@@ -26,8 +26,8 @@
                             <Button Content="Изменить выбранные" Command="{Binding BulkEditCommand}" Padding="12,5" Margin="0,0,6,0" />
                             <Button Content="Экспорт Excel" Command="{Binding ExportExcelCommand}" Padding="12,5" Margin="0,0,6,0" />
                             <Button Content="Показать в модели" Command="{Binding ShowSelectedElementCommand}" Padding="12,5" Margin="0,0,10,0" />
-                            <TextBlock Text="Профиль Excel:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
-                            <ComboBox ItemsSource="{Binding ExcelProfiles}" SelectedItem="{Binding SelectedExcelProfile, Mode=TwoWay}" Width="190" />
+                            <TextBlock Text="Тип выгрузки:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
+                            <ComboBox ItemsSource="{Binding ExcelProfiles}" SelectedItem="{Binding SelectedExcelProfile, Mode=TwoWay}" Width="210" />
                         </WrapPanel>
                         <WrapPanel Margin="0,0,0,6">
                             <TextBlock Text="Раздел:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,4,0" />
@@ -60,7 +60,26 @@
             </TabItem>
             <TabItem Header="Конструктор">
                 <DockPanel Margin="6">
-                    <Button DockPanel.Dock="Top" Content="Сохранить настройки конструктора" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left" Padding="10,5" Margin="0,0,0,6" />
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <WrapPanel Margin="0,0,0,6">
+                            <Button Content="Сохранить настройки конструктора" Command="{Binding SaveSettingsCommand}" Padding="10,5" Margin="0,0,8,0" />
+                            <Button Content="Сбросить профиль" Command="{Binding ResetColumnProfileCommand}" Padding="10,5" Margin="0,0,8,0" />
+                            <TextBlock Text="Количество воздуховодов считать как:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="10,0,4,0" />
+                            <ComboBox ItemsSource="{Binding DuctQuantityModeOptions}" SelectedItem="{Binding DuctQuantityMode, Mode=TwoWay}" Width="160" />
+                        </WrapPanel>
+                        <Expander Header="Наименования" IsExpanded="False">
+                            <DataGrid ItemsSource="{Binding NameRules}" AutoGenerateColumns="False" CanUserAddRows="False" MaxHeight="170" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridCheckBoxColumn Header="Вкл." Binding="{Binding Enabled, Mode=TwoWay}" Width="45" />
+                                    <DataGridTextColumn Header="Группа" Binding="{Binding Group, Mode=TwoWay}" Width="150" />
+                                    <DataGridTextColumn Header="Шаблон наименования" Binding="{Binding NameTemplate, Mode=TwoWay}" Width="240" />
+                                    <DataGridTextColumn Header="Шаблон размера" Binding="{Binding SizeTemplate, Mode=TwoWay}" Width="150" />
+                                    <DataGridTextColumn Header="Ед. изм." Binding="{Binding Unit, Mode=TwoWay}" Width="80" />
+                                    <DataGridTextColumn Header="Примечание/шаблон" Binding="{Binding NoteTemplate, Mode=TwoWay}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Expander>
+                    </StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

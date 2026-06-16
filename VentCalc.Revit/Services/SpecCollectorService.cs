@@ -271,6 +271,7 @@ namespace VentCalc.Revit.Services
             {
                 item.AdskName = adskName;
                 item.AdskMark = adskMark;
+                item.AdskCode = adskCode;
                 item.AdskSize = adskSize;
                 if (!string.IsNullOrWhiteSpace(adskName) && CanUseAdskName(item, adskName)) { item.Name = adskName; anyAdsk = true; }
                 item.HasAdskName = !string.IsNullOrWhiteSpace(adskName);

@@ -30,14 +30,20 @@ namespace VentCalc.UI.Services
 
         private sealed class SheetData
         {
-            public SheetData(string name, IReadOnlyList<IReadOnlyList<object?>> rows)
+            public SheetData(string name, IReadOnlyList<IReadOnlyList<object?>> rows, int headerRow = 2, bool useFilter = false, bool a3 = false)
             {
                 Name = name;
                 Rows = rows;
+                HeaderRow = headerRow;
+                UseFilter = useFilter;
+                A3 = a3;
             }
 
             public string Name { get; }
             public IReadOnlyList<IReadOnlyList<object?>> Rows { get; }
+            public int HeaderRow { get; }
+            public bool UseFilter { get; }
+            public bool A3 { get; }
         }
 
         public static SpecExcelExportResult Export(IEnumerable<SpecItemRow> sourceRows, string? exportDirectory = null)
@@ -60,7 +66,7 @@ namespace VentCalc.UI.Services
             var imageStats = new ImageExportStats { TotalRows = rows.Count, ImageColumnEnabled = includeImages };
             List<SheetData> sheets = new List<SheetData>
             {
-                new SheetData(GetSheetName(profile), BuildSpecificationRows(rows, profile, columnLayouts, createdAt))
+                BuildSheet(rows, profile, columnLayouts, createdAt)
             };
 
             using (FileStream stream = File.Create(path))
@@ -73,7 +79,7 @@ namespace VentCalc.UI.Services
                 AddText(archive, "xl/workbook.xml", BuildWorkbook(sheets));
                 for (int i = 0; i < sheets.Count; i++)
                 {
-                    AddText(archive, $"xl/worksheets/sheet{i + 1}.xml", BuildWorksheet(archive, i + 1, sheets[i].Rows, imageStats));
+                    AddText(archive, $"xl/worksheets/sheet{i + 1}.xml", BuildWorksheet(archive, i + 1, sheets[i], imageStats));
                 }
             }
 
@@ -97,15 +103,28 @@ namespace VentCalc.UI.Services
             }
         }
 
-        private static IReadOnlyList<IReadOnlyList<object?>> BuildSpecificationRows(IReadOnlyList<SpecGroupRow> rows, string profile, IEnumerable<SpecColumnLayout> columnLayouts, DateTime createdAt)
+        private static SheetData BuildSheet(IReadOnlyList<SpecGroupRow> rows, string profile, IEnumerable<SpecColumnLayout> columnLayouts, DateTime createdAt)
+        {
+            if (profile == "Ведомость А3")
+            {
+                return new SheetData("А3", BuildA3Rows(rows), 2, false, true);
+            }
+
+            bool working = profile == "Рабочий Excel";
+            IReadOnlyList<IReadOnlyList<object?>> sheetRows = BuildSpecificationRows(rows, profile, columnLayouts, createdAt, working);
+            bool useFilter = working || profile == "Монтажная ведомость" || profile == "Закупка";
+            return new SheetData(GetSheetName(profile), sheetRows, working ? 3 : 2, useFilter, false);
+        }
+
+        private static IReadOnlyList<IReadOnlyList<object?>> BuildSpecificationRows(IReadOnlyList<SpecGroupRow> rows, string profile, IEnumerable<SpecColumnLayout> columnLayouts, DateTime createdAt, bool includeDate)
         {
             List<SpecColumnLayout> columns = ResolveColumns(profile, columnLayouts);
             var result = new List<IReadOnlyList<object?>>
             {
-                Row(profile),
-                Row($"Дата экспорта: {createdAt:yyyy-MM-dd HH:mm:ss}"),
-                Row(new[] { "№" }.Concat(columns.Select(column => column.Header)).ToArray())
+                Row(GetTitle(profile))
             };
+            if (includeDate) result.Add(Row($"Дата экспорта: {createdAt:yyyy-MM-dd HH:mm:ss}"));
+            result.Add(Row(new[] { "№" }.Concat(columns.Select(column => column.Header)).ToArray()));
 
             int number = 1;
             foreach (SpecGroupRow row in rows.OrderBy(row => row.Section).ThenBy(row => row.Group).ThenBy(row => row.Name).ThenBy(row => row.Size))
@@ -116,6 +135,25 @@ namespace VentCalc.UI.Services
                     values.Add(GetValue(row, column.FieldName, profile));
                 }
                 result.Add(values);
+            }
+
+            return result;
+        }
+
+        private static IReadOnlyList<IReadOnlyList<object?>> BuildA3Rows(IReadOnlyList<SpecGroupRow> rows)
+        {
+            var result = new List<IReadOnlyList<object?>>
+            {
+                Row("Спецификация оборудования, изделий и материалов"),
+                Row("Поз.", "Наименование и техническая характеристика", "Тип, марка, обозначение документа, опросного листа", "Код оборудования, изделия, материала", "Поставщик", "Единица измерения", "Количество", "Масса единицы, кг", "Примечание")
+            };
+
+            int number = 1;
+            foreach (SpecGroupRow row in rows.OrderBy(row => row.Section).ThenBy(row => row.Group).ThenBy(row => row.Name).ThenBy(row => row.Size))
+            {
+                string description = row.Name;
+                if (!string.IsNullOrWhiteSpace(row.Size) && row.Size != "—") description = $"{description}, {row.Size}";
+                result.Add(Row(number++, description, CleanDash(row.TypeMark), CleanDash(row.Code), string.Empty, row.Unit, Math.Round(row.Quantity, row.Unit == "шт" ? 0 : 2), string.Empty, row.Note));
             }
 
             return result;
@@ -164,8 +202,19 @@ namespace VentCalc.UI.Services
 
         private static string GetSheetName(string profile)
         {
-            return profile == "Монтажная ведомость" ? "Монтажная ведомость" : profile == "Закупка" ? "Закупка" : "Спецификация";
+            return profile == "Монтажная ведомость" ? "Монтажная ведомость" : profile == "Закупка" ? "Закупка" : profile == "Ведомость А3" ? "А3" : "Спецификация";
         }
+
+        private static string GetTitle(string profile)
+        {
+            return profile == "Визуальная спецификация" ? "Визуальная спецификация вентиляции"
+                : profile == "Проектная спецификация" ? "Спецификация оборудования, изделий и материалов"
+                : profile == "Монтажная ведомость" ? "Монтажная ведомость вентиляции"
+                : profile == "Закупка" ? "Закупочная спецификация вентиляции"
+                : "Спецификация вентиляции";
+        }
+
+        private static string CleanDash(string value) => string.IsNullOrWhiteSpace(value) || value == "—" ? string.Empty : value;
 
         private static object? GetValue(SpecGroupRow row, string field, string profile)
         {
@@ -239,12 +288,13 @@ namespace VentCalc.UI.Services
             return builder.ToString();
         }
 
-        private static string BuildWorksheet(ZipArchive archive, int sheetIndex, IReadOnlyList<IReadOnlyList<object?>> rows, ImageExportStats imageStats)
+        private static string BuildWorksheet(ZipArchive archive, int sheetIndex, SheetData sheet, ImageExportStats imageStats)
         {
+            IReadOnlyList<IReadOnlyList<object?>> rows = sheet.Rows;
             int maxColumns = Math.Max(1, rows.Any() ? rows.Max(row => row.Count) : 1);
             var images = new List<(int Row, int Column, string Path)>();
             var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-            builder.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"3\" topLeftCell=\"A4\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
+            builder.Append($"<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"{sheet.HeaderRow}\" topLeftCell=\"A{sheet.HeaderRow + 1}\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             HashSet<int> imageColumns = rows.SelectMany(row => row.Select((value, index) => new { value, index }))
                 .Where(item => Convert.ToString(item.value, CultureInfo.InvariantCulture)?.StartsWith("__IMG:", StringComparison.Ordinal) == true)
                 .Select(item => item.index + 1)
@@ -262,7 +312,7 @@ namespace VentCalc.UI.Services
                     int columnNumber = c + 1;
                     string? textValue = Convert.ToString(value, CultureInfo.InvariantCulture);
                     string cell = ColumnName(columnNumber) + rowNumber.ToString(CultureInfo.InvariantCulture);
-                    string style = r == 0 || r == 2 ? " s=\"1\"" : " s=\"2\"";
+                    string style = r == 0 || rowNumber == sheet.HeaderRow ? " s=\"1\"" : " s=\"2\"";
                     if (textValue?.StartsWith("__IMG:", StringComparison.Ordinal) == true)
                     {
                         string imagePath = textValue.Substring("__IMG:".Length);
@@ -284,9 +334,13 @@ namespace VentCalc.UI.Services
             }
 
             builder.Append("</sheetData>");
-            if (rows.Count > 0)
+            if (sheet.UseFilter && rows.Count >= sheet.HeaderRow)
             {
-                builder.Append($"<autoFilter ref=\"A3:{ColumnName(maxColumns)}{rows.Count}\"/>");
+                builder.Append($"<autoFilter ref=\"A{sheet.HeaderRow}:{ColumnName(maxColumns)}{rows.Count}\"/>");
+            }
+            if (sheet.A3)
+            {
+                builder.Append("<pageMargins left=\"0.25\" right=\"0.25\" top=\"0.35\" bottom=\"0.35\" header=\"0.1\" footer=\"0.1\"/><pageSetup paperSize=\"8\" orientation=\"landscape\" fitToWidth=\"1\" fitToHeight=\"0\"/>");
             }
             if (images.Count > 0)
             {
@@ -350,7 +404,7 @@ namespace VentCalc.UI.Services
 
         private static string BuildStyles()
         {
-            return @"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?><styleSheet xmlns=""http://schemas.openxmlformats.org/spreadsheetml/2006/main""><fonts count=""2""><font><sz val=""11""/><name val=""Calibri""/></font><font><b/><sz val=""11""/><name val=""Calibri""/></font></fonts><fills count=""3""><fill><patternFill patternType=""none""/></fill><fill><patternFill patternType=""gray125""/></fill><fill><patternFill patternType=""solid""><fgColor rgb=""FFE6E6E6""/><bgColor indexed=""64""/></patternFill></fill></fills><borders count=""1""><border><left style=""thin""/><right style=""thin""/><top style=""thin""/><bottom style=""thin""/><diagonal/></border></borders><cellStyleXfs count=""1""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0""/></cellStyleXfs><cellXfs count=""3""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0""/><xf numFmtId=""0"" fontId=""1"" fillId=""2"" borderId=""0"" xfId=""0"" applyFont=""1"" applyFill=""1"" applyBorder=""1""/><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0"" applyBorder=""1""/></cellXfs></styleSheet>";
+            return @"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?><styleSheet xmlns=""http://schemas.openxmlformats.org/spreadsheetml/2006/main""><fonts count=""2""><font><sz val=""11""/><name val=""GOST Common""/></font><font><b/><sz val=""11""/><name val=""GOST Common""/></font></fonts><fills count=""3""><fill><patternFill patternType=""none""/></fill><fill><patternFill patternType=""gray125""/></fill><fill><patternFill patternType=""solid""><fgColor rgb=""FFE6E6E6""/><bgColor indexed=""64""/></patternFill></fill></fills><borders count=""1""><border><left style=""thin""/><right style=""thin""/><top style=""thin""/><bottom style=""thin""/><diagonal/></border></borders><cellStyleXfs count=""1""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0""/></cellStyleXfs><cellXfs count=""3""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0""/><xf numFmtId=""0"" fontId=""1"" fillId=""2"" borderId=""0"" xfId=""0"" applyFont=""1"" applyFill=""1"" applyBorder=""1""/><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0"" applyBorder=""1""/></cellXfs></styleSheet>";
         }
 
         private static string ColumnName(int column)

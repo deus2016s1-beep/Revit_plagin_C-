@@ -41,6 +41,7 @@ namespace VentCalc.UI.Services
         public bool IsUnrecognized { get; set; }
         public string AdskName { get; set; } = string.Empty;
         public string AdskMark { get; set; } = string.Empty;
+        public string AdskCode { get; set; } = string.Empty;
         public string AdskSize { get; set; } = string.Empty;
         public string ImagePath { get; set; } = string.Empty;
         public string Problem => Note;
@@ -124,6 +125,7 @@ namespace VentCalc.UI.Services
         public string System { get; set; } = string.Empty;
         public string Level { get; set; } = string.Empty;
         public string Material { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
         public string Note { get; set; } = string.Empty;
         public string Status { get; set; } = "OK";
         public string Source { get; set; } = "Auto";
@@ -159,7 +161,27 @@ namespace VentCalc.UI.Services
     {
         public int SchemaVersion { get; set; } = 1;
         public string SelectedExcelProfile { get; set; } = "Проектная спецификация";
+        public string DuctQuantityMode { get; set; } = "Площадь, м²";
         public List<SpecColumnLayout> Columns { get; set; } = new List<SpecColumnLayout>();
+        public List<SpecNameRule> NameRules { get; set; } = new List<SpecNameRule>();
+    }
+
+    public sealed class SpecNameRule : INotifyPropertyChanged
+    {
+        private bool enabled = true;
+        private string group = string.Empty;
+        private string nameTemplate = string.Empty;
+        private string sizeTemplate = "{размер}";
+        private string unit = string.Empty;
+        private string noteTemplate = string.Empty;
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public bool Enabled { get => enabled; set { enabled = value; OnChanged(); } }
+        public string Group { get => group; set { group = value; OnChanged(); } }
+        public string NameTemplate { get => nameTemplate; set { nameTemplate = value; OnChanged(); } }
+        public string SizeTemplate { get => sizeTemplate; set { sizeTemplate = value; OnChanged(); } }
+        public string Unit { get => unit; set { unit = value; OnChanged(); } }
+        public string NoteTemplate { get => noteTemplate; set { noteTemplate = value; OnChanged(); } }
+        private void OnChanged([CallerMemberName] string propertyName = "") => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
     public readonly record struct SpecRuleKey(string Scope, string Category, string FamilyName, string TypeName, string UniqueId, long ElementId, string GroupName)
