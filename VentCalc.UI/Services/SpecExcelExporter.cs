@@ -144,7 +144,7 @@ namespace VentCalc.UI.Services
         {
             var result = new List<IReadOnlyList<object?>>
             {
-                Row("Спецификация оборудования, изделий и материалов"),
+                Row("СПЕЦИФИКАЦИЯ"),
                 Row("Поз.", "Наименование и техническая характеристика", "Тип, марка, обозначение документа, опросного листа", "Код оборудования, изделия, материала", "Поставщик", "Единица измерения", "Количество", "Масса единицы, кг", "Примечание")
             };
 
@@ -207,11 +207,7 @@ namespace VentCalc.UI.Services
 
         private static string GetTitle(string profile)
         {
-            return profile == "Визуальная спецификация" ? "Визуальная спецификация вентиляции"
-                : profile == "Проектная спецификация" ? "Спецификация оборудования, изделий и материалов"
-                : profile == "Монтажная ведомость" ? "Монтажная ведомость вентиляции"
-                : profile == "Закупка" ? "Закупочная спецификация вентиляции"
-                : "Спецификация вентиляции";
+            return "СПЕЦИФИКАЦИЯ";
         }
 
         private static string CleanDash(string value) => string.IsNullOrWhiteSpace(value) || value == "—" ? string.Empty : value;
@@ -312,7 +308,7 @@ namespace VentCalc.UI.Services
                     int columnNumber = c + 1;
                     string? textValue = Convert.ToString(value, CultureInfo.InvariantCulture);
                     string cell = ColumnName(columnNumber) + rowNumber.ToString(CultureInfo.InvariantCulture);
-                    string style = r == 0 || rowNumber == sheet.HeaderRow ? " s=\"1\"" : " s=\"2\"";
+                    string style = r == 0 ? " s=\"3\"" : rowNumber == sheet.HeaderRow ? " s=\"1\"" : " s=\"2\"";
                     if (textValue?.StartsWith("__IMG:", StringComparison.Ordinal) == true)
                     {
                         string imagePath = textValue.Substring("__IMG:".Length);
@@ -337,6 +333,10 @@ namespace VentCalc.UI.Services
             if (sheet.UseFilter && rows.Count >= sheet.HeaderRow)
             {
                 builder.Append($"<autoFilter ref=\"A{sheet.HeaderRow}:{ColumnName(maxColumns)}{rows.Count}\"/>");
+            }
+            if (maxColumns > 1)
+            {
+                builder.Append($"<mergeCells count=\"1\"><mergeCell ref=\"A1:{ColumnName(maxColumns)}1\"/></mergeCells>");
             }
             if (sheet.A3)
             {
@@ -395,7 +395,7 @@ namespace VentCalc.UI.Services
             for (int c = 0; c < maxColumns; c++)
             {
                 int oneBased = c + 1;
-                double width = imageColumns.Contains(oneBased) ? 18 : c switch { 0 => 6, 1 => 18, 2 => 32, 3 => 18, 4 => 14, 5 => 10, 6 => 10, 7 => 10, 8 => 12, _ => 24 };
+                double width = imageColumns.Contains(oneBased) ? 18 : c switch { 0 => 6, 1 => 42, 2 => 18, 3 => 16, 4 => 14, 5 => 10, 6 => 10, 7 => 12, 8 => 22, _ => 18 };
                 builder.Append($"<col min=\"{oneBased}\" max=\"{oneBased}\" width=\"{width.ToString(CultureInfo.InvariantCulture)}\" customWidth=\"1\"/>");
             }
             builder.Append("</cols>");
@@ -404,7 +404,7 @@ namespace VentCalc.UI.Services
 
         private static string BuildStyles()
         {
-            return @"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?><styleSheet xmlns=""http://schemas.openxmlformats.org/spreadsheetml/2006/main""><fonts count=""2""><font><sz val=""11""/><name val=""GOST Common""/></font><font><b/><sz val=""11""/><name val=""GOST Common""/></font></fonts><fills count=""3""><fill><patternFill patternType=""none""/></fill><fill><patternFill patternType=""gray125""/></fill><fill><patternFill patternType=""solid""><fgColor rgb=""FFE6E6E6""/><bgColor indexed=""64""/></patternFill></fill></fills><borders count=""1""><border><left style=""thin""/><right style=""thin""/><top style=""thin""/><bottom style=""thin""/><diagonal/></border></borders><cellStyleXfs count=""1""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0""/></cellStyleXfs><cellXfs count=""3""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0""/><xf numFmtId=""0"" fontId=""1"" fillId=""2"" borderId=""0"" xfId=""0"" applyFont=""1"" applyFill=""1"" applyBorder=""1""/><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0"" applyBorder=""1""/></cellXfs></styleSheet>";
+            return @"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?><styleSheet xmlns=""http://schemas.openxmlformats.org/spreadsheetml/2006/main""><fonts count=""3""><font><sz val=""11""/><name val=""GOST Common""/></font><font><b/><sz val=""11""/><name val=""GOST Common""/></font><font><b/><sz val=""16""/><name val=""GOST Common""/></font></fonts><fills count=""3""><fill><patternFill patternType=""none""/></fill><fill><patternFill patternType=""gray125""/></fill><fill><patternFill patternType=""solid""><fgColor rgb=""FFE6E6E6""/><bgColor indexed=""64""/></patternFill></fill></fills><borders count=""1""><border><left style=""thin""/><right style=""thin""/><top style=""thin""/><bottom style=""thin""/><diagonal/></border></borders><cellStyleXfs count=""1""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0""/></cellStyleXfs><cellXfs count=""4""><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0""/><xf numFmtId=""0"" fontId=""1"" fillId=""2"" borderId=""0"" xfId=""0"" applyFont=""1"" applyFill=""1"" applyBorder=""1"" applyAlignment=""1""><alignment horizontal=""center"" vertical=""center"" wrapText=""1""/></xf><xf numFmtId=""0"" fontId=""0"" fillId=""0"" borderId=""0"" xfId=""0"" applyBorder=""1"" applyAlignment=""1""><alignment vertical=""center"" wrapText=""1""/></xf><xf numFmtId=""0"" fontId=""2"" fillId=""0"" borderId=""0"" xfId=""0"" applyFont=""1"" applyAlignment=""1""><alignment horizontal=""center"" vertical=""center""/></xf></cellXfs></styleSheet>";
         }
 
         private static string ColumnName(int column)

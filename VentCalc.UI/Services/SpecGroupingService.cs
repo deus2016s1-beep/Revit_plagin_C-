@@ -28,24 +28,23 @@ namespace VentCalc.UI.Services
             return new SpecGroupingKey(
                 item.Section,
                 item.Group,
-                StripSizeFromName(item.Name, item.Size),
+                item.Name,
                 duct ? string.Empty : CleanTypeMark(item.TypeMark),
-                NormalizeCompositeSize(item.Size),
+                item.Size,
                 item.Unit,
                 item.Note);
         }
 
         private static SpecGroupRow ToGroupRow(IGrouping<SpecGroupingKey, SpecItemRow> group, SpecCalcSettings settings)
         {
-            string size = NormalizeCompositeSize(group.Key.Size);
-            string name = StripSizeFromName(group.Key.Name, size);
+            string size = group.Key.Size;
+            string name = group.Key.Name;
             string unit = group.Key.Unit;
             string note = group.Key.Note;
             double quantity = group.Sum(item => item.Quantity);
             double length = Math.Round(group.Sum(item => item.LengthM), 2);
             double area = Math.Round(group.Sum(item => item.AreaM2), 2);
 
-            ApplyNameRule(settings, group.Key.Group, group.FirstOrDefault(), ref name, ref size, ref unit, ref note);
             ApplyDuctQuantityMode(settings.DuctQuantityMode, group.Key.Group, ref unit, ref quantity, length, area);
 
             var row = new SpecGroupRow

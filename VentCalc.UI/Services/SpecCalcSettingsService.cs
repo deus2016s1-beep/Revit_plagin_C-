@@ -47,6 +47,7 @@ namespace VentCalc.UI.Services
         public static void EnsureDefaults(SpecCalcSettings settings)
         {
             if (settings.Columns == null) settings.Columns = new List<SpecColumnLayout>();
+            bool hadStoredColumns = settings.Columns.Count > 0;
             settings.Columns = settings.Columns
                 .Where(column => column != null && KnownFields.Contains(column.FieldName))
                 .GroupBy(column => column.FieldName)
@@ -87,12 +88,103 @@ namespace VentCalc.UI.Services
             }
 
             settings.Columns = settings.Columns.OrderBy(column => column.Order).ToList();
-            if (string.IsNullOrWhiteSpace(settings.SelectedExcelProfile)) settings.SelectedExcelProfile = "Проектная спецификация";
-            if (!new[] { "Рабочий Excel", "Проектная спецификация", "Визуальная спецификация", "Ведомость А3", "Монтажная ведомость", "Закупка" }.Contains(settings.SelectedExcelProfile)) settings.SelectedExcelProfile = "Проектная спецификация";
+            if (string.IsNullOrWhiteSpace(settings.SelectedExcelProfile)) settings.SelectedExcelProfile = "Рабочий Excel";
+            if (!VisibleExportProfiles.Contains(settings.SelectedExcelProfile)) settings.SelectedExcelProfile = "Рабочий Excel";
             if (string.IsNullOrWhiteSpace(settings.DuctQuantityMode)) settings.DuctQuantityMode = "Площадь, м²";
             if (settings.DuctQuantityMode != "Площадь, м²" && settings.DuctQuantityMode != "Длина, м" && settings.DuctQuantityMode != "Площадь и длина") settings.DuctQuantityMode = "Площадь, м²";
+            settings.ProfileColumns ??= new Dictionary<string, List<SpecColumnLayout>>();
+            EnsureProfileColumns(settings, hadStoredColumns);
             settings.NameRules ??= new List<SpecNameRule>();
             EnsureNameRules(settings);
+        }
+
+        public static IReadOnlyList<string> VisibleExportProfiles { get; } = new[] { "Рабочий Excel", "Визуальная спецификация", "Ведомость А3" };
+
+        public static List<SpecColumnLayout> CreateDefaultColumnsForProfile(string profile)
+        {
+            IReadOnlyList<SpecColumnLayout> defaults = CreateDefaultColumns();
+            string[] fields = profile == "Визуальная спецификация"
+                ? new[] { "Name", "Size", "Unit", "Quantity", "ImagePath" }
+                : profile == "Ведомость А3"
+                    ? new[] { "Name", "TypeMark", "Unit", "Quantity", "Note" }
+                    : new[] { "Name", "Size", "Unit", "Quantity", "LengthM", "AreaM2" };
+            var result = new List<SpecColumnLayout>();
+            for (int i = 0; i < fields.Length; i++)
+            {
+                SpecColumnLayout source = defaults.First(column => column.FieldName == fields[i]);
+                SpecColumnLayout clone = CloneColumn(source);
+                clone.Order = i + 1;
+                clone.VisibleInMain = clone.FieldName != "ImagePath";
+                clone.VisibleInExcel = true;
+                result.Add(clone);
+            }
+            foreach (SpecColumnLayout source in defaults.Where(column => !fields.Contains(column.FieldName)))
+            {
+                SpecColumnLayout clone = CloneColumn(source);
+                clone.VisibleInMain = false;
+                clone.VisibleInExcel = false;
+                result.Add(clone);
+            }
+            return result.OrderBy(column => column.Order).ToList();
+        }
+
+        private static void EnsureProfileColumns(SpecCalcSettings settings, bool useLegacyColumns)
+        {
+            foreach (string profile in VisibleExportProfiles)
+            {
+                List<SpecColumnLayout> seed = settings.ProfileColumns.TryGetValue(profile, out List<SpecColumnLayout>? existing) && existing.Count > 0
+                    ? existing
+                    : useLegacyColumns && profile == settings.SelectedExcelProfile && settings.Columns.Count > 0 ? settings.Columns.Select(CloneColumn).ToList() : CreateDefaultColumnsForProfile(profile);
+                settings.ProfileColumns[profile] = NormalizeColumns(seed);
+            }
+            settings.Columns = settings.ProfileColumns[settings.SelectedExcelProfile].Select(CloneColumn).ToList();
+        }
+
+        private static List<SpecColumnLayout> NormalizeColumns(IEnumerable<SpecColumnLayout> columns)
+        {
+            var temp = new SpecCalcSettings { Columns = columns.Select(CloneColumn).ToList(), SelectedExcelProfile = "Рабочий Excel" };
+            temp.NameRules = new List<SpecNameRule>();
+            if (temp.Columns.Count == 0) temp.Columns = CreateDefaultColumnsForProfile("Рабочий Excel");
+            temp.Columns = temp.Columns
+                .Where(column => column != null && KnownFields.Contains(column.FieldName))
+                .GroupBy(column => column.FieldName)
+                .Select(group => group.First())
+                .ToList();
+            foreach (SpecColumnLayout column in CreateDefaultColumns())
+            {
+                if (!temp.Columns.Any(existing => existing.FieldName == column.FieldName))
+                {
+                    SpecColumnLayout clone = CloneColumn(column);
+                    clone.VisibleInMain = false;
+                    clone.VisibleInExcel = false;
+                    temp.Columns.Add(clone);
+                }
+            }
+            foreach (SpecColumnLayout column in temp.Columns)
+            {
+                SpecColumnLayout defaultColumn = CreateDefaultColumns().First(item => item.FieldName == column.FieldName);
+                if (string.IsNullOrWhiteSpace(column.Header)) column.Header = defaultColumn.Header;
+                if (column.Order <= 0) column.Order = defaultColumn.Order;
+                if (string.IsNullOrWhiteSpace(column.Format)) column.Format = defaultColumn.Format;
+                column.IsNumeric = defaultColumn.IsNumeric;
+            }
+            return temp.Columns.OrderBy(column => column.Order).ToList();
+        }
+
+        public static SpecColumnLayout CloneColumn(SpecColumnLayout column)
+        {
+            return new SpecColumnLayout
+            {
+                FieldName = column.FieldName,
+                Header = column.Header,
+                Format = column.Format,
+                IsNumeric = column.IsNumeric,
+                VisibleInMain = column.VisibleInMain,
+                VisibleInExcel = column.VisibleInExcel,
+                GroupBy = column.GroupBy,
+                Sum = column.Sum,
+                Order = column.Order
+            };
         }
 
         public static IReadOnlyList<SpecNameRule> CreateDefaultNameRules()

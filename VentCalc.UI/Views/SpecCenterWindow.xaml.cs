@@ -61,7 +61,7 @@ namespace VentCalc.UI.Views
 
         private void Column_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName is nameof(SpecColumnLayout.VisibleInMain) or nameof(SpecColumnLayout.Header) or nameof(SpecColumnLayout.Order))
+            if (e.PropertyName is nameof(SpecColumnLayout.VisibleInMain) or nameof(SpecColumnLayout.Header) or nameof(SpecColumnLayout.Order) or nameof(SpecColumnLayout.Format))
             {
                 SafeRebuildSpecColumns();
             }
@@ -77,6 +77,7 @@ namespace VentCalc.UI.Views
             {
                 viewModel?.ReportUiError(exception);
                 SpecRowsGrid.Columns.Clear();
+                PreviewGrid.Columns.Clear();
             }
         }
 
@@ -84,6 +85,7 @@ namespace VentCalc.UI.Views
         {
             if (viewModel == null) return;
             SpecRowsGrid.Columns.Clear();
+                PreviewGrid.Columns.Clear();
             DataTemplate? selectionTemplate = TryFindResource("SelectionCheckBoxTemplate") as DataTemplate;
             SpecRowsGrid.Columns.Add(new DataGridTemplateColumn
             {
@@ -92,16 +94,30 @@ namespace VentCalc.UI.Views
                 CellTemplate = selectionTemplate
             });
 
-            foreach (SpecColumnLayout column in viewModel.ActiveColumns.Where(column => column.VisibleInMain && !string.IsNullOrWhiteSpace(column.FieldName)).OrderBy(column => column.Order))
+            foreach (SpecColumnLayout activeColumn in viewModel.ActiveColumns)
             {
-                SpecRowsGrid.Columns.Add(new DataGridTextColumn
-                {
-                    Header = column.Header,
-                    Binding = new Binding(column.FieldName) { StringFormat = column.IsNumeric ? "{0:0.##}" : null },
-                    IsReadOnly = true,
-                    Width = column.FieldName == "Note" ? new DataGridLength(1, DataGridLengthUnitType.Star) : DataGridLength.Auto
-                });
+                activeColumn.PropertyChanged -= Column_PropertyChanged;
+                activeColumn.PropertyChanged += Column_PropertyChanged;
             }
+
+            foreach (SpecColumnLayout column in viewModel.ActiveColumns.Where(column => column.VisibleInMain && !string.IsNullOrWhiteSpace(column.FieldName) && column.FieldName != "ImagePath").OrderBy(column => column.Order))
+            {
+                var gridColumn = CreateTextColumn(column);
+                SpecRowsGrid.Columns.Add(gridColumn);
+                PreviewGrid.Columns.Add(CreateTextColumn(column));
+            }
+        }
+
+
+        private static DataGridTextColumn CreateTextColumn(SpecColumnLayout column)
+        {
+            return new DataGridTextColumn
+            {
+                Header = column.Header,
+                Binding = new Binding(column.FieldName) { StringFormat = column.IsNumeric ? "{0:0.##}" : null },
+                IsReadOnly = true,
+                Width = column.FieldName == "Name" || column.FieldName == "Note" ? new DataGridLength(1, DataGridLengthUnitType.Star) : DataGridLength.Auto
+            };
         }
 
         private void SpecRowsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)

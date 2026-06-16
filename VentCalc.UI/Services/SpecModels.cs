@@ -163,6 +163,7 @@ namespace VentCalc.UI.Services
         public string SelectedExcelProfile { get; set; } = "Проектная спецификация";
         public string DuctQuantityMode { get; set; } = "Площадь, м²";
         public List<SpecColumnLayout> Columns { get; set; } = new List<SpecColumnLayout>();
+        public Dictionary<string, List<SpecColumnLayout>> ProfileColumns { get; set; } = new Dictionary<string, List<SpecColumnLayout>>();
         public List<SpecNameRule> NameRules { get; set; } = new List<SpecNameRule>();
     }
 
